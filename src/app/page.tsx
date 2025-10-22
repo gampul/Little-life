@@ -375,7 +375,7 @@ export default function Home() {
           />
           <RoutineItem
             emoji="💕"
-            label="사랑이와 함께하기"
+            label="사랑"
             checked={formData.love}
             onChange={() => handleCheckboxChange('love')}
             disabled={!isEditMode}
