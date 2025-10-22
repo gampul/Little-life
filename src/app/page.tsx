@@ -375,7 +375,7 @@ export default function Home() {
           />
           <RoutineItem
             emoji="💕"
-            label="사랑 나누기"
+            label="사랑이와 함께하기"
             checked={formData.love}
             onChange={() => handleCheckboxChange('love')}
             disabled={!isEditMode}
@@ -471,18 +471,21 @@ export default function Home() {
           <h2 className="text-xl font-bold text-white mb-6">📊 데이터 분석</h2>
 
           {/* 1. 체중 추이 그래프 */}
-          <div className="bg-gray-800 rounded-2xl border border-gray-700 p-5 mb-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-white">체중 추이</h3>
-              <div className="flex gap-2">
+          <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl border border-gray-700/50 p-6 mb-4 shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1">체중 추이</h3>
+                <p className="text-xs text-gray-400">시간에 따른 체중 변화를 확인하세요</p>
+              </div>
+              <div className="flex gap-1.5 bg-gray-900/50 rounded-lg p-1">
                 {(['7days', '1month', '1year', 'ytd', 'all'] as PeriodFilter[]).map((period) => (
                   <button
                     key={period}
                     onClick={() => setWeightPeriod(period)}
-                    className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${
                       weightPeriod === period
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30'
+                        : 'text-gray-400 hover:text-gray-300 hover:bg-gray-800'
                     }`}
                   >
                     {period === '7days' && '7일'}
@@ -494,41 +497,80 @@ export default function Home() {
                 ))}
               </div>
             </div>
-            <div className="h-64">
+            <div className="h-72">
               {getWeightChartData().length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={getWeightChartData()}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <LineChart 
+                    data={getWeightChartData()}
+                    margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid 
+                      strokeDasharray="3 3" 
+                      stroke="#374151" 
+                      strokeOpacity={0.3}
+                      vertical={false}
+                    />
                     <XAxis 
                       dataKey="date" 
-                      stroke="#9CA3AF"
-                      tick={{ fontSize: 12 }}
+                      stroke="#6B7280"
+                      tick={{ fontSize: 11, fill: '#9CA3AF' }}
+                      tickLine={false}
+                      axisLine={{ stroke: '#374151' }}
                     />
                     <YAxis 
-                      stroke="#9CA3AF"
-                      tick={{ fontSize: 12 }}
-                      domain={['dataMin - 2', 'dataMax + 2']}
+                      stroke="#6B7280"
+                      tick={{ fontSize: 11, fill: '#9CA3AF' }}
+                      tickLine={false}
+                      axisLine={{ stroke: '#374151' }}
+                      domain={['dataMin - 1', 'dataMax + 1']}
+                      tickFormatter={(value) => `${value}kg`}
                     />
                     <Tooltip 
                       contentStyle={{ 
                         backgroundColor: '#1F2937', 
                         border: '1px solid #374151',
-                        borderRadius: '8px',
-                        color: '#fff'
+                        borderRadius: '12px',
+                        padding: '8px 12px',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
                       }}
+                      labelStyle={{ color: '#D1D5DB', fontSize: '12px', marginBottom: '4px' }}
+                      itemStyle={{ color: '#3B82F6', fontSize: '14px', fontWeight: 'bold' }}
+                      formatter={(value: any) => [`${value} kg`, '체중']}
+                      cursor={{ stroke: '#3B82F6', strokeWidth: 1, strokeDasharray: '5 5' }}
                     />
                     <Line 
                       type="monotone" 
                       dataKey="weight" 
                       stroke="#3B82F6" 
-                      strokeWidth={2}
-                      dot={{ fill: '#3B82F6', r: 4 }}
+                      strokeWidth={1}
+                      dot={{ 
+                        fill: '#3B82F6', 
+                        strokeWidth: 2,
+                        stroke: '#1F2937',
+                        r: 3
+                      }}
+                      activeDot={{ 
+                        r: 5, 
+                        fill: '#3B82F6',
+                        stroke: '#fff',
+                        strokeWidth: 2
+                      }}
+                      fill="url(#colorWeight)"
                     />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-full flex items-center justify-center text-gray-500">
-                  체중 데이터가 없습니다
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">📊</div>
+                    <p className="text-gray-500 text-sm">체중 데이터가 없습니다</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -550,16 +592,16 @@ export default function Home() {
                 <thead>
                   <tr className="border-b border-gray-700">
                     <th className="text-left py-2 px-2 text-gray-400 font-medium">날짜</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">📝</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🏋️</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🔥</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">📚</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🎓</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🚫</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🏃</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🪥</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">💕</th>
-                    <th className="text-center py-2 px-1 text-gray-400 font-medium">🧹</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">📝</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🏋️</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🔥</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">📚</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🎓</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🚫</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🏃</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🪥</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">💕</th>
+                    <th className="text-center py-2 px-1 text-gray-400 font-medium text-lg">🧹</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -661,7 +703,7 @@ function RoutineItem({
           className="w-6 h-6 text-blue-500 bg-gray-700 border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
         />
       </label>
-      {!isLast && <div style={{ height: '1mm', backgroundColor: '#374151' }}></div>}
+      {!isLast && <div style={{ height: '1mm', backgroundColor: '#4B5563' }}></div>}
     </div>
   );
 }
