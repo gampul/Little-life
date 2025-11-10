@@ -1,7 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 환경 변수가 빌드 시점에 없을 수 있으므로 동적 렌더링 강제
-  output: 'standalone',
+  // 환경 변수를 명시적으로 클라이언트에 노출
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  },
 };
 
 export default nextConfig;

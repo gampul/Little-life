@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -39,8 +39,15 @@ export default function Home() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+    // 디버깅: 환경 변수 상태 확인
+    console.log('🔍 환경 변수 확인:');
+    console.log('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? '✅ 설정됨' : '❌ 없음');
+    console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseAnonKey ? '✅ 설정됨' : '❌ 없음');
+
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('Missing Supabase environment variables. Please check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+      console.error('❌ Missing Supabase environment variables.');
+      console.error('설정된 URL:', supabaseUrl || '없음');
+      console.error('설정된 Key:', supabaseAnonKey ? '있음 (길이: ' + supabaseAnonKey.length + ')' : '없음');
       return null;
     }
 
@@ -77,18 +84,8 @@ export default function Home() {
     daily_memo: '',
   });
 
-  useEffect(() => {
-    loadRoutineTemplates();
-  }, []);
-
-  useEffect(() => {
-    loadDailyRecord(selectedDate);
-    loadRoutineChecks(selectedDate);
-    loadAllRecords();
-  }, [selectedDate]);
-
   // 루틴 템플릿 로드
-  const loadRoutineTemplates = async () => {
+  const loadRoutineTemplates = useCallback(async () => {
     if (!supabase) return;
     try {
       const { data, error } = await supabase
@@ -106,10 +103,10 @@ export default function Home() {
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  };
+  }, [supabase, userId]);
 
   // 특정 날짜의 루틴 체크 상태 로드
-  const loadRoutineChecks = async (date: string) => {
+  const loadRoutineChecks = useCallback(async (date: string) => {
     if (!supabase) return;
     try {
       const { data, error } = await supabase
@@ -126,9 +123,9 @@ export default function Home() {
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  };
+  }, [supabase]);
 
-  const loadDailyRecord = async (date: string) => {
+  const loadDailyRecord = useCallback(async (date: string) => {
     if (!supabase) return;
     try {
       const { data, error } = await supabase
@@ -162,10 +159,13 @@ export default function Home() {
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  };
+  }, [supabase]);
 
-  const loadAllRecords = async () => {
-    if (!supabase) return;
+  const loadAllRecords = useCallback(async () => {
+    if (!supabase) {
+      console.warn('Supabase 클라이언트가 없습니다.');
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('daily_records')
@@ -177,11 +177,23 @@ export default function Home() {
         return;
       }
 
+      console.log('로드된 레코드 수:', data?.length || 0);
+      console.log('체중 데이터가 있는 레코드:', data?.filter(r => r.weight !== null).length || 0);
       setAllRecords(data || []);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    loadRoutineTemplates();
+  }, [loadRoutineTemplates]);
+
+  useEffect(() => {
+    loadDailyRecord(selectedDate);
+    loadRoutineChecks(selectedDate);
+    loadAllRecords();
+  }, [selectedDate, loadDailyRecord, loadRoutineChecks, loadAllRecords]);
 
   // 루틴 체크박스 상태 확인
   const isRoutineChecked = (routineId: string): boolean => {
@@ -313,15 +325,17 @@ export default function Home() {
         startDate = new Date(now.getFullYear(), 0, 1);
         break;
       case 'all':
-        return allRecords
+        const allData = allRecords
           .filter((r) => r.weight !== null)
           .map((r) => ({
             date: r.date,
             weight: r.weight,
           }));
+        console.log('전체 데이터 필터링 결과:', allData.length, '개');
+        return allData;
     }
 
-    return allRecords
+    const filtered = allRecords
       .filter((r) => {
         const recordDate = new Date(r.date);
         return r.weight !== null && recordDate >= startDate;
@@ -330,6 +344,8 @@ export default function Home() {
         date: r.date,
         weight: r.weight,
       }));
+    console.log(`${weightPeriod} 필터링 결과:`, filtered.length, '개');
+    return filtered;
   };
 
   // 월별 달성 현황 데이터
@@ -364,6 +380,34 @@ export default function Home() {
       .filter((r) => r.daily_memo && r.daily_memo.trim() !== '')
       .reverse();
   };
+
+  // 환경 변수 오류 표시
+  if (!supabase) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+          <h2 className="text-xl font-bold text-red-800 dark:text-red-400 mb-4">
+            ⚠️ 환경 변수 오류
+          </h2>
+          <p className="text-red-700 dark:text-red-300 mb-4">
+            Supabase 환경 변수가 설정되지 않았습니다.
+          </p>
+          <div className="bg-white dark:bg-gray-800 rounded p-4 mb-4">
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
+              다음 환경 변수가 필요합니다:
+            </p>
+            <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
+              <li>NEXT_PUBLIC_SUPABASE_URL</li>
+              <li>NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
+            </ul>
+          </div>
+          <p className="text-sm text-red-600 dark:text-red-400">
+            Vercel에 배포된 경우, 프로젝트 설정 → Environment Variables에서 확인하세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
@@ -911,11 +955,7 @@ function MonthlyAchievementTable({
     return createClient(supabaseUrl, supabaseAnonKey);
   }, []);
 
-  useEffect(() => {
-    loadMonthlyData();
-  }, [selectedMonth, routineTemplates]);
-
-  const loadMonthlyData = async () => {
+  const loadMonthlyData = useCallback(async () => {
     if (!supabase) {
       setIsLoading(false);
       return;
@@ -942,7 +982,11 @@ function MonthlyAchievementTable({
     
     setMonthlyData(result);
     setIsLoading(false);
-  };
+  }, [supabase, selectedMonth]);
+
+  useEffect(() => {
+    loadMonthlyData();
+  }, [loadMonthlyData, routineTemplates]);
 
   const isChecked = (dayData: any, routineId: string) => {
     return dayData.checks.some((c: any) => c.routine_id === routineId && c.checked);
