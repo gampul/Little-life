@@ -1,18 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ThemeToggle } from './components/ThemeToggle';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables. Please check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
-}
-
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface DailyRecord {
   id?: string;
@@ -42,6 +33,19 @@ type PeriodFilter = '7days' | '1month' | '1year' | 'ytd' | 'all';
 
 export default function Home() {
   const userId = 'default_user'; // 실제 앱에서는 로그인한 사용자 ID 사용
+
+  // Supabase 클라이언트를 런타임에만 초기화 (빌드 시점에는 환경 변수가 없을 수 있음)
+  const supabase = useMemo(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('Missing Supabase environment variables. Please check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+      return null;
+    }
+
+    return createClient(supabaseUrl, supabaseAnonKey);
+  }, []);
 
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -85,6 +89,7 @@ export default function Home() {
 
   // 루틴 템플릿 로드
   const loadRoutineTemplates = async () => {
+    if (!supabase) return;
     try {
       const { data, error } = await supabase
         .from('routine_templates')
@@ -105,6 +110,7 @@ export default function Home() {
 
   // 특정 날짜의 루틴 체크 상태 로드
   const loadRoutineChecks = async (date: string) => {
+    if (!supabase) return;
     try {
       const { data, error } = await supabase
         .from('daily_routine_checks')
@@ -123,6 +129,7 @@ export default function Home() {
   };
 
   const loadDailyRecord = async (date: string) => {
+    if (!supabase) return;
     try {
       const { data, error } = await supabase
         .from('daily_records')
@@ -158,6 +165,7 @@ export default function Home() {
   };
 
   const loadAllRecords = async () => {
+    if (!supabase) return;
     try {
       const { data, error } = await supabase
         .from('daily_records')
@@ -213,6 +221,10 @@ export default function Home() {
   };
 
   const handleSave = async () => {
+    if (!supabase) {
+      setMessage('❌ Supabase 연결이 설정되지 않았습니다.');
+      return;
+    }
     setIsSaving(true);
     setMessage('');
 
@@ -322,6 +334,7 @@ export default function Home() {
 
   // 월별 달성 현황 데이터
   const getMonthlyAchievement = async () => {
+    if (!supabase) return [];
     const [year, month] = selectedMonth.split('-');
     const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
     
@@ -731,6 +744,18 @@ function RoutineSettingModal({
   const [templates, setTemplates] = useState<RoutineTemplate[]>([...routineTemplates]);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Supabase 클라이언트를 런타임에만 초기화
+  const supabase = useMemo(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return null;
+    }
+
+    return createClient(supabaseUrl, supabaseAnonKey);
+  }, []);
+
   const handleAdd = () => {
     const newTemplate: RoutineTemplate = {
       id: `temp_${Date.now()}`,
@@ -753,6 +778,10 @@ function RoutineSettingModal({
   };
 
   const handleSave = async () => {
+    if (!supabase) {
+      alert('❌ Supabase 연결이 설정되지 않았습니다.');
+      return;
+    }
     setIsSaving(true);
     try {
       // 기존 템플릿 삭제
@@ -870,11 +899,27 @@ function MonthlyAchievementTable({
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Supabase 클라이언트를 런타임에만 초기화
+  const supabase = useMemo(() => {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return null;
+    }
+
+    return createClient(supabaseUrl, supabaseAnonKey);
+  }, []);
+
   useEffect(() => {
     loadMonthlyData();
   }, [selectedMonth, routineTemplates]);
 
   const loadMonthlyData = async () => {
+    if (!supabase) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     const [year, month] = selectedMonth.split('-');
     const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
