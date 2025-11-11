@@ -436,29 +436,27 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
-      <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6">
+      <div className="max-w-7xl mx-auto p-4">
         {/* 헤더 */}
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
             Little Life
           </h1>
-          <div className="flex gap-2 sm:gap-3">
+          <div className="flex gap-3">
             <ThemeToggle />
             <button
               onClick={() => setIsAIAgentOpen(true)}
-              className="px-3 py-2.5 sm:px-4 sm:py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center gap-1 sm:gap-2 shadow-lg text-sm sm:text-base min-h-[44px]"
+              className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center gap-2 shadow-lg text-base min-h-[44px]"
               aria-label="AI Agent"
             >
-              <span className="hidden sm:inline">🤖 AI Agent</span>
-              <span className="sm:hidden text-lg">🤖</span>
+              🤖 AI Agent
             </button>
             <button
               onClick={() => setIsRoutineSettingOpen(true)}
-              className="px-3 py-2.5 sm:px-4 sm:py-2 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-1 sm:gap-2 text-sm sm:text-base min-h-[44px]"
+              className="px-4 py-2.5 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2 text-base min-h-[44px]"
               aria-label="루틴 설정"
             >
-              <span className="hidden sm:inline">⚙️ 루틴 설정</span>
-              <span className="sm:hidden text-lg">⚙️</span>
+              ⚙️ 루틴 설정
             </button>
           </div>
         </div>
@@ -482,22 +480,22 @@ export default function Home() {
           />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 왼쪽: 입력 섹션 */}
           <div>
             {/* 날짜 선택 & 버튼 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
+              <div className="flex flex-col gap-3 items-stretch">
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="flex-1 px-4 py-3 sm:py-2 text-base sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                  className="flex-1 px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
                 />
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                    className="w-full sm:w-auto px-6 py-3 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white text-base sm:text-sm font-medium rounded-lg transition-colors min-h-[44px]"
+                    className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-base font-medium rounded-lg transition-colors min-h-[44px]"
                   >
                     수정하기
                   </button>
@@ -505,20 +503,20 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="w-full sm:w-auto px-6 py-3 sm:py-2 bg-green-600 hover:bg-green-700 text-white text-base sm:text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                    className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white text-base font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                   >
                     {isSaving ? '저장 중...' : '저장'}
                   </button>
                 )}
               </div>
               {message && (
-                <div className="mt-3 text-center text-sm sm:text-base font-medium text-gray-700 dark:text-gray-300">{message}</div>
+                <div className="mt-3 text-center text-base font-medium text-gray-700 dark:text-gray-300">{message}</div>
               )}
             </div>
 
             {/* 체중 입력 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <label className="block text-base sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
+              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
                 ⚖️ 오늘의 체중 (kg)
               </label>
               <input
@@ -530,13 +528,13 @@ export default function Home() {
                 }
                 placeholder="체중을 입력하세요"
                 disabled={!isEditMode}
-                className="w-full px-4 py-3 sm:py-2 text-base sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
               />
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <h3 className="text-lg sm:text-base font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
               {routineTemplates.map((routine, index) => (
                 <RoutineItem
                   key={routine.id}
@@ -556,11 +554,11 @@ export default function Home() {
             </div>
 
             {/* 식사 기록 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <label className="block text-base sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
+              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
                 🍽️ 오늘의 식사
               </label>
-              <div className="flex flex-wrap gap-4 sm:gap-4 mb-4">
+              <div className="flex flex-wrap gap-4 mb-4">
                 <MealCheckbox
                   label="아침"
                   checked={formData.meal_breakfast}
@@ -585,14 +583,14 @@ export default function Home() {
                 onChange={(e) => handleInputChange('meal_memo', e.target.value)}
                 placeholder="식사 메모 (선택사항)"
                 disabled={!isEditMode}
-                className="w-full px-4 py-3 sm:py-2 text-base sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
                 rows={3}
               />
             </div>
 
             {/* 오늘의 메모 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <label className="block text-base sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
+              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
                 📝 오늘의 메모
               </label>
               <textarea
@@ -600,7 +598,7 @@ export default function Home() {
                 onChange={(e) => handleInputChange('daily_memo', e.target.value)}
                 placeholder="오늘 하루를 기록해보세요..."
                 disabled={!isEditMode}
-                className="w-full px-4 py-3 sm:py-2 text-base sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
                 rows={5}
               />
             </div>
@@ -609,13 +607,13 @@ export default function Home() {
           {/* 오른쪽: 통계 섹션 */}
           <div>
             {/* 1. 체중 그래프 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-4 shadow-sm">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
-                <h3 className="text-lg sm:text-base font-semibold text-gray-900 dark:text-white">체중 변화</h3>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-4 shadow-sm">
+              <div className="flex flex-col items-start justify-between gap-3 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">체중 변화</h3>
                 <select
                   value={weightPeriod}
                   onChange={(e) => setWeightPeriod(e.target.value as PeriodFilter)}
-                  className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                  className="w-full px-4 py-2.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
                 >
                   <option value="7days">최근 7일</option>
                   <option value="1month">1개월</option>
@@ -624,7 +622,7 @@ export default function Home() {
                   <option value="all">전체</option>
                 </select>
               </div>
-              <div className="h-48 sm:h-64">
+              <div className="h-64">
                 {getWeightChartData().length > 0 ? (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart 
@@ -713,17 +711,17 @@ export default function Home() {
             />
 
             {/* 3. 일별 메모 보기 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-              <h3 className="text-lg sm:text-base font-semibold text-gray-900 dark:text-white mb-4">일별 메모</h3>
-              <div className="space-y-3 max-h-80 sm:max-h-96 overflow-y-auto">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">일별 메모</h3>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
                 {getMemoDates().length > 0 ? (
                   getMemoDates().map((record) => (
                     <div
                       key={record.id}
-                      className="bg-white dark:bg-gray-700/50 rounded-lg p-3 sm:p-3 border border-gray-200 dark:border-gray-600"
+                      className="bg-white dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
                     >
-                      <div className="text-xs sm:text-xs text-gray-500 dark:text-gray-400 mb-2">{record.date}</div>
-                      <div className="text-sm sm:text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{record.daily_memo}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">{record.date}</div>
+                      <div className="text-base text-gray-700 dark:text-gray-200 leading-relaxed">{record.daily_memo}</div>
                     </div>
                   ))
                 ) : (
@@ -758,9 +756,9 @@ function RoutineItem({
 }) {
   return (
     <div>
-      <label className="flex items-center gap-3 sm:gap-3 cursor-pointer py-3 sm:py-3 min-h-[52px]">
-        <span className="text-2xl sm:text-2xl">{emoji}</span>
-        <span className={`flex-1 text-base sm:text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
+      <label className="flex items-center gap-3 cursor-pointer py-3 min-h-[52px]">
+        <span className="text-2xl">{emoji}</span>
+        <span className={`flex-1 text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
           {label}
         </span>
         <input
@@ -768,7 +766,7 @@ function RoutineItem({
           checked={checked}
           onChange={onChange}
           disabled={disabled}
-          className="w-6 h-6 sm:w-6 sm:h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+          className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
         />
       </label>
       {!isLast && <div style={{ height: '0.5mm' }} className="bg-gray-200 dark:bg-gray-600"></div>}
@@ -789,15 +787,15 @@ function MealCheckbox({
   disabled: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 sm:gap-2 cursor-pointer min-h-[44px] py-1">
+    <label className="flex items-center gap-2 cursor-pointer min-h-[44px] py-1">
       <input
         type="checkbox"
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="w-6 h-6 sm:w-5 sm:h-5 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex-shrink-0"
+        className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
       />
-      <span className={`text-base sm:text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
+      <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
         {label}
       </span>
     </label>
@@ -889,13 +887,13 @@ function RoutineSettingModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-2xl border-0 sm:border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-2xl w-full h-full sm:h-auto sm:max-h-[80vh] overflow-y-auto shadow-xl">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <h2 className="text-xl sm:text-xl font-bold text-gray-900 dark:text-white">⚙️ 루틴 설정</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 루틴 설정</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-3xl sm:text-2xl w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl w-10 h-10 flex items-center justify-center"
             aria-label="닫기"
           >
             ×
@@ -904,24 +902,24 @@ function RoutineSettingModal({
 
         <div className="space-y-3 mb-6">
           {templates.map((template, index) => (
-            <div key={template.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3 sm:p-3">
-              <span className="text-gray-500 dark:text-gray-400 text-sm w-auto sm:w-6">{index + 1}</span>
+            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+              <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
               <input
                 type="text"
                 value={template.emoji}
                 onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
-                className="w-full sm:w-12 px-3 sm:px-2 py-2.5 sm:py-1 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                className="w-full px-3 py-2.5 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
                 maxLength={2}
               />
               <input
                 type="text"
                 value={template.label}
                 onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
-                className="flex-1 px-4 sm:px-3 py-2.5 sm:py-1 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
               />
               <button
                 onClick={() => handleDelete(template.id)}
-                className="w-full sm:w-auto px-4 sm:px-3 py-2.5 sm:py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
+                className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
               >
                 삭제
               </button>
@@ -931,22 +929,22 @@ function RoutineSettingModal({
 
         <button
           onClick={handleAdd}
-          className="w-full py-3 sm:py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors mb-4 min-h-[44px] text-base sm:text-sm"
+          className="w-full py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors mb-4 min-h-[44px] text-base"
         >
           + 루틴 추가
         </button>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-3 sm:py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors min-h-[44px] text-base sm:text-sm"
+            className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors min-h-[44px] text-base"
           >
             취소
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex-1 py-3 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 min-h-[44px] text-base sm:text-sm"
+            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 min-h-[44px] text-base"
           >
             {isSaving ? '저장 중...' : '저장'}
           </button>
@@ -1023,14 +1021,14 @@ function MonthlyAchievementTable({
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-4 shadow-sm">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
-        <h3 className="text-lg sm:text-base font-semibold text-gray-900 dark:text-white">월별 달성 현황</h3>
+    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-4 shadow-sm">
+      <div className="flex flex-col items-start justify-between gap-3 mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">월별 달성 현황</h3>
         <input
           type="month"
           value={selectedMonth}
           onChange={(e) => setSelectedMonth(e.target.value)}
-          className="w-full sm:w-auto px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+          className="w-full px-4 py-2.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
         />
       </div>
       
@@ -1038,13 +1036,13 @@ function MonthlyAchievementTable({
         <div className="text-center text-gray-400 dark:text-gray-500 py-8">로딩 중...</div>
       ) : (
         <>
-          <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-            <table className="w-full text-xs sm:text-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-base">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-3 sm:py-2 px-3 sm:px-2 text-gray-600 dark:text-gray-400 font-medium text-sm sm:text-xs">날짜</th>
+                  <th className="text-left py-3 px-3 text-gray-600 dark:text-gray-400 font-medium text-base">날짜</th>
                   {routineTemplates.map(routine => (
-                    <th key={routine.id} className="text-center py-3 sm:py-2 px-2 sm:px-1 text-gray-600 dark:text-gray-400 font-medium text-xl sm:text-lg">
+                    <th key={routine.id} className="text-center py-3 px-2 text-gray-600 dark:text-gray-400 font-medium text-xl">
                       {routine.emoji}
                     </th>
                   ))}
@@ -1055,9 +1053,9 @@ function MonthlyAchievementTable({
                   .filter((_, index) => isMonthExpanded || index < 15)
                   .map((dayData) => (
                   <tr key={dayData.day} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-3 sm:py-2 px-3 sm:px-2 text-gray-700 dark:text-gray-300 text-sm sm:text-xs">{dayData.day}일</td>
+                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 text-base">{dayData.day}일</td>
                     {routineTemplates.map(routine => (
-                      <td key={routine.id} className="text-center py-3 sm:py-2 px-2 sm:px-1 text-green-600 dark:text-green-400 font-bold text-base sm:text-sm">
+                      <td key={routine.id} className="text-center py-3 px-2 text-green-600 dark:text-green-400 font-bold text-lg">
                         {isChecked(dayData, routine.id) ? '✓' : '-'}
                       </td>
                     ))}
@@ -1066,10 +1064,10 @@ function MonthlyAchievementTable({
               </tbody>
             </table>
           </div>
-          <div className="mt-4 sm:mt-3 flex justify-center">
+          <div className="mt-4 flex justify-center">
             <button
               onClick={() => setIsMonthExpanded(!isMonthExpanded)}
-              className="px-6 sm:px-4 py-3 sm:py-2 text-base sm:text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-lg transition-colors min-h-[44px]"
+              className="px-6 py-3 text-base text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-lg transition-colors min-h-[44px]"
             >
               {isMonthExpanded ? '접기 ▲' : '더보기 ▼'}
             </button>
@@ -1083,15 +1081,15 @@ function MonthlyAchievementTable({
 // AI Agent 모달 컴포넌트
 function AIAgentModal({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 sm:p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-none sm:rounded-2xl border-0 sm:border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-4xl w-full h-full sm:h-auto sm:max-h-[85vh] overflow-y-auto shadow-xl">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-4xl w-full max-h-[85vh] overflow-y-auto shadow-xl">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
             🤖 AI Agent
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-3xl sm:text-2xl w-10 h-10 sm:w-auto sm:h-auto flex items-center justify-center"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl w-10 h-10 flex items-center justify-center"
             aria-label="닫기"
           >
             ×
@@ -1099,13 +1097,13 @@ function AIAgentModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* AI Agent 설명 */}
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 border border-purple-200 dark:border-purple-500/20">
-          <h3 className="text-lg sm:text-lg font-semibold text-gray-900 dark:text-white mb-3">✨ 나만의 AI 라이프 코치</h3>
-          <p className="text-gray-600 dark:text-gray-300 text-sm sm:text-sm leading-relaxed mb-4">
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 rounded-xl p-6 mb-6 border border-purple-200 dark:border-purple-500/20">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">✨ 나만의 AI 라이프 코치</h3>
+          <p className="text-gray-600 dark:text-gray-300 text-base leading-relaxed mb-4">
             AI Agent가 당신의 일상을 종합적으로 분석하여 맞춤형 조언을 제공합니다.
           </p>
           
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
             <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">⚖️</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">체중 변화</div>
@@ -1136,18 +1134,18 @@ function AIAgentModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* 개발 예정 기능 안내 */}
-        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-gray-600">
+        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-6 border border-gray-200 dark:border-gray-600">
           <div className="text-center">
-            <div className="text-5xl sm:text-6xl mb-4">🚀</div>
-            <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-3">곧 만나요!</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4 sm:mb-6 text-sm sm:text-base">
-              AI Agent 기능은 현재 개발 중입니다.<br className="hidden sm:block"/>
-              <span className="sm:hidden"> </span>조만간 당신의 라이프 코치가 되어드릴게요!
+            <div className="text-6xl mb-4">🚀</div>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">곧 만나요!</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6 text-base">
+              AI Agent 기능은 현재 개발 중입니다.<br/>
+              조만간 당신의 라이프 코치가 되어드릴게요!
             </p>
             
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-3 sm:p-4 text-left border border-gray-200 dark:border-gray-700">
-              <h4 className="text-sm sm:text-sm font-semibold text-gray-900 dark:text-white mb-3">🎯 예정된 기능</h4>
-              <ul className="space-y-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300">
+            <div className="bg-white dark:bg-gray-900 rounded-lg p-4 text-left border border-gray-200 dark:border-gray-700">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">🎯 예정된 기능</h4>
+              <ul className="space-y-2 text-base text-gray-600 dark:text-gray-300">
                 <li className="flex items-start gap-2">
                   <span className="text-purple-400 dark:text-purple-400">▸</span>
                   <span>일주일 단위 루틴 달성률 분석 및 개선 제안</span>
@@ -1181,10 +1179,10 @@ function AIAgentModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <div className="mt-4 sm:mt-6 flex justify-center">
+        <div className="mt-6 flex justify-center">
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-6 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors min-h-[44px] text-base sm:text-sm"
+            className="w-full px-6 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors min-h-[44px] text-base"
           >
             닫기
           </button>
