@@ -383,6 +383,9 @@ export default function Home() {
 
   // 환경 변수 오류 표시
   if (!supabase) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
@@ -396,10 +399,32 @@ export default function Home() {
             <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
               다음 환경 변수가 필요합니다:
             </p>
-            <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>NEXT_PUBLIC_SUPABASE_URL</li>
-              <li>NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
+            <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-3">
+              <li>
+                NEXT_PUBLIC_SUPABASE_URL: {supabaseUrl ? (
+                  <span className="text-green-600">✅ 설정됨 ({supabaseUrl.substring(0, 30)}...)</span>
+                ) : (
+                  <span className="text-red-600">❌ 없음</span>
+                )}
+              </li>
+              <li>
+                NEXT_PUBLIC_SUPABASE_ANON_KEY: {supabaseAnonKey ? (
+                  <span className="text-green-600">✅ 설정됨 (길이: {supabaseAnonKey.length})</span>
+                ) : (
+                  <span className="text-red-600">❌ 없음</span>
+                )}
+              </li>
             </ul>
+          </div>
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded p-3 mb-4">
+            <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              💡 <strong>해결 방법:</strong>
+            </p>
+            <ol className="text-xs text-yellow-700 dark:text-yellow-400 mt-2 space-y-1 list-decimal list-inside">
+              <li>Vercel 대시보드 → Settings → Environment Variables 확인</li>
+              <li>환경 변수 추가 후 <strong>반드시 재배포</strong> (Redeploy) 필요</li>
+              <li>브라우저 콘솔(F12)에서 환경 변수 상태 확인</li>
+            </ol>
           </div>
           <p className="text-sm text-red-600 dark:text-red-400">
             Vercel에 배포된 경우, 프로젝트 설정 → Environment Variables에서 확인하세요.
