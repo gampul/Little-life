@@ -708,6 +708,10 @@ export default function Home() {
               routineTemplates={routineTemplates}
               isMonthExpanded={isMonthExpanded}
               setIsMonthExpanded={setIsMonthExpanded}
+              onDateSelect={(date) => {
+                setSelectedDate(date);
+                setIsEditMode(true);
+              }}
             />
 
             {/* 3. 일별 메모 보기 */}
@@ -961,17 +965,22 @@ function MonthlyAchievementTable({
   routineTemplates,
   isMonthExpanded,
   setIsMonthExpanded,
+  onDateSelect,
 }: {
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
   routineTemplates: RoutineTemplate[];
   isMonthExpanded: boolean;
   setIsMonthExpanded: (expanded: boolean) => void;
+  onDateSelect?: (date: string) => void;
 }) {
-  const [monthlyData, setMonthlyData] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
+  const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1;
 
-  // Supabase 클라이언트를 런타임에만 초기화
+  // Supabase 클라이언트 (기존 데이터 동기화용)
   const supabase = useMemo(() => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -983,97 +992,458 @@ function MonthlyAchievementTable({
     return createClient(supabaseUrl, supabaseAnonKey);
   }, []);
 
-  const loadMonthlyData = useCallback(async () => {
-    if (!supabase) {
-      setIsLoading(false);
-      return;
+  // 3개월 목록 생성 (이전, 현재, 다음)
+  const getThreeMonths = useCallback(() => {
+    const months = [];
+    for (let i = -1; i <= 1; i++) {
+      let year = currentYear;
+      let month = currentMonth + i;
+      
+      if (month < 1) {
+        month += 12;
+        year -= 1;
+      } else if (month > 12) {
+        month -= 12;
+        year += 1;
+      }
+      
+      months.push({ year, month });
     }
-    setIsLoading(true);
-    const [year, month] = selectedMonth.split('-');
-    const daysInMonth = new Date(parseInt(year), parseInt(month), 0).getDate();
-    
-    const result = [];
-    
+    return months;
+  }, [currentYear, currentMonth]);
+
+  // 로컬 스토리지에서 데이터 로드 및 Supabase 데이터 동기화
+  useEffect(() => {
+    const loadData = async () => {
+      // 1. 로컬 스토리지에서 로드
+      let data: Record<string, Set<string>> = {};
+      try {
+        const stored = localStorage.getItem('routine-calendar-data');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          Object.keys(parsed).forEach(date => {
+            data[date] = new Set(parsed[date]);
+          });
+        }
+      } catch (err) {
+        console.error('로컬 스토리지 로드 오류:', err);
+      }
+
+      // 2. Supabase에서도 로드하여 병합 (기존 데이터 유지)
+      if (supabase) {
+        try {
+          const threeMonths = getThreeMonths();
+          const allDates: string[] = [];
+          
+          for (const { year, month } of threeMonths) {
+            const daysInMonth = new Date(year, month, 0).getDate();
+            for (let day = 1; day <= daysInMonth; day++) {
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              allDates.push(dateStr);
+            }
+          }
+
+          const { data: checks } = await supabase
+            .from('daily_routine_checks')
+            .select('date, routine_id, checked')
+            .in('date', allDates)
+            .eq('checked', true);
+
+          if (checks && checks.length > 0) {
+            checks.forEach((check: any) => {
+              if (!data[check.date]) {
+                data[check.date] = new Set();
+              }
+              data[check.date].add(check.routine_id);
+            });
+          }
+        } catch (err) {
+          console.error('Supabase 데이터 로드 오류:', err);
+        }
+      }
+
+      setCheckedDates(data);
+      // 로컬 스토리지에 병합된 데이터 저장
+      if (Object.keys(data).length > 0) {
+        const serializable: Record<string, string[]> = {};
+        Object.keys(data).forEach(date => {
+          serializable[date] = Array.from(data[date]);
+        });
+        localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
+      }
+    };
+    loadData();
+  }, [routineTemplates, getThreeMonths, supabase]);
+
+  // 로컬 스토리지에 데이터 저장
+  const saveToStorage = useCallback((data: Record<string, Set<string>>) => {
+    try {
+      const serializable: Record<string, string[]> = {};
+      Object.keys(data).forEach(date => {
+        serializable[date] = Array.from(data[date]);
+      });
+      localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
+    } catch (err) {
+      console.error('로컬 스토리지 저장 오류:', err);
+    }
+  }, []);
+
+  // 특정 월의 날짜 목록 생성
+  const getMonthDays = (year: number, month: number) => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const days = [];
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
-      
-      const { data: checks } = await supabase
-        .from('daily_routine_checks')
-        .select('routine_id, checked')
-        .eq('date', dateStr);
-      
-      result.push({
+      days.push({
         day,
-        checks: checks || []
+        date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
       });
     }
+    return days;
+  };
+
+  // 연속된 날짜 배열 생성 (빈 칸 없이 여러 달 포함)
+  const getContinuousDateGrid = (startYear: number, startMonth: number, numGrids: number = 3) => {
+    const grids: Array<Array<{ day: number | null; date: string | null; month: number | null; year: number | null }>> = [];
     
-    setMonthlyData(result);
-    setIsLoading(false);
-  }, [supabase, selectedMonth]);
+    // 시작 날짜 계산
+    let currentDate = new Date(startYear, startMonth - 1, 1);
+    
+    // 여러 그리드 생성 (각 그리드는 98개 셀)
+    for (let gridIdx = 0; gridIdx < numGrids; gridIdx++) {
+      const grid: Array<{ day: number | null; date: string | null; month: number | null; year: number | null }> = [];
+      
+      // 98개 셀 채우기 (7행 × 14열)
+      for (let i = 0; i < 98; i++) {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1;
+        const day = currentDate.getDate();
+        
+        grid.push({
+          day,
+          date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+          month,
+          year
+        });
+        
+        // 다음 날로 이동
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      grids.push(grid);
+    }
+    
+    return grids;
+  };
 
-  useEffect(() => {
-    loadMonthlyData();
-  }, [loadMonthlyData, routineTemplates]);
+  // 날짜 포맷팅 (월 표시용)
+  const formatDateLabel = (year: number, month: number, day: number) => {
+    // 날짜만 표시 (월은 필요시 별도 표시)
+    return day;
+  };
 
-  const isChecked = (dayData: any, routineId: string) => {
-    return dayData.checks.some((c: any) => c.routine_id === routineId && c.checked);
+  // 날짜 체크 상태 확인
+  const isDateChecked = (date: string, routineId: string) => {
+    return checkedDates[date]?.has(routineId) || false;
+  };
+
+  // 날짜 클릭 핸들러 (체크/언체크)
+  const handleDateToggle = (date: string, routineId: string) => {
+    if (editModeRoutine !== routineId) return;
+    
+    setCheckedDates(prev => {
+      const newData = { ...prev };
+      if (!newData[date]) {
+        newData[date] = new Set();
+      }
+      
+      const dateSet = new Set(newData[date]);
+      if (dateSet.has(routineId)) {
+        dateSet.delete(routineId);
+      } else {
+        dateSet.add(routineId);
+      }
+      
+      if (dateSet.size === 0) {
+        delete newData[date];
+      } else {
+        newData[date] = dateSet;
+      }
+      
+      saveToStorage(newData);
+      return newData;
+    });
+  };
+
+  // 월별 체크 비율 계산 (0~100%)
+  const getMonthProgress = (year: number, month: number, routineId: string) => {
+    const days = getMonthDays(year, month);
+    let checkedCount = 0;
+    
+    days.forEach(({ date }) => {
+      if (isDateChecked(date, routineId)) {
+        checkedCount++;
+      }
+    });
+    
+    return days.length > 0 ? (checkedCount / days.length) * 100 : 0;
+  };
+
+  // 연속 체크한 날짜 수 계산 (현재 날짜 기준)
+  const getConsecutiveDays = (routineId: string) => {
+    let consecutiveCount = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // 오늘부터 과거로 거슬러 올라가며 연속 체크된 날짜 계산
+    let checkDate = new Date(today);
+    
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (isDateChecked(dateStr, routineId)) {
+        consecutiveCount++;
+        // 하루 전으로 이동
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+      
+      // 무한 루프 방지 (최대 365일까지 확인)
+      if (consecutiveCount > 365) break;
+    }
+    
+    return consecutiveCount;
+  };
+
+  // 진행률에 따른 색상 계산 (0% = 회색, 100% = 진한 보라색 #8B5CF6)
+  const getProgressColor = (progress: number) => {
+    if (progress === 0) {
+      return 'bg-gray-400';
+    }
+    // 보라색 그라데이션: progress에 따라 농도 조절 (#8B5CF6 = purple-500/violet-500)
+    const opacity = Math.min(progress / 100, 1);
+    if (opacity < 0.3) {
+      return 'bg-violet-400';
+    } else if (opacity < 0.6) {
+      return 'bg-violet-500'; // #8B5CF6에 가장 가까운 색상
+    } else if (opacity < 0.8) {
+      return 'bg-violet-600';
+    } else {
+      return 'bg-violet-700';
+    }
   };
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-4 shadow-sm">
-      <div className="flex flex-col items-start justify-between gap-3 mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">월별 달성 현황</h3>
-        <input
-          type="month"
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
-          className="w-full px-4 py-2.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-        />
+    <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-4 shadow-sm max-w-full mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">캘린더</h3>
       </div>
       
-      {isLoading ? (
-        <div className="text-center text-gray-400 dark:text-gray-500 py-8">로딩 중...</div>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-base">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-3 px-3 text-gray-600 dark:text-gray-400 font-medium text-base">날짜</th>
-                  {routineTemplates.map(routine => (
-                    <th key={routine.id} className="text-center py-3 px-2 text-gray-600 dark:text-gray-400 font-medium text-xl">
-                      {routine.emoji}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {monthlyData
-                  .filter((_, index) => isMonthExpanded || index < 15)
-                  .map((dayData) => (
-                  <tr key={dayData.day} className="border-b border-gray-100 dark:border-gray-700/50">
-                    <td className="py-3 px-3 text-gray-700 dark:text-gray-300 text-base">{dayData.day}일</td>
-                    {routineTemplates.map(routine => (
-                      <td key={routine.id} className="text-center py-3 px-2 text-green-600 dark:text-green-400 font-bold text-lg">
-                        {isChecked(dayData, routine.id) ? '✓' : '-'}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="space-y-8">
+        {routineTemplates.map((routine) => {
+          const threeMonths = getThreeMonths();
+          const consecutiveDays = getConsecutiveDays(routine.id);
+          
+          return (
+            <div key={routine.id} className="border-b border-gray-200 dark:border-gray-700 pb-8 last:border-b-0 last:pb-0 relative">
+              {/* 루틴 제목 + 연속 체크 수 */}
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">{routine.emoji}</span>
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-white flex-1">{routine.label}</h4>
+                {consecutiveDays > 0 && (
+                  <div className="px-2 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 text-xs font-medium rounded-full">
+                    {consecutiveDays}일 연속
+                  </div>
+                )}
+              </div>
+              
+              {/* 우측 수정 버튼 */}
+              <button
+                onClick={() => setEditModeRoutine(editModeRoutine === routine.id ? null : routine.id)}
+                className="absolute top-0 right-0 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 hover:scale-105"
+              >
+                {editModeRoutine === routine.id ? '저장' : '수정'}
+              </button>
+              
+              {/* 연속 날짜 캘린더 (가로 스크롤) */}
+              <div className="space-y-3">
+                {/* 현재 달 표시 */}
+                <div className="flex items-center gap-3">
+                  <h5 className="text-base font-medium text-gray-900 dark:text-white text-left shrink-0">
+                    {currentYear}년 {currentMonth}월
+                  </h5>
+                  <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden max-w-[200px]">
+                    <div
+                      className="h-full transition-all duration-500 ease-out"
+                      style={{ 
+                        width: `${getMonthProgress(currentYear, currentMonth, routine.id)}%`,
+                        backgroundColor: getMonthProgress(currentYear, currentMonth, routine.id) > 0 
+                          ? `rgba(139, 92, 246, ${Math.min(getMonthProgress(currentYear, currentMonth, routine.id) / 100, 1)})` 
+                          : '#9CA3AF'
+                      }}
+                    />
+                  </div>
+                  <div className="w-3 h-3 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden shrink-0">
+                    <div
+                      className="w-full h-full transition-all duration-500 ease-out"
+                      style={{ 
+                        backgroundColor: getMonthProgress(currentYear, currentMonth, routine.id) > 0 ? '#8B5CF6' : '#9CA3AF',
+                        opacity: getMonthProgress(currentYear, currentMonth, routine.id) > 0 ? 1 : 0.3 
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                {/* 가로 스크롤 가능한 캘린더 컨테이너 */}
+                <div 
+                  className="overflow-x-auto overflow-y-hidden"
+                  style={{
+                    width: '100%',
+                    maxWidth: '882px',
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: '#6B7280 #3A3A3C'
+                  }}
+                >
+                  <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+                    {(() => {
+                      // 시작 날짜: 현재 달 기준 1개월 전 (과거 기록도 볼 수 있도록)
+                      const startDate = new Date(currentYear, currentMonth - 2, 1);
+                      const startYear = startDate.getFullYear();
+                      const startMonth = startDate.getMonth() + 1;
+                      
+                      // 총 3개 그리드 생성 (각 그리드 = 98일 = 약 3.2개월, 총 약 9.6개월)
+                      const numGrids = 3;
+                      const grids = getContinuousDateGrid(startYear, startMonth, numGrids);
+                      
+                      // 모든 그리드를 하나의 배열로 병합하여 월 변경 감지
+                      const allDates = grids.flat();
+                      
+                      return grids.map((grid, gridIdx) => {
+                        // 그리드를 7행 × 14열로 변환
+                        const rows: Array<Array<{ day: number | null; date: string | null; month: number | null; year: number | null; globalIndex: number }>> = [];
+                        for (let i = 0; i < 7; i++) {
+                          const row: Array<{ day: number | null; date: string | null; month: number | null; year: number | null; globalIndex: number }> = [];
+                          for (let j = 0; j < 14; j++) {
+                            const index = i * 14 + j;
+                            const globalIndex = gridIdx * 98 + index;
+                            const cell = grid[index] || { day: null, date: null, month: null, year: null };
+                            row.push({ ...cell, globalIndex });
+                          }
+                          rows.push(row);
+                        }
+                        
+                        return (
+                          <div
+                            key={gridIdx}
+                            className="shrink-0"
+                            style={{
+                              width: '882px',
+                              height: '370px',
+                              backgroundColor: '#3A3A3C',
+                              padding: '8px',
+                              borderRadius: '8px',
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(14, 56px)',
+                              gridTemplateRows: 'repeat(7, 48px)',
+                              gap: '6px',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            {rows.map((row, rowIdx) => (
+                              row.map((cell, colIdx) => {
+                                const { day, date, month, year, globalIndex } = cell;
+                                const isChecked = date ? isDateChecked(date, routine.id) : false;
+                                const isToday = date === new Date().toISOString().split('T')[0];
+                                const isEmpty = day === null || date === null;
+                                
+                                // 월 변경 감지: 이전 날짜와 다른 월이거나, day가 1인 경우
+                                let isMonthStart = false;
+                                if (!isEmpty && day === 1) {
+                                  // 첫 번째 셀이거나, 이전 셀이 다른 월인 경우
+                                  if (globalIndex === 0) {
+                                    isMonthStart = true;
+                                  } else {
+                                    const prevCell = allDates[globalIndex - 1];
+                                    if (prevCell && (prevCell.month !== month || prevCell.year !== year)) {
+                                      isMonthStart = true;
+                                    }
+                                  }
+                                }
+                                
+                                return (
+                                  <div
+                                    key={`${gridIdx}-${rowIdx}-${colIdx}`}
+                                    className={`
+                                      flex items-center justify-center relative
+                                      ${isEmpty ? '' : 'cursor-pointer'}
+                                      transition-all duration-300 ease-in-out
+                                      ${editModeRoutine === routine.id && !isEmpty ? 'hover:scale-105' : ''}
+                                    `}
+                                    style={{
+                                      width: '56px',
+                                      height: '48px',
+                                      backgroundColor: isEmpty ? '#3A3A3C' : isChecked ? '#8B5CF6' : '#B8B0E5',
+                                      borderRadius: '8px',
+                                      color: isEmpty ? 'transparent' : isChecked ? '#FFFFFF' : '#1A1A1A',
+                                      fontSize: '18px',
+                                      fontWeight: '500',
+                                      border: isToday ? '2px solid #3B82F6' : 'none',
+                                      boxShadow: isChecked ? '0 2px 4px rgba(0,0,0,0.2)' : 'none',
+                                      userSelect: 'none',
+                                      position: 'relative'
+                                    }}
+                                    onClick={() => {
+                                      if (!isEmpty && date && editModeRoutine === routine.id) {
+                                        handleDateToggle(date, routine.id);
+                                      }
+                                    }}
+                                    title={
+                                      isEmpty 
+                                        ? '' 
+                                        : `${year}년 ${month}월 ${day}일${isChecked ? ' (체크됨)' : ''}${editModeRoutine === routine.id ? ' - 클릭하여 체크/언체크' : ' - 수정 버튼을 눌러 편집'}`
+                                    }
+                                  >
+                                    {day !== null ? day : ''}
+                                    {/* 월 시작 표시 (작은 점) */}
+                                    {isMonthStart && (
+                                      <div
+                                        style={{
+                                          position: 'absolute',
+                                          top: '2px',
+                                          right: '2px',
+                                          width: '4px',
+                                          height: '4px',
+                                          backgroundColor: '#FFFFFF',
+                                          borderRadius: '50%',
+                                          opacity: 0.8
+                                        }}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })
+                            ))}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+                
+                {/* 스크롤 안내 */}
+                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                  ← 좌우로 스크롤하여 더 많은 날짜를 확인하세요 →
+                </p>
+              </div>
+            </div>
+          );
+        })}
+        
+        {routineTemplates.length === 0 && (
+          <div className="text-center text-gray-400 dark:text-gray-500 py-8">
+            루틴을 추가해주세요
           </div>
-          <div className="mt-4 flex justify-center">
-            <button
-              onClick={() => setIsMonthExpanded(!isMonthExpanded)}
-              className="px-6 py-3 text-base text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-gray-100 dark:hover:bg-gray-700/50 rounded-lg transition-colors min-h-[44px]"
-            >
-              {isMonthExpanded ? '접기 ▲' : '더보기 ▼'}
-            </button>
-          </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }

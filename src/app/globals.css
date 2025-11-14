@@ -54,3 +54,19 @@ body {
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #6b7280;
 }
+
+/* 스크롤바 숨김 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* 캘린더 그리드 스타일 */
+.calendar-grid-14 {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+}
