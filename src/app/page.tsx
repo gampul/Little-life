@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ThemeToggle } from './components/ThemeToggle';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface DailyRecord {
   id?: string;
@@ -22,6 +24,7 @@ interface RoutineTemplate {
   label: string;
   field_key: string;
   sort_order: number;
+  color?: string; // 루틴 색상 (기본값: blue)
 }
 
 interface RoutineCheck {
@@ -70,6 +73,12 @@ export default function Home() {
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
+  const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
+  const [memoViewMode, setMemoViewMode] = useState<'edit' | 'preview'>('edit');
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkText, setLinkText] = useState('');
+  const memoTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [formData, setFormData] = useState<DailyRecord>({
     date: selectedDate,
@@ -227,6 +236,67 @@ export default function Home() {
       ...prev,
       [field]: value,
     }));
+  };
+
+  // 텍스트 영역에 텍스트 삽입 (커서 위치)
+  const insertTextAtCursor = (before: string, after: string) => {
+    if (!memoTextareaRef.current) return;
+    
+    const textarea = memoTextareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = formData.daily_memo.substring(start, end);
+    const newText = 
+      formData.daily_memo.substring(0, start) +
+      before + selectedText + after +
+      formData.daily_memo.substring(end);
+    
+    handleInputChange('daily_memo', newText);
+    
+    // 커서 위치 조정
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + before.length + selectedText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  // 이미지 업로드 처리
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 파일 크기 제한 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('이미지 크기는 5MB 이하여야 합니다.');
+      return;
+    }
+
+    // 이미지 파일인지 확인
+    if (!file.type.startsWith('image/')) {
+      alert('이미지 파일만 업로드할 수 있습니다.');
+      return;
+    }
+
+    try {
+      // FileReader로 base64로 변환
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        const imageMarkdown = `![${file.name}](${base64})`;
+        insertTextAtCursor(imageMarkdown, '');
+      };
+      reader.onerror = () => {
+        alert('이미지 읽기 오류가 발생했습니다.');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('이미지 업로드 오류:', error);
+      alert('이미지 업로드에 실패했습니다.');
+    }
+    
+    // input 초기화
+    e.target.value = '';
   };
 
   const handleSave = async () => {
@@ -412,25 +482,43 @@ export default function Home() {
         {/* 고정 헤더 */}
         <div className="sticky top-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 sm:py-3 mb-4 sm:mb-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              Little Life
-            </h1>
+            <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent">
+            Little Life
+          </h1>
             <div className="flex gap-1.5 sm:gap-2">
-              <ThemeToggle />
+            {!isEditMode ? (
               <button
-                onClick={() => setIsAIAgentOpen(true)}
-                className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg flex items-center justify-center min-h-[44px]"
-                aria-label="AI Agent"
-              >
-                <span className="text-base">🤖</span>
-              </button>
-              <button
-                onClick={() => setIsRoutineSettingOpen(true)}
+                onClick={handleEdit}
                 className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
-                aria-label="루틴 설정"
+                aria-label="수정하기"
               >
-                <span className="text-base">⚙️</span>
+                <span className="text-base">✏️</span>
               </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 disabled:bg-gray-400 text-white rounded-lg flex items-center justify-center min-h-[44px] disabled:cursor-not-allowed"
+                aria-label={isSaving ? '저장 중' : '저장'}
+              >
+                <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
+              </button>
+            )}
+            <ThemeToggle />
+            <button
+              onClick={() => setIsAIAgentOpen(true)}
+                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
+              aria-label="AI Agent"
+            >
+                <span className="text-base">🤖</span>
+            </button>
+            <button
+              onClick={() => setIsRoutineSettingOpen(true)}
+                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
+              aria-label="루틴 설정"
+            >
+                <span className="text-base">⚙️</span>
+            </button>
             </div>
           </div>
         </div>
@@ -457,9 +545,9 @@ export default function Home() {
         <div className="space-y-6">
           {/* 입력 섹션 */}
           <div>
-            {/* 날짜, 체중 입력, 수정하기 한 줄 배치 */}
+            {/* 날짜, 체중 입력 한 줄 배치 */}
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
                   className="relative cursor-pointer"
@@ -482,10 +570,10 @@ export default function Home() {
                     }
                   }}
                 >
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
                     className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -511,23 +599,6 @@ export default function Home() {
                   disabled={!isEditMode}
                   className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
                 />
-                {/* 수정/저장 버튼 */}
-                {!isEditMode ? (
-                  <button
-                    onClick={handleEdit}
-                    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-base font-medium rounded-lg transition-colors min-h-[44px] whitespace-nowrap"
-                  >
-                    수정하기
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white text-base font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap"
-                  >
-                    {isSaving ? '저장 중...' : '저장'}
-                  </button>
-                )}
               </div>
               {message && (
                 <div className="mt-3 text-center text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{message}</div>
@@ -541,7 +612,7 @@ export default function Home() {
                 <div className="flex gap-1.5 sm:gap-2">
                   <button
                     onClick={() => setWeightPeriod('7days')}
-                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '7days'
                         ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -551,7 +622,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('1month')}
-                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '1month'
                         ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -561,7 +632,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('1year')}
-                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '1year'
                         ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -571,7 +642,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('ytd')}
-                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === 'ytd'
                         ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -581,7 +652,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('all')}
-                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === 'all'
                         ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -704,16 +775,22 @@ export default function Home() {
                     onExpandToggle={() => {
                       setExpandedRoutineId(expandedRoutineId === routine.id ? null : routine.id);
                     }}
+                    routineId={routine.id}
+                    routineTemplates={routineTemplates}
+                    editModeRoutine={editModeRoutine}
+                    setEditModeRoutine={setEditModeRoutine}
                   />
                   {/* 확장된 루틴의 캘린더 표시 */}
                   {expandedRoutineId === routine.id && (
-                    <div className="mt-4 pb-4">
+                    <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
                       <RoutineCalendar
                         routineId={routine.id}
                         routineLabel={routine.label}
                         routineEmoji={routine.emoji}
                         routineTemplates={routineTemplates}
                         isExpanded={true}
+                        editModeRoutine={editModeRoutine}
+                        setEditModeRoutine={setEditModeRoutine}
                       />
                     </div>
                   )}
@@ -763,17 +840,189 @@ export default function Home() {
 
             {/* 오늘의 메모 */}
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                📝 오늘의 메모
-              </label>
-              <textarea
-                value={formData.daily_memo}
-                onChange={(e) => handleInputChange('daily_memo', e.target.value)}
-                placeholder="오늘 하루를 기록해보세요..."
-                disabled={!isEditMode}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
-                rows={5}
-              />
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-base font-medium text-gray-700 dark:text-gray-300">
+                  📝 오늘의 메모
+                </label>
+                {isEditMode && (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMemoViewMode('edit')}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        memoViewMode === 'edit'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      편집
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMemoViewMode('preview')}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                        memoViewMode === 'preview'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      미리보기
+                    </button>
+                  </div>
+                )}
+              </div>
+              {memoViewMode === 'edit' ? (
+                <>
+                  {/* 툴바 */}
+                  {isEditMode && (
+                    <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('**', '**')}
+                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                        title="굵게"
+                      >
+                        <strong>B</strong>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('*', '*')}
+                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                        title="기울임"
+                      >
+                        <em>I</em>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('`', '`')}
+                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 font-mono"
+                        title="코드"
+                      >
+                        {'</>'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowLinkDialog(true)}
+                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                        title="링크 삽입"
+                      >
+                        🔗
+                      </button>
+                      <label className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 cursor-pointer">
+                        📷
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('# ', '')}
+                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                        title="제목"
+                      >
+                        H1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertTextAtCursor('- ', '')}
+                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                        title="리스트"
+                      >
+                        •
+                      </button>
+                    </div>
+                  )}
+                  <textarea
+                    ref={memoTextareaRef}
+                    value={formData.daily_memo}
+                    onChange={(e) => handleInputChange('daily_memo', e.target.value)}
+                    placeholder="오늘 하루를 기록해보세요...&#10;&#10;마크다운 문법을 사용할 수 있습니다:&#10;- **굵게**&#10;- *기울임*&#10;- # 제목&#10;- - 리스트"
+                    disabled={!isEditMode}
+                    className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-y min-h-[200px] font-mono"
+                    rows={10}
+                  />
+                </>
+              ) : (
+                <div className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg min-h-[200px] overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
+                  {formData.daily_memo ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {formData.daily_memo}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-gray-400 dark:text-gray-500">메모를 작성하면 미리보기가 표시됩니다.</p>
+                  )}
+                </div>
+              )}
+              {isEditMode && (
+                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  💡 마크다운 문법: **굵게**, *기울임*, # 제목, - 리스트, `코드`, [링크](url), ![이미지](url)
+                </div>
+              )}
+              
+              {/* 링크 삽입 다이얼로그 */}
+              {showLinkDialog && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 max-w-md w-full">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">링크 삽입</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          링크 텍스트
+                        </label>
+                        <input
+                          type="text"
+                          value={linkText}
+                          onChange={(e) => setLinkText(e.target.value)}
+                          placeholder="표시할 텍스트"
+                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          URL
+                        </label>
+                        <input
+                          type="url"
+                          value={linkUrl}
+                          onChange={(e) => setLinkUrl(e.target.value)}
+                          placeholder="https://example.com"
+                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (linkUrl && linkText) {
+                              insertTextAtCursor(`[${linkText}](${linkUrl})`, '');
+                              setLinkUrl('');
+                              setLinkText('');
+                              setShowLinkDialog(false);
+                            }
+                          }}
+                          className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                        >
+                          삽입
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowLinkDialog(false);
+                            setLinkUrl('');
+                            setLinkText('');
+                          }}
+                          className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -790,7 +1039,11 @@ export default function Home() {
                       className="bg-white dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
                     >
                       <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">{record.date}</div>
-                      <div className="text-base text-gray-700 dark:text-gray-200 leading-relaxed">{record.daily_memo}</div>
+                      <div className="text-base text-gray-700 dark:text-gray-200 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {record.daily_memo}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -817,6 +1070,10 @@ function RoutineItem({
   isLast = false,
   isExpanded = false,
   onExpandToggle,
+  routineId,
+  routineTemplates,
+  editModeRoutine,
+  setEditModeRoutine,
 }: {
   emoji: string;
   label: string;
@@ -826,29 +1083,184 @@ function RoutineItem({
   isLast?: boolean;
   isExpanded?: boolean;
   onExpandToggle?: () => void;
+  routineId: string;
+  routineTemplates: RoutineTemplate[];
+  editModeRoutine: string | null;
+  setEditModeRoutine: (routineId: string | null) => void;
 }) {
+  const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1;
+
+  // 로컬 스토리지에서 데이터 로드
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('routine-calendar-data');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const data: Record<string, Set<string>> = {};
+        Object.keys(parsed).forEach(date => {
+          data[date] = new Set(parsed[date]);
+        });
+        setCheckedDates(data);
+      }
+    } catch (err) {
+      console.error('로컬 스토리지 로드 오류:', err);
+    }
+  }, []);
+
+  // 날짜 체크 상태 확인
+  const isDateChecked = (date: string, routineId: string) => {
+    return checkedDates[date]?.has(routineId) || false;
+  };
+
+  // 연속 체크한 날짜 수 계산
+  const getConsecutiveDays = (routineId: string) => {
+    let consecutiveCount = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let checkDate = new Date(today);
+    
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (isDateChecked(dateStr, routineId)) {
+        consecutiveCount++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+      if (consecutiveCount > 365) break;
+    }
+    return consecutiveCount;
+  };
+
+  // 월별 체크 비율 계산
+  const getMonthProgress = (year: number, month: number, routineId: string) => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let checkedCount = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (isDateChecked(dateStr, routineId)) {
+        checkedCount++;
+      }
+    }
+    return daysInMonth > 0 ? (checkedCount / daysInMonth) * 100 : 0;
+  };
+
+  // 루틴 색상 가져오기
+  const routine = routineTemplates.find(r => r.id === routineId);
+  const routineColor = routine?.color || '#3B82F6';
+  
+  // hex 색상을 RGB로 변환
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 59, g: 130, b: 246 };
+  };
+  
+  // 색상 밝기 계산 (0-255)
+  const getBrightness = (hex: string) => {
+    const rgb = hexToRgb(hex);
+    return (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+  };
+  
+  // hex를 rgba로 변환
+  const hexToRgba = (hex: string, alpha: number) => {
+    const rgb = hexToRgb(hex);
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+  };
+  
+  // 색상별 클래스 매핑 (hex 색상 지원)
+  const getColorClasses = (color: string) => {
+    // hex 색상인 경우
+    if (color.startsWith('#')) {
+      const brightness = getBrightness(color);
+      const isLight = brightness > 128;
+      const lightColor = hexToRgba(color, 0.2); // 20% 투명도
+      const darkColor = hexToRgba(color, 0.3); // 30% 투명도
+      const textColor = isLight ? '#1E3A8A' : '#60A5FA';
+      const textDarkColor = isLight ? '#3B82F6' : '#93C5FD';
+      
+      return {
+        bg: color,
+        bgLight: lightColor,
+        bgDark: darkColor,
+        text: textColor,
+        textDark: textDarkColor,
+        ring: color,
+        button: color,
+        buttonHover: color,
+      };
+    }
+    
+    // 기존 색상 이름 매핑
+    const colorMap: Record<string, { bg: string; bgLight: string; bgDark: string; text: string; textDark: string; ring: string; button: string; buttonHover: string }> = {
+      blue: { bg: 'bg-blue-500', bgLight: 'bg-blue-100', bgDark: 'bg-blue-900/30', text: 'text-blue-700', textDark: 'text-blue-400', ring: 'ring-blue-500', button: 'bg-blue-600', buttonHover: 'hover:bg-blue-700' },
+      purple: { bg: 'bg-purple-500', bgLight: 'bg-purple-100', bgDark: 'bg-purple-900/30', text: 'text-purple-700', textDark: 'text-purple-400', ring: 'ring-purple-500', button: 'bg-purple-600', buttonHover: 'hover:bg-purple-700' },
+      green: { bg: 'bg-green-500', bgLight: 'bg-green-100', bgDark: 'bg-green-900/30', text: 'text-green-700', textDark: 'text-green-400', ring: 'ring-green-500', button: 'bg-green-600', buttonHover: 'hover:bg-green-700' },
+      red: { bg: 'bg-red-500', bgLight: 'bg-red-100', bgDark: 'bg-red-900/30', text: 'text-red-700', textDark: 'text-red-400', ring: 'ring-red-500', button: 'bg-red-600', buttonHover: 'hover:bg-red-700' },
+      yellow: { bg: 'bg-yellow-500', bgLight: 'bg-yellow-100', bgDark: 'bg-yellow-900/30', text: 'text-yellow-700', textDark: 'text-yellow-400', ring: 'ring-yellow-500', button: 'bg-yellow-600', buttonHover: 'hover:bg-yellow-700' },
+      orange: { bg: 'bg-orange-500', bgLight: 'bg-orange-100', bgDark: 'bg-orange-900/30', text: 'text-orange-700', textDark: 'text-orange-400', ring: 'ring-orange-500', button: 'bg-orange-600', buttonHover: 'hover:bg-orange-700' },
+      pink: { bg: 'bg-pink-500', bgLight: 'bg-pink-100', bgDark: 'bg-pink-900/30', text: 'text-pink-700', textDark: 'text-pink-400', ring: 'ring-pink-500', button: 'bg-pink-600', buttonHover: 'hover:bg-pink-700' },
+      indigo: { bg: 'bg-indigo-500', bgLight: 'bg-indigo-100', bgDark: 'bg-indigo-900/30', text: 'text-indigo-700', textDark: 'text-indigo-400', ring: 'ring-indigo-500', button: 'bg-indigo-600', buttonHover: 'hover:bg-indigo-700' },
+    };
+    return colorMap[color] || colorMap.blue;
+  };
+  
+  const colorClasses = getColorClasses(routineColor);
+  const isHexColor = routineColor.startsWith('#');
+  const consecutiveDays = getConsecutiveDays(routineId);
+  
   return (
     <div>
       <div 
-        className="flex items-center gap-3 py-3 min-h-[52px] cursor-pointer"
+        className="flex items-center gap-3 py-2 min-h-[44px] cursor-pointer"
         onClick={onExpandToggle}
       >
-        {/* 확장/접기 버튼 */}
-        <div
-          className="flex items-center justify-center w-6 h-6 shrink-0 text-gray-500 dark:text-gray-400 transition-transform pointer-events-none"
-          style={{
-            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-          }}
-        >
-          <span className="text-lg">▶</span>
-        </div>
-        
         {/* 이모지 + 텍스트 영역 */}
         <div className="flex items-center gap-3 flex-1">
           <span className="text-2xl">{emoji}</span>
           <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
             {label}
           </span>
+        </div>
+        
+        {/* 연속 일수 + 슬라이더 */}
+        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+          {consecutiveDays > 0 && (
+            <div
+              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                isHexColor 
+                  ? '' 
+                  : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
+              }`}
+              style={isHexColor ? {
+                backgroundColor: colorClasses.bgLight,
+                color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
+              } : {}}
+            >
+              {consecutiveDays}일 연속
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-24">
+              <div
+                className={isHexColor ? 'h-full transition-all duration-500 ease-out' : `h-full ${colorClasses.bg} transition-all duration-500 ease-out`}
+                style={{ 
+                  width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
+                  backgroundColor: isHexColor ? routineColor : undefined,
+                }}
+              />
+            </div>
+            <div
+              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0 shadow-sm' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0 shadow-sm`}
+              style={isHexColor ? { backgroundColor: routineColor } : {}}
+            />
+          </div>
         </div>
         
         {/* 체크박스 */}
@@ -858,11 +1270,16 @@ function RoutineItem({
             checked={checked}
             onChange={onChange}
             disabled={disabled}
-            className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className={`w-6 h-6 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
+              isHexColor ? '' : `${colorClasses.text} focus:${colorClasses.ring}`
+            }`}
+            style={isHexColor ? {
+              accentColor: routineColor,
+            } : {}}
           />
         </label>
       </div>
-      {!isLast && <div style={{ height: '0.5mm' }} className="bg-gray-200 dark:bg-gray-600"></div>}
+      {!isLast && <div style={{ height: '0.5px' }} className="bg-gray-200 dark:bg-gray-600"></div>}
     </div>
   );
 }
@@ -927,6 +1344,7 @@ function RoutineSettingModal({
       label: '새로운 루틴',
       field_key: `custom_${Date.now()}`,
       sort_order: templates.length + 1,
+      color: '#3B82F6', // 기본 색상 (blue-500)
     };
     setTemplates([...templates, newTemplate]);
   };
@@ -935,7 +1353,7 @@ function RoutineSettingModal({
     setTemplates(templates.filter(t => t.id !== id));
   };
 
-  const handleUpdate = (id: string, field: 'emoji' | 'label', value: string) => {
+  const handleUpdate = (id: string, field: 'emoji' | 'label' | 'color', value: string) => {
     setTemplates(templates.map(t => 
       t.id === id ? { ...t, [field]: value } : t
     ));
@@ -961,6 +1379,7 @@ function RoutineSettingModal({
         label: t.label,
         field_key: t.field_key,
         sort_order: index + 1,
+        color: t.color || '#3B82F6', // 기본값: blue-500
       }));
 
       const { error } = await supabase
@@ -994,30 +1413,98 @@ function RoutineSettingModal({
         </div>
 
         <div className="space-y-3 mb-6">
-          {templates.map((template, index) => (
-            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-              <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
-              <input
-                type="text"
-                value={template.emoji}
-                onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
-                className="w-full px-3 py-2.5 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-                maxLength={2}
-              />
-              <input
-                type="text"
-                value={template.label}
-                onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-              />
-              <button
-                onClick={() => handleDelete(template.id)}
-                className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
-              >
-                삭제
-              </button>
-            </div>
-          ))}
+          {templates.map((template, index) => {
+            const colors = [
+              { name: 'blue', label: '파란색', bg: 'bg-blue-500' },
+              { name: 'purple', label: '보라색', bg: 'bg-purple-500' },
+              { name: 'green', label: '초록색', bg: 'bg-green-500' },
+              { name: 'red', label: '빨간색', bg: 'bg-red-500' },
+              { name: 'yellow', label: '노란색', bg: 'bg-yellow-500' },
+              { name: 'orange', label: '주황색', bg: 'bg-orange-500' },
+              { name: 'pink', label: '분홍색', bg: 'bg-pink-500' },
+              { name: 'indigo', label: '남색', bg: 'bg-indigo-500' },
+            ];
+            const currentColor = template.color || 'blue';
+            
+            return (
+              <div key={template.id} className="flex flex-col items-stretch gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
+                <input
+                  type="text"
+                  value={template.emoji}
+                  onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
+                  className="w-full px-3 py-2.5 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                  maxLength={2}
+                />
+                <input
+                  type="text"
+                  value={template.label}
+                  onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
+                  className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                />
+                {/* 색상 선택 */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm text-gray-700 dark:text-gray-300">색상</label>
+                  {/* RGB 색상 피커 */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={template.color?.startsWith('#') ? template.color : '#3B82F6'}
+                      onChange={(e) => handleUpdate(template.id, 'color', e.target.value)}
+                      className="h-10 w-20 rounded-lg border-2 border-gray-300 dark:border-gray-500 cursor-pointer"
+                      title="RGB 색상 선택"
+                    />
+                    <input
+                      type="text"
+                      value={template.color?.startsWith('#') ? template.color : '#3B82F6'}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value.startsWith('#') && value.length <= 7) {
+                          handleUpdate(template.id, 'color', value);
+                        }
+                      }}
+                      placeholder="#3B82F6"
+                      className="flex-1 px-3 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] text-sm"
+                      maxLength={7}
+                    />
+                  </div>
+                  {/* 빠른 색상 선택 버튼 */}
+                  <div className="grid grid-cols-4 gap-2">
+                    {colors.map((color) => {
+                      const colorHex = color.name === 'blue' ? '#3B82F6' :
+                                      color.name === 'purple' ? '#A855F7' :
+                                      color.name === 'green' ? '#10B981' :
+                                      color.name === 'red' ? '#EF4444' :
+                                      color.name === 'yellow' ? '#EAB308' :
+                                      color.name === 'orange' ? '#F97316' :
+                                      color.name === 'pink' ? '#EC4899' :
+                                      '#6366F1';
+                      const isSelected = template.color === colorHex || (!template.color?.startsWith('#') && template.color === color.name);
+                      return (
+                        <button
+                          key={color.name}
+                          type="button"
+                          onClick={() => handleUpdate(template.id, 'color', colorHex)}
+                          className={`h-10 rounded-lg border-2 transition-all ${
+                            isSelected
+                              ? 'border-gray-900 dark:border-white'
+                              : 'border-gray-300 dark:border-gray-500 hover:border-gray-400 dark:hover:border-gray-400'
+                          } ${color.bg}`}
+                          title={color.label}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDelete(template.id)}
+                  className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
+                >
+                  삭제
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         <button
@@ -1054,15 +1541,18 @@ function RoutineCalendar({
   routineEmoji,
   routineTemplates,
   isExpanded = false,
+  editModeRoutine,
+  setEditModeRoutine,
 }: {
   routineId: string;
   routineLabel: string;
   routineEmoji: string;
   routineTemplates: RoutineTemplate[];
   isExpanded?: boolean;
+  editModeRoutine: string | null;
+  setEditModeRoutine: (routineId: string | null) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
-  const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -1388,42 +1878,127 @@ function RoutineCalendar({
     return consecutiveCount;
   };
 
+  // 루틴 색상 가져오기
+  const routine = routineTemplates.find(r => r.id === routineId);
+  const routineColor = routine?.color || '#3B82F6';
+  
+  // hex 색상을 RGB로 변환
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 59, g: 130, b: 246 };
+  };
+  
+  // 색상 밝기 계산 (0-255)
+  const getBrightness = (hex: string) => {
+    const rgb = hexToRgb(hex);
+    return (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+  };
+  
+  // hex를 rgba로 변환
+  const hexToRgba = (hex: string, alpha: number) => {
+    const rgb = hexToRgb(hex);
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+  };
+  
+  // 색상별 클래스 매핑 (hex 색상 지원)
+  const getColorClasses = (color: string) => {
+    // hex 색상인 경우
+    if (color.startsWith('#')) {
+      const brightness = getBrightness(color);
+      const isLight = brightness > 128;
+      const lightColor = hexToRgba(color, 0.2); // 20% 투명도
+      const darkColor = hexToRgba(color, 0.3); // 30% 투명도
+      const textColor = isLight ? '#1E3A8A' : '#60A5FA';
+      const textDarkColor = isLight ? '#3B82F6' : '#93C5FD';
+      
+      return {
+        bg: color,
+        bgLight: lightColor,
+        bgDark: darkColor,
+        text: textColor,
+        textDark: textDarkColor,
+        ring: color,
+        button: color,
+        buttonHover: color,
+      };
+    }
+    
+    // 기존 색상 이름 매핑
+    const colorMap: Record<string, { bg: string; bgLight: string; bgDark: string; text: string; textDark: string; button: string; buttonHover: string }> = {
+      blue: { bg: 'bg-blue-500', bgLight: 'bg-blue-100', bgDark: 'bg-blue-900/30', text: 'text-blue-700', textDark: 'text-blue-400', button: 'bg-blue-600', buttonHover: 'hover:bg-blue-700' },
+      purple: { bg: 'bg-purple-500', bgLight: 'bg-purple-100', bgDark: 'bg-purple-900/30', text: 'text-purple-700', textDark: 'text-purple-400', button: 'bg-purple-600', buttonHover: 'hover:bg-purple-700' },
+      green: { bg: 'bg-green-500', bgLight: 'bg-green-100', bgDark: 'bg-green-900/30', text: 'text-green-700', textDark: 'text-green-400', button: 'bg-green-600', buttonHover: 'hover:bg-green-700' },
+      red: { bg: 'bg-red-500', bgLight: 'bg-red-100', bgDark: 'bg-red-900/30', text: 'text-red-700', textDark: 'text-red-400', button: 'bg-red-600', buttonHover: 'hover:bg-red-700' },
+      yellow: { bg: 'bg-yellow-500', bgLight: 'bg-yellow-100', bgDark: 'bg-yellow-900/30', text: 'text-yellow-700', textDark: 'text-yellow-400', button: 'bg-yellow-600', buttonHover: 'hover:bg-yellow-700' },
+      orange: { bg: 'bg-orange-500', bgLight: 'bg-orange-100', bgDark: 'bg-orange-900/30', text: 'text-orange-700', textDark: 'text-orange-400', button: 'bg-orange-600', buttonHover: 'hover:bg-orange-700' },
+      pink: { bg: 'bg-pink-500', bgLight: 'bg-pink-100', bgDark: 'bg-pink-900/30', text: 'text-pink-700', textDark: 'text-pink-400', button: 'bg-pink-600', buttonHover: 'hover:bg-pink-700' },
+      indigo: { bg: 'bg-indigo-500', bgLight: 'bg-indigo-100', bgDark: 'bg-indigo-900/30', text: 'text-indigo-700', textDark: 'text-indigo-400', button: 'bg-indigo-600', buttonHover: 'hover:bg-indigo-700' },
+    };
+    return colorMap[color] || colorMap.blue;
+  };
+  
+  const colorClasses = getColorClasses(routineColor);
+  const isHexColor = routineColor.startsWith('#');
   const consecutiveDays = getConsecutiveDays(routineId);
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm w-full">
-      {/* 루틴 제목 + 연속 체크 수 + 수정 버튼 */}
-      <div className="flex items-center gap-2 mb-4 relative">
-        <span className="text-2xl">{routineEmoji}</span>
-        <h4 className="text-lg font-semibold text-gray-900 dark:text-white flex-1">{routineLabel}</h4>
-        {consecutiveDays > 0 && (
-          <div className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-xs font-medium rounded-full">
-            {consecutiveDays}일 연속
-          </div>
-        )}
-        {/* 우측 수정 버튼 */}
-        <button
-          onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
-          className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md"
-        >
-          {editModeRoutine === routineId ? '저장' : '수정'}
-        </button>
-      </div>
-      
-      {/* 현재 달 표시 */}
-      <div className="flex items-center gap-3 mb-3">
-        <h5 className="text-base font-medium text-gray-900 dark:text-white text-left shrink-0">
-          {currentYear}년 {currentMonth}월
-        </h5>
-        <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden max-w-[200px]">
-          <div
-            className="h-full bg-purple-500 transition-all duration-500 ease-out"
-            style={{ 
-              width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
-            }}
-          />
+    <div className="bg-gray-50 dark:bg-gray-800 p-2 sm:p-3 w-full">
+      {/* 날짜 + 달성률 + 슬라이더 + 수정 버튼 일직선 */}
+      <div className="flex items-center justify-between mb-3">
+        {/* 왼쪽: 날짜 + 연속 일수 */}
+        <div className="flex items-center gap-2 shrink-0">
+          <h5 className="text-base font-medium text-gray-900 dark:text-white shrink-0">
+            {currentYear}년 {currentMonth}월
+          </h5>
+          {consecutiveDays > 0 && (
+            <div
+              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                isHexColor 
+                  ? '' 
+                  : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
+              }`}
+              style={isHexColor ? {
+                backgroundColor: colorClasses.bgLight,
+                color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
+              } : {}}
+            >
+              {consecutiveDays}일 연속
+            </div>
+          )}
         </div>
-        <div className="w-3 h-3 rounded-full bg-purple-500 overflow-hidden shrink-0 shadow-sm" />
+        {/* 오른쪽: 슬라이더 + 수정 버튼 */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-24">
+              <div
+                className={isHexColor ? 'h-full transition-all duration-500 ease-out' : `h-full ${colorClasses.bg} transition-all duration-500 ease-out`}
+                style={{ 
+                  width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
+                  backgroundColor: isHexColor ? routineColor : undefined,
+                }}
+              />
+            </div>
+            <div
+              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0 shadow-sm' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0 shadow-sm`}
+              style={isHexColor ? { backgroundColor: routineColor } : {}}
+            />
+          </div>
+          <button
+            onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
+            className={`px-3 py-1.5 text-sm text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md shrink-0 ${
+              isHexColor ? '' : `${colorClasses.button} ${colorClasses.buttonHover}`
+            }`}
+            style={isHexColor ? {
+              backgroundColor: routineColor,
+            } : {}}
+          >
+            {editModeRoutine === routineId ? '저장' : '수정'}
+          </button>
+        </div>
       </div>
       
       {/* 가로 스크롤 가능한 캘린더 컨테이너 (요일별 세로 배치) */}
@@ -1531,6 +2106,25 @@ function RoutineCalendar({
                     const { day, date, month, year } = cell;
                     const isChecked = isDateChecked(date, routineId);
                     const isToday = date === new Date().toISOString().split('T')[0];
+                    const isSaturday = weekdayIdx === 5; // 토요일
+                    const isSunday = weekdayIdx === 6; // 일요일
+                    
+                    // 배경색 결정: 체크됨 > 요일별 색상 > 기본
+                    let backgroundColor = 'rgba(75, 85, 99, 0.15)'; // 기본 회색 (투명도 15%)
+                    if (isChecked) {
+                      // 체크된 날짜는 요일별로 다른 색상
+                      if (isSaturday) {
+                        backgroundColor = '#3B82F6'; // 토요일: 파란색
+                      } else if (isSunday) {
+                        backgroundColor = '#EF4444'; // 일요일: 빨간색
+                      } else {
+                        backgroundColor = '#9CA3AF'; // 월~금: 밝은 회색
+                      }
+                    } else if (isSaturday) {
+                      backgroundColor = 'rgba(59, 130, 246, 0.15)'; // 토요일: 파란색 (투명도 15%)
+                    } else if (isSunday) {
+                      backgroundColor = 'rgba(239, 68, 68, 0.15)'; // 일요일: 붉은색 (투명도 15%)
+                    }
                     
                     return (
                       <div
@@ -1551,24 +2145,20 @@ function RoutineCalendar({
                             flex items-center justify-center relative shrink-0
                             cursor-pointer
                             transition-all duration-200 ease-in-out
-                            hover:scale-110 hover:shadow-lg hover:brightness-125 hover:z-10
+                            hover:scale-110 hover:shadow-lg hover:brightness-150 hover:z-10 hover:ring-2 hover:ring-blue-400
                           `}
                           style={{
                             width: '37px',
                             height: '32px',
-                            backgroundColor: isChecked ? '#8B5CF6' : '#4B5563',
+                            backgroundColor: backgroundColor,
                             borderRadius: '6px',
                             color: isChecked ? '#FFFFFF' : '#E5E7EB',
                             fontSize: '14px',
-                            fontWeight: '500',
+                            fontWeight: isChecked ? '700' : '500',
                             border: isToday 
                               ? '2px solid #60A5FA'
-                              : isChecked 
-                                ? 'none' 
-                                : '1px solid #6B7280',
-                            boxShadow: isChecked 
-                              ? '0 2px 8px rgba(139, 92, 246, 0.4)' 
-                              : '0 1px 2px rgba(0,0,0,0.1)',
+                              : 'none',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                             userSelect: 'none',
                             position: 'relative',
                             zIndex: 2
@@ -1605,7 +2195,7 @@ function AIAgentModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[85vh] overflow-y-auto shadow-xl">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent">
             🤖 AI Agent
           </h2>
           <button
@@ -1618,7 +2208,7 @@ function AIAgentModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* AI Agent 설명 */}
-        <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/30 dark:to-blue-900/30 rounded-xl p-6 mb-6 border border-purple-200 dark:border-purple-500/20">
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-900/30 rounded-xl p-6 mb-6 border border-blue-200 dark:border-blue-500/20">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">✨ 나만의 AI 라이프 코치</h3>
           <p className="text-gray-600 dark:text-gray-300 text-base leading-relaxed mb-4">
             AI Agent가 당신의 일상을 종합적으로 분석하여 맞춤형 조언을 제공합니다.
@@ -1668,31 +2258,31 @@ function AIAgentModal({ onClose }: { onClose: () => void }) {
               <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">🎯 예정된 기능</h4>
               <ul className="space-y-2 text-base text-gray-600 dark:text-gray-300">
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>일주일 단위 루틴 달성률 분석 및 개선 제안</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>체중 변화 패턴 분석 및 건강 조언</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>식사 기록 기반 영양 밸런스 체크</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>재무 상태와 소비 패턴 분석 (개발 예정)</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>가계부 데이터 기반 절약 팁 제공 (개발 예정)</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>일기 내용 감정 분석 및 멘탈 케어 조언</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="text-purple-400 dark:text-purple-400">▸</span>
+                  <span className="text-blue-400 dark:text-blue-400">▸</span>
                   <span>개인화된 주간/월간 리포트 자동 생성</span>
                 </li>
               </ul>
