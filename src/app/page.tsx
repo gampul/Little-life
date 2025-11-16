@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getSupabase } from '../lib/supabase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ThemeToggle } from './components/ThemeToggle';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { GlobalNav } from './components/GlobalNav';
+import { AIAgentModal } from './components/AIAgentModal';
 
 interface DailyRecord {
   id?: string;
@@ -24,7 +23,6 @@ interface RoutineTemplate {
   label: string;
   field_key: string;
   sort_order: number;
-  color?: string; // 루틴 색상 (기본값: blue)
 }
 
 interface RoutineCheck {
@@ -37,25 +35,8 @@ type PeriodFilter = '7days' | '1month' | '1year' | 'ytd' | 'all';
 export default function Home() {
   const userId = 'default_user'; // 실제 앱에서는 로그인한 사용자 ID 사용
 
-  // Supabase 클라이언트를 런타임에만 초기화 (빌드 시점에는 환경 변수가 없을 수 있음)
-  const supabase = useMemo(() => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    // 디버깅: 환경 변수 상태 확인
-    console.log('🔍 환경 변수 확인:');
-    console.log('NEXT_PUBLIC_SUPABASE_URL:', supabaseUrl ? '✅ 설정됨' : '❌ 없음');
-    console.log('NEXT_PUBLIC_SUPABASE_ANON_KEY:', supabaseAnonKey ? '✅ 설정됨' : '❌ 없음');
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('❌ Missing Supabase environment variables.');
-      console.error('설정된 URL:', supabaseUrl || '없음');
-      console.error('설정된 Key:', supabaseAnonKey ? '있음 (길이: ' + supabaseAnonKey.length + ')' : '없음');
-      return null;
-    }
-
-    return createClient(supabaseUrl, supabaseAnonKey);
-  }, []);
+  // Supabase 클라이언트 싱글톤 사용
+  const supabase = getSupabase();
 
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -74,11 +55,6 @@ export default function Home() {
   const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
-  const [memoViewMode, setMemoViewMode] = useState<'edit' | 'preview'>('edit');
-  const [showLinkDialog, setShowLinkDialog] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkText, setLinkText] = useState('');
-  const memoTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [formData, setFormData] = useState<DailyRecord>({
     date: selectedDate,
@@ -90,18 +66,33 @@ export default function Home() {
     daily_memo: '',
   });
 
+  const handleInputChange = (
+    field: keyof DailyRecord,
+    value: string | number
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+
   // 루틴 템플릿 로드
   const loadRoutineTemplates = useCallback(async () => {
     if (!supabase) return;
     try {
       const { data, error } = await supabase
         .from('routine_templates')
-        .select('*')
+        .select('id, emoji, label, field_key, sort_order, user_id')
         .eq('user_id', userId)
         .order('sort_order', { ascending: true });
 
       if (error) {
-        console.error('루틴 템플릿 조회 오류:', error);
+        console.error('루틴 템플릿 조회 오류');
+        if (error?.message) console.error('- 메시지:', error.message);
+        if (error?.code) console.error('- 코드:', error.code);
+        if (error?.details) console.error('- 상세:', error.details);
+        if (error?.hint) console.error('- 힌트:', error.hint);
         return;
       }
 
@@ -134,14 +125,19 @@ export default function Home() {
   const loadDailyRecord = useCallback(async (date: string) => {
     if (!supabase) return;
     try {
+      // 명시적으로 컬럼 지정 (title 컬럼 제외)
       const { data, error } = await supabase
         .from('daily_records')
-        .select('*')
+        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
         .eq('date', date)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('데이터 조회 오류:', error);
+        console.error('데이터 조회 오류');
+        if (error?.message) console.error('- 메시지:', error.message);
+        if (error?.code) console.error('- 코드:', error.code);
+        if (error?.details) console.error('- 상세:', error.details);
+        if (error?.hint) console.error('- 힌트:', error.hint);
         return;
       }
 
@@ -173,13 +169,18 @@ export default function Home() {
       return;
     }
     try {
+      // 명시적으로 컬럼 지정 (title 컬럼 제외)
       const { data, error } = await supabase
         .from('daily_records')
-        .select('*')
+        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
         .order('date', { ascending: true });
 
       if (error) {
-        console.error('전체 데이터 조회 오류:', error);
+        console.error('전체 데이터 조회 오류');
+        if (error?.message) console.error('- 메시지:', error.message);
+        if (error?.code) console.error('- 코드:', error.code);
+        if (error?.details) console.error('- 상세:', error.details);
+        if (error?.hint) console.error('- 힌트:', error.hint);
         return;
       }
 
@@ -228,92 +229,34 @@ export default function Home() {
     }));
   };
 
-  const handleInputChange = (
-    field: keyof DailyRecord,
-    value: string | number
-  ) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  };
-
-  // 텍스트 영역에 텍스트 삽입 (커서 위치)
-  const insertTextAtCursor = (before: string, after: string) => {
-    if (!memoTextareaRef.current) return;
-    
-    const textarea = memoTextareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = formData.daily_memo.substring(start, end);
-    const newText = 
-      formData.daily_memo.substring(0, start) +
-      before + selectedText + after +
-      formData.daily_memo.substring(end);
-    
-    handleInputChange('daily_memo', newText);
-    
-    // 커서 위치 조정
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + before.length + selectedText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
-
-  // 이미지 업로드 처리
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // 파일 크기 제한 (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('이미지 크기는 5MB 이하여야 합니다.');
-      return;
-    }
-
-    // 이미지 파일인지 확인
-    if (!file.type.startsWith('image/')) {
-      alert('이미지 파일만 업로드할 수 있습니다.');
-      return;
-    }
-
-    try {
-      // FileReader로 base64로 변환
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        const imageMarkdown = `![${file.name}](${base64})`;
-        insertTextAtCursor(imageMarkdown, '');
-      };
-      reader.onerror = () => {
-        alert('이미지 읽기 오류가 발생했습니다.');
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('이미지 업로드 오류:', error);
-      alert('이미지 업로드에 실패했습니다.');
-    }
-    
-    // input 초기화
-    e.target.value = '';
-  };
 
   const handleSave = async () => {
     if (!supabase) {
-      setMessage('❌ Supabase 연결이 설정되지 않았습니다.');
+      setMessage('❌ Supabase 연결이 설정되지 않았습니다. 환경 변수를 확인해주세요.');
       return;
     }
+    
     setIsSaving(true);
     setMessage('');
 
     try {
       // 1. daily_records 저장
-      const { data: existingData } = await supabase
+      const { data: existingData, error: checkError } = await supabase
         .from('daily_records')
         .select('id')
         .eq('date', selectedDate)
-        .single();
+        .maybeSingle();
+
+      // ✅ 에러 상세 로깅 추가
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('=== 체크 에러 상세 ===');
+        console.error('메시지:', checkError.message);
+        console.error('코드:', checkError.code);
+        console.error('상세:', checkError.details);
+        console.error('힌트:', checkError.hint);
+        console.error('전체:', JSON.stringify(checkError, null, 2));
+        throw checkError;
+      }
 
       if (existingData) {
         const { error } = await supabase
@@ -324,17 +267,32 @@ export default function Home() {
           })
           .eq('date', selectedDate);
 
-        if (error) throw error;
+        if (error) {
+          console.error('=== 업데이트 에러 상세 ===');
+          console.error('메시지:', error.message);
+          console.error('코드:', error.code);
+          console.error('상세:', error.details);
+          console.error('힌트:', error.hint);
+          console.error('전체:', JSON.stringify(error, null, 2));
+          throw error;
+        }
       } else {
         const { error } = await supabase
           .from('daily_records')
           .insert([formData]);
 
-        if (error) throw error;
+        if (error) {
+          console.error('=== 삽입 에러 상세 ===');
+          console.error('메시지:', error.message);
+          console.error('코드:', error.code);
+          console.error('상세:', error.details);
+          console.error('힌트:', error.hint);
+          console.error('전체:', JSON.stringify(error, null, 2));
+          throw error;
+        }
       }
 
       // 2. 루틴 체크 저장
-      // 기존 데이터 삭제 후 재삽입
       await supabase
         .from('daily_routine_checks')
         .delete()
@@ -353,7 +311,15 @@ export default function Home() {
           .from('daily_routine_checks')
           .insert(checksToInsert);
 
-        if (checkError) throw checkError;
+        if (checkError) {
+          console.error('=== 루틴 체크 삽입 에러 상세 ===');
+          console.error('메시지:', checkError.message);
+          console.error('코드:', checkError.code);
+          console.error('상세:', checkError.details);
+          console.error('힌트:', checkError.hint);
+          console.error('전체:', JSON.stringify(checkError, null, 2));
+          throw checkError;
+        }
       }
 
       setMessage('✅ 저장되었습니다!');
@@ -361,9 +327,28 @@ export default function Home() {
       setHasData(true);
       loadAllRecords();
       setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      console.error('저장 오류:', err);
-      setMessage('❌ 저장에 실패했습니다.');
+    } catch (err: any) {
+      console.error('=== 최종 에러 캐치 ===');
+      console.error('타입:', typeof err);
+      console.error('전체 에러:', err);
+      
+      let errorMessage = '알 수 없는 오류가 발생했습니다.';
+      
+      if (err?.message) {
+        errorMessage = err.message;
+        
+        // 구체적인 에러 메시지 처리
+        if (err.message.includes('new row violates row-level security policy')) {
+          errorMessage = '데이터 저장 권한이 없습니다. Supabase RLS 정책을 확인해주세요.';
+        } else if (err.message.includes('duplicate key value')) {
+          errorMessage = '이미 존재하는 데이터입니다.';
+        } else if (err.message.includes('violates foreign key constraint')) {
+          errorMessage = '참조 데이터가 존재하지 않습니다.';
+        }
+      }
+      
+      setMessage(`❌ 저장 실패: ${errorMessage}`);
+      setTimeout(() => setMessage(''), 5000);
     } finally {
       setIsSaving(false);
     }
@@ -416,12 +401,6 @@ export default function Home() {
   };
 
 
-  // 메모가 있는 날짜 조회
-  const getMemoDates = () => {
-    return allRecords
-      .filter((r) => r.daily_memo && r.daily_memo.trim() !== '')
-      .reverse();
-  };
 
   // 환경 변수 오류 표시
   if (!supabase) {
@@ -478,50 +457,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
-      <div className="max-w-[480px] mx-auto px-4 sm:px-6">
-        {/* 고정 헤더 */}
-        <div className="sticky top-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 sm:py-3 mb-4 sm:mb-6">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent">
-            Little Life
-          </h1>
-            <div className="flex gap-1.5 sm:gap-2">
-            {!isEditMode ? (
-              <button
-                onClick={handleEdit}
-                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
-                aria-label="수정하기"
-              >
-                <span className="text-base">✏️</span>
-              </button>
-            ) : (
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 disabled:bg-gray-400 text-white rounded-lg flex items-center justify-center min-h-[44px] disabled:cursor-not-allowed"
-                aria-label={isSaving ? '저장 중' : '저장'}
-              >
-                <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
-              </button>
-            )}
-            <ThemeToggle />
-            <button
-              onClick={() => setIsAIAgentOpen(true)}
-                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
-              aria-label="AI Agent"
-            >
-                <span className="text-base">🤖</span>
-            </button>
-            <button
-              onClick={() => setIsRoutineSettingOpen(true)}
-                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
-              aria-label="루틴 설정"
-            >
-                <span className="text-base">⚙️</span>
-            </button>
-            </div>
-          </div>
-        </div>
+      <GlobalNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
+      <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
         {/* 루틴 설정 모달 */}
         {isRoutineSettingOpen && (
@@ -545,9 +482,9 @@ export default function Home() {
         <div className="space-y-6">
           {/* 입력 섹션 */}
           <div>
-            {/* 날짜, 체중 입력 한 줄 배치 */}
+            {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
                   className="relative cursor-pointer"
@@ -586,19 +523,38 @@ export default function Home() {
                       }
                     }}
                   />
-                </div>
-                {/* 체중 입력 */}
-                <input
-                  type="number"
-                  step="0.1"
-                  value={formData.weight || ''}
-                  onChange={(e) =>
-                    handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : '')
-                  }
-                  placeholder="체중"
-                  disabled={!isEditMode}
-                  className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
-                />
+              </div>
+            {/* 체중 입력 */}
+            <input
+              type="number"
+              step="0.1"
+              value={formData.weight || ''}
+              onChange={(e) =>
+                handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : '')
+              }
+              placeholder="체중"
+              disabled={!isEditMode}
+              className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+            />
+            {/* 수정/저장 버튼 */}
+                {!isEditMode ? (
+                  <button
+                    onClick={handleEdit}
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
+                aria-label="수정하기"
+                  >
+                <span className="text-base">✏️</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                aria-label={isSaving ? '저장 중' : '저장'}
+                  >
+                <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
+                  </button>
+                )}
               </div>
               {message && (
                 <div className="mt-3 text-center text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{message}</div>
@@ -837,224 +793,8 @@ export default function Home() {
                 rows={3}
               />
             </div>
-
-            {/* 오늘의 메모 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-base font-medium text-gray-700 dark:text-gray-300">
-                  📝 오늘의 메모
-                </label>
-                {isEditMode && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setMemoViewMode('edit')}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                        memoViewMode === 'edit'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      편집
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMemoViewMode('preview')}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                        memoViewMode === 'preview'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      미리보기
-                    </button>
-                  </div>
-                )}
-              </div>
-              {memoViewMode === 'edit' ? (
-                <>
-                  {/* 툴바 */}
-                  {isEditMode && (
-                    <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                      <button
-                        type="button"
-                        onClick={() => insertTextAtCursor('**', '**')}
-                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
-                        title="굵게"
-                      >
-                        <strong>B</strong>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertTextAtCursor('*', '*')}
-                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
-                        title="기울임"
-                      >
-                        <em>I</em>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertTextAtCursor('`', '`')}
-                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 font-mono"
-                        title="코드"
-                      >
-                        {'</>'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowLinkDialog(true)}
-                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
-                        title="링크 삽입"
-                      >
-                        🔗
-                      </button>
-                      <label className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 cursor-pointer">
-                        📷
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => insertTextAtCursor('# ', '')}
-                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
-                        title="제목"
-                      >
-                        H1
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertTextAtCursor('- ', '')}
-                        className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
-                        title="리스트"
-                      >
-                        •
-                      </button>
-                    </div>
-                  )}
-                  <textarea
-                    ref={memoTextareaRef}
-                    value={formData.daily_memo}
-                    onChange={(e) => handleInputChange('daily_memo', e.target.value)}
-                    placeholder="오늘 하루를 기록해보세요...&#10;&#10;마크다운 문법을 사용할 수 있습니다:&#10;- **굵게**&#10;- *기울임*&#10;- # 제목&#10;- - 리스트"
-                    disabled={!isEditMode}
-                    className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-y min-h-[200px] font-mono"
-                    rows={10}
-                  />
-                </>
-              ) : (
-                <div className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg min-h-[200px] overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
-                  {formData.daily_memo ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {formData.daily_memo}
-                    </ReactMarkdown>
-                  ) : (
-                    <p className="text-gray-400 dark:text-gray-500">메모를 작성하면 미리보기가 표시됩니다.</p>
-                  )}
-                </div>
-              )}
-              {isEditMode && (
-                <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  💡 마크다운 문법: **굵게**, *기울임*, # 제목, - 리스트, `코드`, [링크](url), ![이미지](url)
-                </div>
-              )}
-              
-              {/* 링크 삽입 다이얼로그 */}
-              {showLinkDialog && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 max-w-md w-full">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">링크 삽입</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          링크 텍스트
-                        </label>
-                        <input
-                          type="text"
-                          value={linkText}
-                          onChange={(e) => setLinkText(e.target.value)}
-                          placeholder="표시할 텍스트"
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          URL
-                        </label>
-                        <input
-                          type="url"
-                          value={linkUrl}
-                          onChange={(e) => setLinkUrl(e.target.value)}
-                          placeholder="https://example.com"
-                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (linkUrl && linkText) {
-                              insertTextAtCursor(`[${linkText}](${linkUrl})`, '');
-                              setLinkUrl('');
-                              setLinkText('');
-                              setShowLinkDialog(false);
-                            }
-                          }}
-                          className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                        >
-                          삽입
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowLinkDialog(false);
-                            setLinkUrl('');
-                            setLinkText('');
-                          }}
-                          className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
-                        >
-                          취소
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
-
-          {/* 통계 섹션 */}
-          <div>
-            {/* 일별 메모 보기 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">일별 메모</h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {getMemoDates().length > 0 ? (
-                  getMemoDates().map((record) => (
-                    <div
-                      key={record.id}
-                      className="bg-white dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
-                    >
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">{record.date}</div>
-                      <div className="text-base text-gray-700 dark:text-gray-200 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {record.daily_memo}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center text-gray-400 dark:text-gray-500 py-8">
-                    작성된 메모가 없습니다
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -1148,9 +888,8 @@ function RoutineItem({
     return daysInMonth > 0 ? (checkedCount / daysInMonth) * 100 : 0;
   };
 
-  // 루틴 색상 가져오기
-  const routine = routineTemplates.find(r => r.id === routineId);
-  const routineColor = routine?.color || '#3B82F6';
+  // 루틴 색상은 항상 기본값(blue) 사용
+  const routineColor = '#3B82F6';
   
   // hex 색상을 RGB로 변환
   const hexToRgb = (hex: string) => {
@@ -1219,18 +958,18 @@ function RoutineItem({
     <div>
       <div 
         className="flex items-center gap-3 py-2 min-h-[44px] cursor-pointer"
-        onClick={onExpandToggle}
+          onClick={onExpandToggle}
       >
         {/* 이모지 + 텍스트 영역 */}
         <div className="flex items-center gap-3 flex-1">
-          <span className="text-2xl">{emoji}</span>
+        <span className="text-2xl">{emoji}</span>
           <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
             {label}
           </span>
         </div>
         
         {/* 연속 일수 + 슬라이더 */}
-        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 shrink-0">
           {consecutiveDays > 0 && (
             <div
               className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -1264,11 +1003,24 @@ function RoutineItem({
         </div>
         
         {/* 체크박스 */}
-        <label className="cursor-pointer shrink-0" onClick={(e) => e.stopPropagation()}>
+        <label 
+          className="cursor-pointer shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!disabled) {
+              onChange();
+            }
+          }}
+        >
           <input
             type="checkbox"
             checked={checked}
-            onChange={onChange}
+            onChange={(e) => {
+              e.stopPropagation();
+              if (!disabled) {
+                onChange();
+              }
+            }}
             disabled={disabled}
             className={`w-6 h-6 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
               isHexColor ? '' : `${colorClasses.text} focus:${colorClasses.ring}`
@@ -1325,17 +1077,8 @@ function RoutineSettingModal({
   const [templates, setTemplates] = useState<RoutineTemplate[]>([...routineTemplates]);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Supabase 클라이언트를 런타임에만 초기화
-  const supabase = useMemo(() => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return null;
-    }
-
-    return createClient(supabaseUrl, supabaseAnonKey);
-  }, []);
+  // Supabase 클라이언트 싱글톤 사용
+  const supabase = getSupabase();
 
   const handleAdd = () => {
     const newTemplate: RoutineTemplate = {
@@ -1344,7 +1087,6 @@ function RoutineSettingModal({
       label: '새로운 루틴',
       field_key: `custom_${Date.now()}`,
       sort_order: templates.length + 1,
-      color: '#3B82F6', // 기본 색상 (blue-500)
     };
     setTemplates([...templates, newTemplate]);
   };
@@ -1353,7 +1095,7 @@ function RoutineSettingModal({
     setTemplates(templates.filter(t => t.id !== id));
   };
 
-  const handleUpdate = (id: string, field: 'emoji' | 'label' | 'color', value: string) => {
+  const handleUpdate = (id: string, field: 'emoji' | 'label', value: string) => {
     setTemplates(templates.map(t => 
       t.id === id ? { ...t, [field]: value } : t
     ));
@@ -1367,10 +1109,18 @@ function RoutineSettingModal({
     setIsSaving(true);
     try {
       // 기존 템플릿 삭제
-      await supabase
+      const { error: deleteError } = await supabase
         .from('routine_templates')
         .delete()
         .eq('user_id', userId);
+
+      if (deleteError) {
+        console.error('템플릿 삭제 오류');
+        if (deleteError?.message) console.error('- 메시지:', deleteError.message);
+        if (deleteError?.code) console.error('- 코드:', deleteError.code);
+        if (deleteError?.details) console.error('- 상세:', deleteError.details);
+        throw deleteError;
+      }
 
       // 새로운 템플릿 삽입
       const templatesToInsert = templates.map((t, index) => ({
@@ -1379,20 +1129,51 @@ function RoutineSettingModal({
         label: t.label,
         field_key: t.field_key,
         sort_order: index + 1,
-        color: t.color || '#3B82F6', // 기본값: blue-500
       }));
 
-      const { error } = await supabase
+      // insert 시도
+      const { error: insertError } = await supabase
         .from('routine_templates')
         .insert(templatesToInsert);
 
-      if (error) throw error;
+      if (insertError) {
+        console.error('=== 템플릿 삽입 에러 상세 ===');
+        console.error('메시지:', insertError.message);
+        console.error('코드:', insertError.code);
+        console.error('상세:', insertError.details);
+        console.error('힌트:', insertError.hint);
+        console.error('전체:', JSON.stringify(insertError, null, 2));
+        throw insertError;
+      }
 
       alert('✅ 저장되었습니다!');
       onClose();
-    } catch (err) {
-      console.error('저장 오류:', err);
-      alert('❌ 저장에 실패했습니다.');
+    } catch (err: any) {
+      console.error('=== 루틴 설정 저장 오류 ===');
+      console.error('타입:', typeof err);
+      console.error('전체 에러:', err);
+      if (err?.message) console.error('메시지:', err.message);
+      if (err?.code) console.error('코드:', err.code);
+      if (err?.details) console.error('상세:', err.details);
+      if (err?.hint) console.error('힌트:', err.hint);
+      console.error('전체 JSON:', JSON.stringify(err, null, 2));
+      
+      let errorMessage = '알 수 없는 오류가 발생했습니다.';
+      
+      if (err?.message) {
+        errorMessage = err.message;
+        
+        // 구체적인 에러 메시지 처리
+        if (err.message.includes('new row violates row-level security policy')) {
+          errorMessage = '데이터 저장 권한이 없습니다. Supabase RLS 정책을 확인해주세요.';
+        } else if (err.message.includes('duplicate key value')) {
+          errorMessage = '이미 존재하는 데이터입니다.';
+        } else if (err.message.includes('violates foreign key constraint')) {
+          errorMessage = '참조 데이터가 존재하지 않습니다.';
+        }
+      }
+      
+      alert(`❌ 저장 실패: ${errorMessage}`);
     } finally {
       setIsSaving(false);
     }
@@ -1414,95 +1195,30 @@ function RoutineSettingModal({
 
         <div className="space-y-3 mb-6">
           {templates.map((template, index) => {
-            const colors = [
-              { name: 'blue', label: '파란색', bg: 'bg-blue-500' },
-              { name: 'purple', label: '보라색', bg: 'bg-purple-500' },
-              { name: 'green', label: '초록색', bg: 'bg-green-500' },
-              { name: 'red', label: '빨간색', bg: 'bg-red-500' },
-              { name: 'yellow', label: '노란색', bg: 'bg-yellow-500' },
-              { name: 'orange', label: '주황색', bg: 'bg-orange-500' },
-              { name: 'pink', label: '분홍색', bg: 'bg-pink-500' },
-              { name: 'indigo', label: '남색', bg: 'bg-indigo-500' },
-            ];
-            const currentColor = template.color || 'blue';
             
             return (
-              <div key={template.id} className="flex flex-col items-stretch gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
-                <input
-                  type="text"
-                  value={template.emoji}
-                  onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
-                  className="w-full px-3 py-2.5 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-                  maxLength={2}
-                />
-                <input
-                  type="text"
-                  value={template.label}
-                  onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
-                  className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-                />
-                {/* 색상 선택 */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm text-gray-700 dark:text-gray-300">색상</label>
-                  {/* RGB 색상 피커 */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={template.color?.startsWith('#') ? template.color : '#3B82F6'}
-                      onChange={(e) => handleUpdate(template.id, 'color', e.target.value)}
-                      className="h-10 w-20 rounded-lg border-2 border-gray-300 dark:border-gray-500 cursor-pointer"
-                      title="RGB 색상 선택"
-                    />
-                    <input
-                      type="text"
-                      value={template.color?.startsWith('#') ? template.color : '#3B82F6'}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value.startsWith('#') && value.length <= 7) {
-                          handleUpdate(template.id, 'color', value);
-                        }
-                      }}
-                      placeholder="#3B82F6"
-                      className="flex-1 px-3 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] text-sm"
-                      maxLength={7}
-                    />
-                  </div>
-                  {/* 빠른 색상 선택 버튼 */}
-                  <div className="grid grid-cols-4 gap-2">
-                    {colors.map((color) => {
-                      const colorHex = color.name === 'blue' ? '#3B82F6' :
-                                      color.name === 'purple' ? '#A855F7' :
-                                      color.name === 'green' ? '#10B981' :
-                                      color.name === 'red' ? '#EF4444' :
-                                      color.name === 'yellow' ? '#EAB308' :
-                                      color.name === 'orange' ? '#F97316' :
-                                      color.name === 'pink' ? '#EC4899' :
-                                      '#6366F1';
-                      const isSelected = template.color === colorHex || (!template.color?.startsWith('#') && template.color === color.name);
-                      return (
-                        <button
-                          key={color.name}
-                          type="button"
-                          onClick={() => handleUpdate(template.id, 'color', colorHex)}
-                          className={`h-10 rounded-lg border-2 transition-all ${
-                            isSelected
-                              ? 'border-gray-900 dark:border-white'
-                              : 'border-gray-300 dark:border-gray-500 hover:border-gray-400 dark:hover:border-gray-400'
-                          } ${color.bg}`}
-                          title={color.label}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleDelete(template.id)}
-                  className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
-                >
-                  삭제
-                </button>
-              </div>
+            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+              <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
+              <input
+                type="text"
+                value={template.emoji}
+                onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
+                className="w-full px-3 py-2.5 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                maxLength={2}
+              />
+              <input
+                type="text"
+                value={template.label}
+                onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
+                className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+              />
+              <button
+                onClick={() => handleDelete(template.id)}
+                className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
+              >
+                삭제
+              </button>
+            </div>
             );
           })}
         </div>
@@ -1558,17 +1274,8 @@ function RoutineCalendar({
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
 
-  // Supabase 클라이언트 (기존 데이터 동기화용)
-  const supabase = useMemo(() => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return null;
-    }
-
-    return createClient(supabaseUrl, supabaseAnonKey);
-  }, []);
+  // Supabase 클라이언트 싱글톤 사용
+  const supabase = getSupabase();
 
   // 3개월 목록 생성 (이전, 현재, 다음)
   const getThreeMonths = useCallback(() => {
@@ -1878,9 +1585,8 @@ function RoutineCalendar({
     return consecutiveCount;
   };
 
-  // 루틴 색상 가져오기
-  const routine = routineTemplates.find(r => r.id === routineId);
-  const routineColor = routine?.color || '#3B82F6';
+  // 루틴 색상은 항상 기본값(blue) 사용
+  const routineColor = '#3B82F6';
   
   // hex 색상을 RGB로 변환
   const hexToRgb = (hex: string) => {
@@ -1954,7 +1660,7 @@ function RoutineCalendar({
           <h5 className="text-base font-medium text-gray-900 dark:text-white shrink-0">
             {currentYear}년 {currentMonth}월
           </h5>
-          {consecutiveDays > 0 && (
+        {consecutiveDays > 0 && (
             <div
               className={`px-2 py-1 text-xs font-medium rounded-full ${
                 isHexColor 
@@ -1966,22 +1672,22 @@ function RoutineCalendar({
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
               } : {}}
             >
-              {consecutiveDays}일 연속
-            </div>
-          )}
-        </div>
+            {consecutiveDays}일 연속
+          </div>
+        )}
+      </div>
         {/* 오른쪽: 슬라이더 + 수정 버튼 */}
         <div className="flex items-center gap-2 shrink-0">
           <div className="flex items-center gap-1.5">
             <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-24">
               <div
                 className={isHexColor ? 'h-full transition-all duration-500 ease-out' : `h-full ${colorClasses.bg} transition-all duration-500 ease-out`}
-                style={{ 
-                  width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
+            style={{ 
+              width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
                   backgroundColor: isHexColor ? routineColor : undefined,
-                }}
-              />
-            </div>
+            }}
+          />
+        </div>
             <div
               className={isHexColor ? 'w-3 h-3 rounded-full shrink-0 shadow-sm' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0 shadow-sm`}
               style={isHexColor ? { backgroundColor: routineColor } : {}}
@@ -2185,120 +1891,6 @@ function RoutineCalendar({
         </div>
       </div>
       
-    </div>
-  );
-}
-
-// AI Agent 모달 컴포넌트
-function AIAgentModal({ onClose }: { onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[85vh] overflow-y-auto shadow-xl">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent">
-            🤖 AI Agent
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl w-10 h-10 flex items-center justify-center"
-            aria-label="닫기"
-          >
-            ×
-          </button>
-        </div>
-
-        {/* AI Agent 설명 */}
-        <div className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-900/30 rounded-xl p-6 mb-6 border border-blue-200 dark:border-blue-500/20">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">✨ 나만의 AI 라이프 코치</h3>
-          <p className="text-gray-600 dark:text-gray-300 text-base leading-relaxed mb-4">
-            AI Agent가 당신의 일상을 종합적으로 분석하여 맞춤형 조언을 제공합니다.
-          </p>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
-              <div className="text-2xl mb-1">⚖️</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">체중 변화</div>
-            </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
-              <div className="text-2xl mb-1">📋</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">데일리 루틴</div>
-            </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
-              <div className="text-2xl mb-1">🍽️</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">식사 기록</div>
-            </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
-              <div className="text-2xl mb-1">💰</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">재무 상태</div>
-              <div className="text-xs text-yellow-400 dark:text-yellow-400 mt-1">준비중</div>
-            </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
-              <div className="text-2xl mb-1">📊</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">가계부</div>
-              <div className="text-xs text-yellow-400 dark:text-yellow-400 mt-1">준비중</div>
-            </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
-              <div className="text-2xl mb-1">📝</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">일기 분석</div>
-            </div>
-          </div>
-        </div>
-
-        {/* 개발 예정 기능 안내 */}
-        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-6 border border-gray-200 dark:border-gray-600">
-          <div className="text-center">
-            <div className="text-6xl mb-4">🚀</div>
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-3">곧 만나요!</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6 text-base">
-              AI Agent 기능은 현재 개발 중입니다.<br/>
-              조만간 당신의 라이프 코치가 되어드릴게요!
-            </p>
-            
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-4 text-left border border-gray-200 dark:border-gray-700">
-              <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">🎯 예정된 기능</h4>
-              <ul className="space-y-2 text-base text-gray-600 dark:text-gray-300">
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>일주일 단위 루틴 달성률 분석 및 개선 제안</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>체중 변화 패턴 분석 및 건강 조언</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>식사 기록 기반 영양 밸런스 체크</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>재무 상태와 소비 패턴 분석 (개발 예정)</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>가계부 데이터 기반 절약 팁 제공 (개발 예정)</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>일기 내용 감정 분석 및 멘탈 케어 조언</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-blue-400 dark:text-blue-400">▸</span>
-                  <span>개인화된 주간/월간 리포트 자동 생성</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-center">
-          <button
-            onClick={onClose}
-            className="w-full px-6 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors min-h-[44px] text-base"
-          >
-            닫기
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

@@ -15,7 +15,7 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <button
-        className="w-10 h-10 bg-gray-600 dark:bg-gray-700 text-white rounded-lg flex items-center justify-center min-h-[44px]"
+        className="w-10 h-10 hover:bg-gray-500/20 dark:hover:bg-gray-400/20 rounded-lg flex items-center justify-center min-h-[44px] transition-colors"
         aria-label="Toggle theme"
       >
         <span className="text-base">🌙</span>
@@ -26,7 +26,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
+      className="w-10 h-10 hover:bg-gray-500/20 dark:hover:bg-gray-400/20 rounded-lg flex items-center justify-center min-h-[44px] transition-colors"
       aria-label="Toggle theme"
     >
       <span className="text-base">{theme === 'dark' ? '☀️' : '🌙'}</span>
