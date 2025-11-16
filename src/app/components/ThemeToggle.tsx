@@ -15,10 +15,10 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <button
-        className="px-4 py-2 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-all border border-gray-300 dark:border-gray-600 shadow-sm"
+        className="w-10 h-10 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg flex items-center justify-center min-h-[44px]"
         aria-label="Toggle theme"
       >
-        🌙
+        <span className="text-base">🌙</span>
       </button>
     );
   }
@@ -26,10 +26,10 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      className="px-4 py-2 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg transition-all border border-gray-300 dark:border-gray-600 shadow-sm transform hover:rotate-180 duration-500"
+      className="w-10 h-10 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg flex items-center justify-center min-h-[44px]"
       aria-label="Toggle theme"
     >
-      {theme === 'dark' ? '☀️' : '🌙'}
+      <span className="text-base">{theme === 'dark' ? '☀️' : '🌙'}</span>
     </button>
   );
 }

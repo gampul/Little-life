@@ -419,17 +419,17 @@ export default function Home() {
               <ThemeToggle />
               <button
                 onClick={() => setIsAIAgentOpen(true)}
-                className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center justify-center shadow-lg hover:scale-105 min-h-[36px] sm:min-h-[40px]"
+                className="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg flex items-center justify-center min-h-[44px]"
                 aria-label="AI Agent"
               >
-                <span className="text-base sm:text-lg">🤖</span>
+                <span className="text-base">🤖</span>
               </button>
               <button
                 onClick={() => setIsRoutineSettingOpen(true)}
-                className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center justify-center hover:scale-105 min-h-[36px] sm:min-h-[40px]"
+                className="w-10 h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg flex items-center justify-center min-h-[44px]"
                 aria-label="루틴 설정"
               >
-                <span className="text-base sm:text-lg">⚙️</span>
+                <span className="text-base">⚙️</span>
               </button>
             </div>
           </div>
@@ -461,12 +461,44 @@ export default function Home() {
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-2 sm:px-3 py-2.5 sm:py-3 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-                />
+                <div 
+                  className="relative cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
+                    if (input) {
+                      input.focus();
+                      // showPicker는 readOnly가 아닌 input에서만 작동
+                      if (input.showPicker) {
+                        try {
+                          input.showPicker();
+                        } catch (err) {
+                          // showPicker 실패 시 click으로 대체
+                          input.click();
+                        }
+                      } else {
+                        input.click();
+                      }
+                    }
+                  }}
+                >
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (e.currentTarget.showPicker) {
+                        try {
+                          e.currentTarget.showPicker();
+                        } catch (err) {
+                          // 에러 무시 (브라우저가 자동으로 처리)
+                        }
+                      }
+                    }}
+                  />
+                </div>
                 {/* 체중 입력 */}
                 <input
                   type="number"
@@ -477,13 +509,13 @@ export default function Home() {
                   }
                   placeholder="체중"
                   disabled={!isEditMode}
-                  className="px-2 sm:px-3 py-2.5 sm:py-3 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+                  className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
                 />
                 {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                    className="px-2 sm:px-3 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors min-h-[44px] whitespace-nowrap"
+                    className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white text-base font-medium rounded-lg transition-colors min-h-[44px] whitespace-nowrap"
                   >
                     수정하기
                   </button>
@@ -491,7 +523,7 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="px-2 sm:px-3 py-2.5 sm:py-3 bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap"
+                    className="px-4 py-3 bg-green-600 hover:bg-green-700 text-white text-base font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap"
                   >
                     {isSaving ? '저장 중...' : '저장'}
                   </button>
@@ -504,31 +536,91 @@ export default function Home() {
 
             {/* 체중 변화 그래프 */}
             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
-              <div className="flex flex-col items-start justify-between gap-3 mb-4">
+              <div className="flex flex-col gap-3 mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
-                <select
-                  value={weightPeriod}
-                  onChange={(e) => setWeightPeriod(e.target.value as PeriodFilter)}
-                  className="w-full px-4 py-2.5 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-                >
-                  <option value="7days">최근 7일</option>
-                  <option value="1month">1개월</option>
-                  <option value="1year">1년</option>
-                  <option value="ytd">연초부터</option>
-                  <option value="all">전체</option>
-                </select>
+                <div className="flex gap-1.5 sm:gap-2">
+                  <button
+                    onClick={() => setWeightPeriod('7days')}
+                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                      weightPeriod === '7days'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    7D
+                  </button>
+                  <button
+                    onClick={() => setWeightPeriod('1month')}
+                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                      weightPeriod === '1month'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    1M
+                  </button>
+                  <button
+                    onClick={() => setWeightPeriod('1year')}
+                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                      weightPeriod === '1year'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    1Y
+                  </button>
+                  <button
+                    onClick={() => setWeightPeriod('ytd')}
+                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                      weightPeriod === 'ytd'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    YTD
+                  </button>
+                  <button
+                    onClick={() => setWeightPeriod('all')}
+                    className={`flex-1 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors min-h-[44px] ${
+                      weightPeriod === 'all'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    전체
+                  </button>
+                </div>
               </div>
               <div className="h-64">
-                {getWeightChartData().length > 0 ? (
+                {getWeightChartData().length > 0 ? (() => {
+                  const rawData = getWeightChartData();
+                  // 날짜순으로 정렬
+                  const chartData = [...rawData].sort((a, b) => 
+                    new Date(a.date).getTime() - new Date(b.date).getTime()
+                  );
+                  
+                  // 데이터 포인트 수에 따라 interval 자동 계산
+                  // 10개 이하: 모두 표시, 10-20개: 1개씩 건너뛰기, 20-30개: 2개씩, 30개 이상: 3개씩
+                  const dataCount = chartData.length;
+                  let interval: number | "preserveStartEnd" = 0;
+                  if (dataCount > 30) {
+                    interval = Math.floor(dataCount / 10); // 최대 10개 정도만 표시
+                  } else if (dataCount > 20) {
+                    interval = 2;
+                  } else if (dataCount > 10) {
+                    interval = 1;
+                  }
+                  
+                  return (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart 
-                      data={getWeightChartData()}
-                      margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                      data={chartData}
+                      margin={{ top: 5, right: 5, left: 0, bottom: 25 }}
                     >
                       <defs>
                         <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid 
@@ -540,17 +632,25 @@ export default function Home() {
                       <XAxis 
                         dataKey="date" 
                         stroke="#6B7280"
-                        tick={{ fontSize: 11, fill: '#9CA3AF' }}
+                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
                         tickLine={false}
                         axisLine={{ stroke: '#374151' }}
+                        padding={{ left: 0, right: 0 }}
+                        interval={interval}
+                        tickFormatter={(value) => {
+                          if (!value) return '';
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
                       />
                       <YAxis 
                         stroke="#6B7280"
                         tick={{ fontSize: 11, fill: '#9CA3AF' }}
                         tickLine={false}
-                        axisLine={{ stroke: '#374151' }}
+                        axisLine={false}
                         domain={['dataMin - 1', 'dataMax + 1']}
                         tickFormatter={(value) => `${value}kg`}
+                        width={45}
                       />
                       <Tooltip 
                         contentStyle={{ 
@@ -561,32 +661,23 @@ export default function Home() {
                           boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
                         }}
                         labelStyle={{ color: '#D1D5DB', fontSize: '12px', marginBottom: '4px' }}
-                        itemStyle={{ color: '#3B82F6', fontSize: '14px', fontWeight: 'bold' }}
+                        itemStyle={{ color: '#EF4444', fontSize: '14px', fontWeight: 'bold' }}
                         formatter={(value: any) => [`${value} kg`, '체중']}
-                        cursor={{ stroke: '#3B82F6', strokeWidth: 1, strokeDasharray: '5 5' }}
+                        cursor={{ stroke: '#EF4444', strokeWidth: 1, strokeDasharray: '5 5' }}
                       />
                       <Line 
                         type="monotone" 
                         dataKey="weight" 
-                        stroke="#3B82F6" 
-                        strokeWidth={1}
-                        dot={{ 
-                          fill: '#3B82F6', 
-                          strokeWidth: 2,
-                          stroke: '#1F2937',
-                          r: 3
-                        }}
-                        activeDot={{ 
-                          r: 5, 
-                          fill: '#3B82F6',
-                          stroke: '#fff',
-                          strokeWidth: 2
-                        }}
+                        stroke="#EF4444" 
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={false}
                         fill="url(#colorWeight)"
                       />
                     </LineChart>
                   </ResponsiveContainer>
-                ) : (
+                  );
+                })() : (
                   <div className="h-full flex items-center justify-center">
                     <div className="text-center">
                       <div className="text-4xl mb-2">📊</div>
