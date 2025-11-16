@@ -360,7 +360,7 @@ export default function Home() {
     
     return (
       <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+        <div className="max-w-[480px] w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 sm:p-6">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-400 mb-4">
             ⚠️ 환경 변수 오류
           </h2>
@@ -408,28 +408,30 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
-      <div className="max-w-7xl mx-auto p-4">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-            Little Life
-          </h1>
-          <div className="flex gap-3">
-            <ThemeToggle />
-            <button
-              onClick={() => setIsAIAgentOpen(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center gap-2 shadow-lg text-base min-h-[44px]"
-              aria-label="AI Agent"
-            >
-              🤖 AI Agent
-            </button>
-            <button
-              onClick={() => setIsRoutineSettingOpen(true)}
-              className="px-4 py-2.5 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2 text-base min-h-[44px]"
-              aria-label="루틴 설정"
-            >
-              ⚙️ 루틴 설정
-            </button>
+      <div className="max-w-[480px] mx-auto px-4 sm:px-6">
+        {/* 고정 헤더 */}
+        <div className="sticky top-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2.5 sm:py-3 mb-4 sm:mb-6">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              Little Life
+            </h1>
+            <div className="flex gap-1.5 sm:gap-2">
+              <ThemeToggle />
+              <button
+                onClick={() => setIsAIAgentOpen(true)}
+                className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-all flex items-center justify-center shadow-lg hover:scale-105 min-h-[36px] sm:min-h-[40px]"
+                aria-label="AI Agent"
+              >
+                <span className="text-base sm:text-lg">🤖</span>
+              </button>
+              <button
+                onClick={() => setIsRoutineSettingOpen(true)}
+                className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-600 dark:bg-gray-700 hover:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center justify-center hover:scale-105 min-h-[36px] sm:min-h-[40px]"
+                aria-label="루틴 설정"
+              >
+                <span className="text-base sm:text-lg">⚙️</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -452,22 +454,36 @@ export default function Home() {
           />
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 왼쪽: 입력 섹션 */}
+        <div className="space-y-6">
+          {/* 입력 섹션 */}
           <div>
-            {/* 날짜 선택 & 버튼 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
-              <div className="flex flex-col gap-3 items-stretch">
+            {/* 날짜, 체중 입력, 수정하기 한 줄 배치 */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {/* 날짜 입력 */}
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="flex-1 px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                  className="px-2 sm:px-3 py-2.5 sm:py-3 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
                 />
+                {/* 체중 입력 */}
+                <input
+                  type="number"
+                  step="0.1"
+                  value={formData.weight || ''}
+                  onChange={(e) =>
+                    handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : '')
+                  }
+                  placeholder="체중"
+                  disabled={!isEditMode}
+                  className="px-2 sm:px-3 py-2.5 sm:py-3 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+                />
+                {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                    className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-base font-medium rounded-lg transition-colors min-h-[44px]"
+                    className="px-2 sm:px-3 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors min-h-[44px] whitespace-nowrap"
                   >
                     수정하기
                   </button>
@@ -475,130 +491,21 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                    className="w-full px-6 py-3 bg-green-600 hover:bg-green-700 text-white text-base font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                    className="px-2 sm:px-3 py-2.5 sm:py-3 bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] whitespace-nowrap"
                   >
                     {isSaving ? '저장 중...' : '저장'}
                   </button>
                 )}
               </div>
               {message && (
-                <div className="mt-3 text-center text-base font-medium text-gray-700 dark:text-gray-300">{message}</div>
+                <div className="mt-3 text-center text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{message}</div>
               )}
             </div>
 
-            {/* 체중 입력 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
-              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                ⚖️ 오늘의 체중 (kg)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                value={formData.weight || ''}
-                onChange={(e) =>
-                  handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : '')
-                }
-                placeholder="체중을 입력하세요"
-                disabled={!isEditMode}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
-              />
-            </div>
-
-            {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
-              {routineTemplates.map((routine, index) => (
-                <div key={routine.id}>
-                  <RoutineItem
-                    emoji={routine.emoji}
-                    label={routine.label}
-                    checked={isRoutineChecked(routine.id)}
-                    onChange={() => handleRoutineCheckChange(routine.id)}
-                    disabled={!isEditMode}
-                    isLast={index === routineTemplates.length - 1}
-                    isExpanded={expandedRoutineId === routine.id}
-                    onExpandToggle={() => {
-                      setExpandedRoutineId(expandedRoutineId === routine.id ? null : routine.id);
-                    }}
-                  />
-                  {/* 확장된 루틴의 캘린더 표시 */}
-                  {expandedRoutineId === routine.id && (
-                    <div className="mt-4 pb-4">
-                      <RoutineCalendar
-                        routineId={routine.id}
-                        routineLabel={routine.label}
-                        routineEmoji={routine.emoji}
-                        routineTemplates={routineTemplates}
-                        isExpanded={true}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
-              {routineTemplates.length === 0 && (
-                <div className="text-center text-gray-400 dark:text-gray-500 py-4">
-                  루틴을 추가해주세요
-                </div>
-              )}
-            </div>
-
-            {/* 식사 기록 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
-              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
-                🍽️ 오늘의 식사
-              </label>
-              <div className="flex flex-wrap gap-4 mb-4">
-                <MealCheckbox
-                  label="아침"
-                  checked={formData.meal_breakfast}
-                  onChange={() => handleCheckboxChange('meal_breakfast')}
-                  disabled={!isEditMode}
-                />
-                <MealCheckbox
-                  label="점심"
-                  checked={formData.meal_lunch}
-                  onChange={() => handleCheckboxChange('meal_lunch')}
-                  disabled={!isEditMode}
-                />
-                <MealCheckbox
-                  label="저녁"
-                  checked={formData.meal_dinner}
-                  onChange={() => handleCheckboxChange('meal_dinner')}
-                  disabled={!isEditMode}
-                />
-              </div>
-              <textarea
-                value={formData.meal_memo}
-                onChange={(e) => handleInputChange('meal_memo', e.target.value)}
-                placeholder="식사 메모 (선택사항)"
-                disabled={!isEditMode}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
-                rows={3}
-              />
-            </div>
-
-            {/* 오늘의 메모 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-3 shadow-sm">
-              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                📝 오늘의 메모
-              </label>
-              <textarea
-                value={formData.daily_memo}
-                onChange={(e) => handleInputChange('daily_memo', e.target.value)}
-                placeholder="오늘 하루를 기록해보세요..."
-                disabled={!isEditMode}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
-                rows={5}
-              />
-            </div>
-          </div>
-
-          {/* 오른쪽: 통계 섹션 */}
-          <div>
-            {/* 1. 체중 그래프 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 mb-4 shadow-sm">
+            {/* 체중 변화 그래프 */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
               <div className="flex flex-col items-start justify-between gap-3 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">체중 변화</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
                 <select
                   value={weightPeriod}
                   onChange={(e) => setWeightPeriod(e.target.value as PeriodFilter)}
@@ -690,8 +597,99 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 2. 일별 메모 보기 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 shadow-sm">
+            {/* 데일리 루틴 - 동적으로 렌더링 */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
+              {routineTemplates.map((routine, index) => (
+                <div key={routine.id}>
+                  <RoutineItem
+                    emoji={routine.emoji}
+                    label={routine.label}
+                    checked={isRoutineChecked(routine.id)}
+                    onChange={() => handleRoutineCheckChange(routine.id)}
+                    disabled={!isEditMode}
+                    isLast={index === routineTemplates.length - 1}
+                    isExpanded={expandedRoutineId === routine.id}
+                    onExpandToggle={() => {
+                      setExpandedRoutineId(expandedRoutineId === routine.id ? null : routine.id);
+                    }}
+                  />
+                  {/* 확장된 루틴의 캘린더 표시 */}
+                  {expandedRoutineId === routine.id && (
+                    <div className="mt-4 pb-4">
+                      <RoutineCalendar
+                        routineId={routine.id}
+                        routineLabel={routine.label}
+                        routineEmoji={routine.emoji}
+                        routineTemplates={routineTemplates}
+                        isExpanded={true}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {routineTemplates.length === 0 && (
+                <div className="text-center text-gray-400 dark:text-gray-500 py-4">
+                  루틴을 추가해주세요
+                </div>
+              )}
+            </div>
+
+            {/* 식사 기록 */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
+                🍽️ 오늘의 식사
+              </label>
+              <div className="flex flex-wrap gap-4 mb-4">
+                <MealCheckbox
+                  label="아침"
+                  checked={formData.meal_breakfast}
+                  onChange={() => handleCheckboxChange('meal_breakfast')}
+                  disabled={!isEditMode}
+                />
+                <MealCheckbox
+                  label="점심"
+                  checked={formData.meal_lunch}
+                  onChange={() => handleCheckboxChange('meal_lunch')}
+                  disabled={!isEditMode}
+                />
+                <MealCheckbox
+                  label="저녁"
+                  checked={formData.meal_dinner}
+                  onChange={() => handleCheckboxChange('meal_dinner')}
+                  disabled={!isEditMode}
+                />
+              </div>
+              <textarea
+                value={formData.meal_memo}
+                onChange={(e) => handleInputChange('meal_memo', e.target.value)}
+                placeholder="식사 메모 (선택사항)"
+                disabled={!isEditMode}
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
+                rows={3}
+              />
+            </div>
+
+            {/* 오늘의 메모 */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
+                📝 오늘의 메모
+              </label>
+              <textarea
+                value={formData.daily_memo}
+                onChange={(e) => handleInputChange('daily_memo', e.target.value)}
+                placeholder="오늘 하루를 기록해보세요..."
+                disabled={!isEditMode}
+                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
+                rows={5}
+              />
+            </div>
+          </div>
+
+          {/* 통계 섹션 */}
+          <div>
+            {/* 일별 메모 보기 */}
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">일별 메모</h3>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {getMemoDates().length > 0 ? (
@@ -740,30 +738,27 @@ function RoutineItem({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-3 py-3 min-h-[52px]">
+      <div 
+        className="flex items-center gap-3 py-3 min-h-[52px] cursor-pointer"
+        onClick={onExpandToggle}
+      >
         {/* 확장/접기 버튼 */}
-        <button
-          onClick={onExpandToggle}
-          disabled={!onExpandToggle}
-          className="flex items-center justify-center w-6 h-6 shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-transform"
+        <div
+          className="flex items-center justify-center w-6 h-6 shrink-0 text-gray-500 dark:text-gray-400 transition-transform pointer-events-none"
           style={{
             transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
           }}
-          aria-label={isExpanded ? '접기' : '펼치기'}
         >
           <span className="text-lg">▶</span>
-        </button>
+        </div>
         
-        <span className="text-2xl">{emoji}</span>
-        
-        {/* 루틴 라벨 클릭 시 확장/접기 */}
-        <button
-          onClick={onExpandToggle}
-          disabled={!onExpandToggle}
-          className={`flex-1 text-left text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'} disabled:opacity-50 disabled:cursor-not-allowed hover:text-gray-700 dark:hover:text-gray-200 transition-colors`}
-        >
-          {label}
-        </button>
+        {/* 이모지 + 텍스트 영역 */}
+        <div className="flex items-center gap-3 flex-1">
+          <span className="text-2xl">{emoji}</span>
+          <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
+            {label}
+          </span>
+        </div>
         
         {/* 체크박스 */}
         <label className="cursor-pointer shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -895,7 +890,7 @@ function RoutineSettingModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto shadow-xl">
+      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[80vh] overflow-y-auto shadow-xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 루틴 설정</h2>
           <button
@@ -1305,7 +1300,7 @@ function RoutineCalendar({
   const consecutiveDays = getConsecutiveDays(routineId);
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm w-full">
+    <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm w-full">
       {/* 루틴 제목 + 연속 체크 수 + 수정 버튼 */}
       <div className="flex items-center gap-2 mb-4 relative">
         <span className="text-2xl">{routineEmoji}</span>
@@ -1464,8 +1459,8 @@ function RoutineCalendar({
                           className={`
                             flex items-center justify-center relative shrink-0
                             cursor-pointer
-                            transition-all duration-300 ease-in-out
-                            ${editModeRoutine === routineId ? 'hover:scale-110 hover:shadow-md' : ''}
+                            transition-all duration-200 ease-in-out
+                            hover:scale-110 hover:shadow-lg hover:brightness-125 hover:z-10
                           `}
                           style={{
                             width: '37px',
@@ -1509,10 +1504,6 @@ function RoutineCalendar({
         </div>
       </div>
       
-      {/* 스크롤 안내 */}
-      <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
-        ← 좌우로 스크롤하여 더 많은 날짜를 확인하세요 →
-      </p>
     </div>
   );
 }
@@ -1521,7 +1512,7 @@ function RoutineCalendar({
 function AIAgentModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 max-w-4xl w-full max-h-[85vh] overflow-y-auto shadow-xl">
+      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[85vh] overflow-y-auto shadow-xl">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
             🤖 AI Agent

@@ -1,5 +1,12 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  outputFileTracingRoot: __dirname, // 현재 디렉토리를 루트로 명시
   // 빌드 시점에 환경 변수 확인 (디버깅용)
   webpack: (config, { isServer }) => {
     if (!isServer) {
