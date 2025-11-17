@@ -3,7 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabase } from '../lib/supabase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { GlobalNav } from './components/GlobalNav';
+import { FooterNav } from './components/FooterNav';
 import { AIAgentModal } from './components/AIAgentModal';
 
 interface DailyRecord {
@@ -34,6 +37,7 @@ type PeriodFilter = '7days' | '1month' | '1year' | 'ytd' | 'all';
 
 export default function Home() {
   const userId = 'default_user'; // 실제 앱에서는 로그인한 사용자 ID 사용
+  const pathname = usePathname();
 
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -456,8 +460,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
-      <GlobalNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
+    <div className="min-h-screen bg-white dark:bg-gray-900 pb-20">
+      <GlobalNav />
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
         {/* 루틴 설정 모달 */}
@@ -483,11 +487,11 @@ export default function Home() {
           {/* 입력 섹션 */}
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
-                  className="relative cursor-pointer"
+                  className="relative cursor-pointer overflow-hidden"
                   onClick={(e) => {
                     e.preventDefault();
                     const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
@@ -507,11 +511,12 @@ export default function Home() {
                     }
                   }}
                 >
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer"
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-transparent border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (e.currentTarget.showPicker) {
@@ -523,7 +528,17 @@ export default function Home() {
                       }
                     }}
                   />
-              </div>
+                  {/* 날짜 포맷 표시 (오버레이) - 한 줄로 정렬, 박스 안으로 제한 */}
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-base text-gray-900 dark:text-white font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-2rem)]">
+                    {(() => {
+                      const date = new Date(selectedDate);
+                      const year = date.getFullYear();
+                      const month = date.getMonth() + 1;
+                      const day = date.getDate();
+                      return `${year}년 ${month}월 ${day}일`;
+                    })()}
+                  </div>
+                </div>
             {/* 체중 입력 */}
             <input
               type="number"
@@ -562,7 +577,7 @@ export default function Home() {
             </div>
 
             {/* 체중 변화 그래프 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
               <div className="flex flex-col gap-3 mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
                 <div className="flex gap-1.5 sm:gap-2">
@@ -716,7 +731,7 @@ export default function Home() {
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
               {routineTemplates.map((routine, index) => (
                 <div key={routine.id}>
@@ -760,7 +775,7 @@ export default function Home() {
             </div>
 
             {/* 식사 기록 */}
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
               <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
                 🍽️ 오늘의 식사
               </label>
@@ -792,6 +807,47 @@ export default function Home() {
                 className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
                 rows={3}
               />
+            </div>
+
+            {/* 네비게이션 메뉴 - 고정 */}
+            <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-lg">
+              <div className="flex items-center justify-around gap-2">
+                {/* AI Agent 버튼 */}
+                <button
+                  onClick={() => setIsAIAgentOpen(true)}
+                  className="w-full px-4 py-3 text-base font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-500"
+                  aria-label="AI Agent"
+                >
+                  <span>🚀</span>
+                  <span>AI</span>
+                </button>
+
+                {/* Daily 버튼 */}
+                <Link
+                  href="/"
+                  className={`w-full px-4 py-3 text-base font-medium rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border ${
+                    pathname === '/'
+                      ? 'bg-blue-600 text-white border-blue-700 dark:border-blue-500'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-500'
+                  }`}
+                >
+                  <span>📅</span>
+                  <span>Daily</span>
+                </Link>
+
+                {/* Diary 버튼 */}
+                <Link
+                  href="/memo"
+                  className={`w-full px-4 py-3 text-base font-medium rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border ${
+                    pathname === '/memo'
+                      ? 'bg-blue-600 text-white border-blue-700 dark:border-blue-500'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-500'
+                  }`}
+                >
+                  <span>📝</span>
+                  <span>Diary</span>
+                </Link>
+              </div>
             </div>
             </div>
           </div>
@@ -1193,11 +1249,11 @@ function RoutineSettingModal({
           </button>
         </div>
 
-        <div className="space-y-3 mb-6">
+        <div className="space-y-6 mb-6">
           {templates.map((template, index) => {
             
             return (
-            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-white dark:bg-gray-700 rounded-lg p-4 sm:p-5">
               <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
               <input
                 type="text"
@@ -1891,6 +1947,7 @@ function RoutineCalendar({
         </div>
       </div>
       
+      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
     </div>
   );
 }

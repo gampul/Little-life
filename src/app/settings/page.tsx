@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
+import { FooterNav } from '../components/FooterNav';
+import { AIAgentModal } from '../components/AIAgentModal';
 import { ThemeToggle } from '../components/ThemeToggle';
 
 interface RoutineTemplate {
@@ -19,6 +21,7 @@ export default function SettingsPage() {
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
 
   // 루틴 템플릿 로드
   const loadRoutineTemplates = useCallback(async () => {
@@ -165,10 +168,15 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
+    <div className="min-h-screen bg-white dark:bg-gray-900 pb-20">
       <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        {isAIAgentOpen && (
+          <AIAgentModal
+            onClose={() => setIsAIAgentOpen(false)}
+          />
+        )}
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 설정</h2>
@@ -266,6 +274,8 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      
+      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
     </div>
   );
 }

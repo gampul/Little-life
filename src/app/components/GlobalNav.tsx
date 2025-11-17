@@ -15,12 +15,6 @@ export function GlobalNav(props: GlobalNavProps) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgSrc, setImgSrc] = useState('/little-life-logo.png');
 
-  const navItems = [
-    { href: '/', label: 'Daily', emoji: '📅' },
-    { href: '/memo', label: 'Diary', emoji: '📝' },
-    { href: '/settings', label: '', emoji: null, isDots: true },
-  ];
-
   const handleImageError = () => {
     if (imgSrc.includes('.png')) {
       setImgSrc('/little-life-logo.jpg');
@@ -46,52 +40,26 @@ export function GlobalNav(props: GlobalNavProps) {
                 onError={handleImageError}
               />
             )}
-            <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
+            <span className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
               Little Life
             </span>
           </Link>
 
-          {/* 네비게이션 메뉴 */}
-          <div className="flex items-center gap-1">
-            {/* AI Agent 버튼 */}
-            {onAIAgentClick && (
-              <button
-                onClick={onAIAgentClick}
-                className="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center gap-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                aria-label="AI Agent"
-              >
-                <span className="text-base">🚀</span>
-                <span className="hidden sm:inline">AI</span>
-              </button>
-            )}
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center ${item.isDots ? '' : 'gap-1.5'} ${
-                    isActive
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  {item.isDots ? (
-                    <span className="flex flex-col gap-0.5 items-center justify-center">
-                      <span className="w-1 h-1 rounded-full bg-current"></span>
-                      <span className="w-1 h-1 rounded-full bg-current"></span>
-                      <span className="w-1 h-1 rounded-full bg-current"></span>
-                    </span>
-                  ) : (
-                    <>
-                      <span className="text-base">{item.emoji}</span>
-                      <span className="hidden sm:inline">{item.label}</span>
-                    </>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
+          {/* Settings 버튼 */}
+          <Link
+            href="/settings"
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
+              pathname === '/settings'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            <span className="flex flex-col gap-0.5 items-center justify-center">
+              <span className="w-1 h-1 rounded-full bg-current"></span>
+              <span className="w-1 h-1 rounded-full bg-current"></span>
+              <span className="w-1 h-1 rounded-full bg-current"></span>
+            </span>
+          </Link>
         </div>
       </div>
     </nav>

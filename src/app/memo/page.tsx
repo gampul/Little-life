@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabase } from '../../lib/supabase';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { GlobalNav } from '../components/GlobalNav';
+import { FooterNav } from '../components/FooterNav';
 import { AIAgentModal } from '../components/AIAgentModal';
 
 interface Memo {
@@ -15,6 +18,7 @@ interface Memo {
 
 export default function MemoPage() {
   const supabase = getSupabase();
+  const pathname = usePathname();
   const [showEditor, setShowEditor] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -255,8 +259,8 @@ export default function MemoPage() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gradient-to-br dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
-      <GlobalNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
+    <div className="min-h-screen bg-white dark:bg-gray-900 pb-20">
+      <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {isAIAgentOpen && (
@@ -266,7 +270,7 @@ export default function MemoPage() {
         )}
 
         {!showEditor && (
-          <div className="mb-4">
+          <div className="mb-6">
             <button
               onClick={handleWrite}
               className="w-full px-4 py-3 text-base font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2"
@@ -278,9 +282,9 @@ export default function MemoPage() {
         )}
 
         {showEditor && (
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 sm:mb-4 shadow-sm">
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
+            <div className="mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 제목
               </label>
               <input
@@ -292,17 +296,17 @@ export default function MemoPage() {
               />
             </div>
             
-            <div className="mb-3">
-              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <div className="mb-2">
+              <label className="block text-lg sm:text-xl font-medium text-gray-700 dark:text-gray-300 mb-1">
                 📝 Diary 작성
               </label>
             </div>
 
-            <div className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-t-lg p-2 flex flex-wrap gap-1">
+            <div className="bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-t-lg p-2 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => formatText('bold')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="굵게"
               >
                 <strong>B</strong>
@@ -310,7 +314,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('italic')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="기울임"
               >
                 <em>I</em>
@@ -318,7 +322,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('underline')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="밑줄"
               >
                 <u>U</u>
@@ -327,7 +331,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('insertUnorderedList')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="글머리 기호"
               >
                 • 목록
@@ -335,7 +339,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('insertOrderedList')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="번호 목록"
               >
                 1. 목록
@@ -344,7 +348,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('formatBlock', '<h2>')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="제목"
               >
                 제목
@@ -352,7 +356,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('removeFormat')}
-                className="px-2 py-1 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500"
+                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="서식 제거"
               >
                 서식 제거
@@ -364,14 +368,14 @@ export default function MemoPage() {
                 ref={editorRef}
                 contentEditable
                 onInput={handleEditorInput}
-                className="min-h-[300px] p-4 text-base text-gray-900 dark:text-white focus:outline-none"
+                className="min-h-[200px] p-3 text-base text-gray-900 dark:text-white focus:outline-none"
                 style={{ whiteSpace: 'pre-wrap' }}
                 suppressContentEditableWarning
                 data-placeholder="오늘 하루를 기록해보세요..."
               />
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-2 flex gap-2 sm:gap-4">
               <button
                 onClick={handleSave}
                 disabled={isSaving}
@@ -393,7 +397,7 @@ export default function MemoPage() {
             </div>
             
             {message && (
-              <div className={`mt-3 text-sm text-center ${message.includes('✅') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              <div className={`mt-2 text-base text-center ${message.includes('✅') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {message}
               </div>
             )}
@@ -401,34 +405,34 @@ export default function MemoPage() {
         )}
 
         {totalCount > 0 && (
-          <div className="mb-4 text-sm text-gray-600 dark:text-gray-400 text-center">
+          <div className="mb-6 text-sm text-gray-600 dark:text-gray-400 text-center">
             전체 {totalCount}개의 글
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           {displayedMemos.length > 0 ? (
             <>
               {displayedMemos.map((memo) => (
                 <div
                   key={memo.id}
-                  className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm"
+                  className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm"
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex-1">
                       {memo.title || '제목 없음'}
                     </h3>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleEdit(memo)}
-                        className="px-3 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[36px] flex items-center gap-1.5"
+                        className="px-4 py-3 text-sm font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center gap-2"
                       >
                         <span>✏️</span>
                         <span>수정</span>
                       </button>
                       <button
                         onClick={() => handleDelete(memo)}
-                        className="px-3 py-1.5 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors min-h-[36px] flex items-center gap-1.5"
+                        className="px-4 py-3 text-sm font-medium bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center gap-2"
                       >
                         <span>🗑️</span>
                         <span>삭제</span>
@@ -443,7 +447,7 @@ export default function MemoPage() {
               ))}
               
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-6 mb-4">
+                <div className="flex items-center justify-center gap-2 mt-6 mb-6">
                   <button
                     onClick={() => loadMemos(currentPage - 1)}
                     disabled={currentPage === 1 || isLoading}
@@ -494,7 +498,7 @@ export default function MemoPage() {
               
               {isLoading && (
                 <div className="h-10 flex items-center justify-center">
-                  <div className="text-gray-400 dark:text-gray-500 text-sm">
+                  <div className="text-gray-400 dark:text-gray-500 text-base">
                     로딩 중...
                   </div>
                 </div>
@@ -502,13 +506,15 @@ export default function MemoPage() {
             </>
           ) : (
             !isLoading && (
-              <div className="text-center text-gray-400 dark:text-gray-500 py-8">
+              <div className="text-center text-base text-gray-400 dark:text-gray-500 py-8">
                 작성된 메모가 없습니다
               </div>
             )
           )}
         </div>
       </div>
+
+      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
 
       <style jsx global>{`
         [contenteditable][data-placeholder]:empty:before {
