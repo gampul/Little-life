@@ -37,28 +37,27 @@ export function GlobalNav(props: GlobalNavProps) {
         <div className="flex items-center justify-between h-16">
           {/* 로고/타이틀 */}
           <Link href="/" className="flex items-center gap-2">
-            {!imgError ? (
+            {!imgError && (
               <img
                 ref={imgRef}
                 src={imgSrc}
                 alt="Little Life"
-                className="h-8 w-auto object-contain max-w-[200px]"
+                className="h-12 w-auto object-contain max-w-[240px]"
                 onError={handleImageError}
               />
-            ) : (
-              <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-                Little Life
-              </span>
             )}
+            <span className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white leading-tight">
+              Little Life
+            </span>
           </Link>
 
           {/* 네비게이션 메뉴 */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* AI Agent 버튼 */}
             {onAIAgentClick && (
               <button
                 onClick={onAIAgentClick}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center gap-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                className="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center gap-1.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                 aria-label="AI Agent"
               >
                 <span className="text-base">🚀</span>
@@ -71,7 +70,7 @@ export function GlobalNav(props: GlobalNavProps) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center ${item.isDots ? '' : 'gap-2'} ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center ${item.isDots ? '' : 'gap-1.5'} ${
                     isActive
                       ? 'bg-blue-600 text-white'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'

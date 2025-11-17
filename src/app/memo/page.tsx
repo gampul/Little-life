@@ -57,7 +57,7 @@ export default function MemoPage() {
         heading: {
           levels: [1, 2, 3],
         },
-        link: false, // StarterKit의 Link 비활성화
+        link: false,
       }),
       Image.configure({
         inline: true,
@@ -119,7 +119,6 @@ export default function MemoPage() {
     
     setIsLoading(true);
     try {
-      // title 컬럼이 있을 수도 있고 없을 수도 있으므로, 먼저 title 포함해서 시도
       const { data, error } = await supabase
         .from('daily_records')
         .select('id, date, daily_memo, title')
@@ -128,8 +127,7 @@ export default function MemoPage() {
         .order('date', { ascending: false })
         .range(pageNum * pageSize, (pageNum + 1) * pageSize - 1);
 
-      // title 컬럼이 없어서 에러가 발생하면 title 없이 재시도
-      if (error && error.code === 'PGRST204' && error.message?.includes('title')) {
+      if (error && error.code === 'PGRST204') {
         const { data: retryData, error: retryError } = await supabase
           .from('daily_records')
           .select('id, date, daily_memo')
@@ -139,11 +137,7 @@ export default function MemoPage() {
           .range(pageNum * pageSize, (pageNum + 1) * pageSize - 1);
         
         if (retryError) {
-          console.error('메모 목록 조회 오류 (재시도)');
-          if (retryError?.message) console.error('- 메시지:', retryError.message);
-          if (retryError?.code) console.error('- 코드:', retryError.code);
-          if (retryError?.details) console.error('- 상세:', retryError.details);
-          if (retryError?.hint) console.error('- 힌트:', retryError.hint);
+          console.error('메모 목록 조회 오류');
           setIsLoading(false);
           return;
         }
@@ -165,10 +159,6 @@ export default function MemoPage() {
 
       if (error) {
         console.error('메모 목록 조회 오류');
-        if (error?.message) console.error('- 메시지:', error.message);
-        if (error?.code) console.error('- 코드:', error.code);
-        if (error?.details) console.error('- 상세:', error.details);
-        if (error?.hint) console.error('- 힌트:', error.hint);
         setIsLoading(false);
         return;
       }
@@ -184,18 +174,12 @@ export default function MemoPage() {
       } else {
         setHasMore(false);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('예상치 못한 오류');
-      if (err?.message) console.error('- 메시지:', err.message);
-      if (err?.code) console.error('- 코드:', err.code);
-      if (err?.details) console.error('- 상세:', err.details);
-      if (err?.hint) console.error('- 힌트:', err.hint);
-      // 에러가 발생해도 예외를 던지지 않음 (목록 조회 실패는 치명적이지 않음)
     } finally {
       setIsLoading(false);
     }
   }, [supabase, pageSize]);
-
 
   // 초기 메모 목록 로드
   useEffect(() => {
@@ -242,20 +226,16 @@ export default function MemoPage() {
         .maybeSingle();
 
       if (checkError && checkError.code !== 'PGRST116') {
-        console.error('=== 체크 에러 상세 ===');
-        console.error('메시지:', checkError.message);
-        console.error('코드:', checkError.code);
+        console.error('체크 에러');
         throw checkError;
       }
 
       if (existingData) {
-        // title 컬럼이 없을 수 있으므로 먼저 daily_memo만 업데이트 시도
         const updateData: any = {
           daily_memo: formData.daily_memo,
           updated_at: new Date().toISOString(),
         };
         
-        // title 컬럼이 있으면 추가 (에러 발생 시 무시)
         if (formData.title) {
           updateData.title = formData.title;
         }
@@ -266,8 +246,7 @@ export default function MemoPage() {
           .eq('date', formData.date);
 
         if (error) {
-          // title 컬럼 에러인 경우 title 없이 재시도
-          if (error.code === 'PGRST204' && error.message?.includes('title')) {
+          if (error.code === 'PGRST204') {
             const { error: retryError } = await supabase
               .from('daily_records')
               .update({
@@ -277,15 +256,11 @@ export default function MemoPage() {
               .eq('date', formData.date);
             
             if (retryError) {
-              console.error('=== 업데이트 에러 상세 ===');
-              console.error('메시지:', retryError.message);
-              console.error('코드:', retryError.code);
+              console.error('업데이트 에러');
               throw retryError;
             }
           } else {
-            console.error('=== 업데이트 에러 상세 ===');
-            console.error('메시지:', error.message);
-            console.error('코드:', error.code);
+            console.error('업데이트 에러');
             throw error;
           }
         }
@@ -300,7 +275,6 @@ export default function MemoPage() {
           meal_memo: '',
         };
         
-        // title 컬럼이 있으면 추가
         if (formData.title) {
           insertData.title = formData.title;
         }
@@ -310,8 +284,7 @@ export default function MemoPage() {
           .insert([insertData]);
 
         if (error) {
-          // title 컬럼 에러인 경우 title 없이 재시도
-          if (error.code === 'PGRST204' && error.message?.includes('title')) {
+          if (error.code === 'PGRST204') {
             const { error: retryError } = await supabase
               .from('daily_records')
               .insert([{
@@ -325,15 +298,11 @@ export default function MemoPage() {
               }]);
             
             if (retryError) {
-              console.error('=== 삽입 에러 상세 ===');
-              console.error('메시지:', retryError.message);
-              console.error('코드:', retryError.code);
+              console.error('삽입 에러');
               throw retryError;
             }
           } else {
-            console.error('=== 삽입 에러 상세 ===');
-            console.error('메시지:', error.message);
-            console.error('코드:', error.code);
+            console.error('삽입 에러');
             throw error;
           }
         }
@@ -341,43 +310,27 @@ export default function MemoPage() {
 
       setMessage('✅ 저장되었습니다!');
       
-      // 저장된 데이터를 다시 조회하여 최신 정보 가져오기
-      const { data: savedData, error: fetchError } = await supabase
+      const { data: savedData } = await supabase
         .from('daily_records')
         .select('id, date, daily_memo, title')
         .eq('date', formData.date)
         .maybeSingle();
       
-      // title 컬럼이 없어서 에러가 발생하면 title 없이 재시도
-      let finalSavedData = savedData;
-      if (fetchError && fetchError.code === 'PGRST204' && fetchError.message?.includes('title')) {
-        const { data: retryData } = await supabase
-          .from('daily_records')
-          .select('id, date, daily_memo')
-          .eq('date', formData.date)
-          .maybeSingle();
-        finalSavedData = retryData;
-      }
-      
-      // 에디터 초기화
       setShowEditor(false);
       setFormData({ date: todayDate, daily_memo: '', title: '' });
       if (editor) {
         editor.commands.setContent('');
       }
       
-      // 목록 새로고침 (저장된 데이터가 포함되도록)
-      // 에러가 발생해도 저장은 성공했으므로 무시
       try {
         await loadMoreRecords(0, true);
       } catch (refreshError) {
-        // 목록 새로고침 실패는 무시 (저장은 성공했으므로)
-        console.warn('목록 새로고침 실패 (저장은 성공):', refreshError);
+        console.warn('목록 새로고침 실패');
       }
       
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
-      console.error('=== 최종 에러 캐치 ===');
+      console.error('저장 실패');
       let errorMessage = '알 수 없는 오류가 발생했습니다.';
       
       if (err?.message) {
@@ -411,7 +364,6 @@ export default function MemoPage() {
       editor.commands.setContent(record.daily_memo || '');
     }
     setMemoViewMode('edit');
-    // 에디터로 스크롤
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
@@ -437,13 +389,12 @@ export default function MemoPage() {
       <GlobalNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {/* AI Agent 모달 */}
         {isAIAgentOpen && (
           <AIAgentModal
             onClose={() => setIsAIAgentOpen(false)}
           />
         )}
-        {/* 글쓰기 버튼 */}
+
         {!showEditor && (
           <div className="mb-4">
             <button
@@ -456,7 +407,6 @@ export default function MemoPage() {
           </div>
         )}
 
-        {/* 메모 에디터 */}
         {showEditor && (
           <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-3 sm:mb-4 shadow-sm">
             <div className="mb-4">
@@ -502,7 +452,6 @@ export default function MemoPage() {
             </div>
             {memoViewMode === 'edit' ? (
               <>
-                {/* Tiptap 툴바 */}
                 {editor && (
                   <div className="flex flex-wrap gap-2 mb-2 p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                   <button
@@ -612,14 +561,12 @@ export default function MemoPage() {
                   </button>
                 </div>
               )}
-                {/* Tiptap 에디터 */}
                 <div className="w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg min-h-[200px] overflow-y-auto">
                   <EditorContent 
                     editor={editor}
                     className="[&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[200px] [&_.ProseMirror]:px-4 [&_.ProseMirror]:py-3 [&_.ProseMirror]:prose [&_.ProseMirror]:prose-sm [&_.ProseMirror]:dark:prose-invert [&_.ProseMirror]:max-w-none [&_p.is-editor-empty:first-child::before]:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child::before]:text-gray-400 [&_p.is-editor-empty:first-child::before]:float-left [&_p.is-editor-empty:first-child::before]:pointer-events-none [&_p.is-editor-empty:first-child::before]:h-0"
                   />
                 </div>
-                {/* 저장 버튼 */}
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={handleSave}
@@ -663,12 +610,10 @@ export default function MemoPage() {
         </div>
         )}
 
-        {/* 메모 목록 (날짜별 그룹화) */}
         <div className="space-y-4">
           {displayedRecords.length > 0 ? (
             <>
               {(() => {
-                // 날짜별로 그룹화
                 const groupedByDate = displayedRecords.reduce((acc, record) => {
                   const date = record.date;
                   if (!acc[date]) {
@@ -678,14 +623,12 @@ export default function MemoPage() {
                   return acc;
                 }, {} as Record<string, DailyRecord[]>);
 
-                // 날짜순 정렬 (최신순)
                 const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
                   new Date(b).getTime() - new Date(a).getTime()
                 );
 
                 return sortedDates.map((date) => (
                   <div key={date} className="space-y-2">
-                    {/* 해당 날짜의 메모들 */}
                     {groupedByDate[date].map((record) => (
                       <div
                         key={record.id || record.date}
@@ -704,7 +647,6 @@ export default function MemoPage() {
                           </button>
                         </div>
                         <div className="text-base text-gray-700 dark:text-gray-200 leading-relaxed prose prose-sm dark:prose-invert max-w-none">
-                          {/* HTML 또는 마크다운 자동 감지 */}
                           {record.daily_memo.trim().startsWith('<') ? (
                             <div dangerouslySetInnerHTML={{ __html: record.daily_memo }} />
                           ) : (
@@ -719,7 +661,6 @@ export default function MemoPage() {
                 ));
               })()}
               
-              {/* 무한 스크롤 감지 영역 */}
               <div ref={observerTarget} className="h-10 flex items-center justify-center">
                 {isLoading && (
                   <div className="text-gray-400 dark:text-gray-500 text-sm">
@@ -745,4 +686,3 @@ export default function MemoPage() {
     </div>
   );
 }
-
