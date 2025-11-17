@@ -852,6 +852,8 @@ export default function Home() {
             </div>
           </div>
       </div>
+      
+      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
     </div>
   );
 }
@@ -1946,8 +1948,6 @@ function RoutineCalendar({
           })()}
         </div>
       </div>
-      
-      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
     </div>
   );
 }
