@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabase } from '../lib/supabase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
 
@@ -36,7 +34,6 @@ type PeriodFilter = '7days' | '1month' | '1year' | 'ytd' | 'all';
 
 export default function Home() {
   const userId = 'default_user'; // 실제 앱에서는 로그인한 사용자 ID 사용
-  const pathname = usePathname();
 
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -44,7 +41,7 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [hasData, setHasData] = useState(false);
@@ -113,8 +110,19 @@ export default function Home() {
         .select('routine_id, checked')
         .eq('date', date);
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('루틴 체크 조회 오류:', error);
+      if (error) {
+        // PGRST116은 "no rows returned" 에러로, 데이터가 없을 때 발생하는 정상적인 상황
+        if (error.code === 'PGRST116') {
+          setRoutineChecks([]);
+          return;
+        }
+        
+        // 실제 에러인 경우에만 상세 로깅
+        console.error('루틴 체크 조회 오류');
+        if (error?.message) console.error('- 메시지:', error.message);
+        if (error?.code) console.error('- 코드:', error.code);
+        if (error?.details) console.error('- 상세:', error.details);
+        if (error?.hint) console.error('- 힌트:', error.hint);
         return;
       }
 
@@ -198,11 +206,20 @@ export default function Home() {
     loadRoutineTemplates();
   }, [loadRoutineTemplates]);
 
+  // 초기 데이터 로드 (마운트 시 한 번만)
   useEffect(() => {
     loadDailyRecord(selectedDate);
     loadRoutineChecks(selectedDate);
     loadAllRecords();
-  }, [selectedDate, loadDailyRecord, loadRoutineChecks, loadAllRecords]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // 빈 배열로 초기 마운트 시에만 실행
+
+  // 날짜 변경 시 데이터 로드
+  useEffect(() => {
+    loadDailyRecord(selectedDate);
+    loadRoutineChecks(selectedDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate]);
 
   // 루틴 체크박스 상태 확인
   const isRoutineChecked = (routineId: string): boolean => {
@@ -295,10 +312,20 @@ export default function Home() {
       }
 
       // 2. 루틴 체크 저장
-      await supabase
+      const { error: deleteError } = await supabase
         .from('daily_routine_checks')
         .delete()
         .eq('date', selectedDate);
+
+      if (deleteError) {
+        console.error('=== 루틴 체크 삭제 에러 상세 ===');
+        console.error('메시지:', deleteError.message);
+        console.error('코드:', deleteError.code);
+        console.error('상세:', deleteError.details);
+        console.error('힌트:', deleteError.hint);
+        console.error('전체:', JSON.stringify(deleteError, null, 2));
+        throw deleteError;
+      }
 
       const checksToInsert = routineChecks
         .filter(check => check.checked)
@@ -404,13 +431,14 @@ export default function Home() {
 
 
 
+
   // 환경 변수 오류 표시
   if (!supabase) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-[480px] w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 sm:p-6">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-400 mb-4">
             ⚠️ 환경 변수 오류
@@ -418,7 +446,7 @@ export default function Home() {
           <p className="text-red-700 dark:text-red-300 mb-4">
             Supabase 환경 변수가 설정되지 않았습니다.
           </p>
-          <div className="bg-white dark:bg-gray-800 rounded p-4 mb-4">
+          <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded p-4 mb-4">
             <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">
               다음 환경 변수가 필요합니다:
             </p>
@@ -458,7 +486,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 pb-20">
+    <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
@@ -479,7 +507,7 @@ export default function Home() {
           {/* 입력 섹션 */}
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
@@ -507,7 +535,7 @@ export default function Home() {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-transparent border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                     style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -541,13 +569,13 @@ export default function Home() {
               }
               placeholder="체중"
               disabled={!isEditMode}
-              className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+              className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
             />
             {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
+                className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
                 aria-label="수정하기"
                   >
                 <span className="text-base">✏️</span>
@@ -556,7 +584,7 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label={isSaving ? '저장 중' : '저장'}
                   >
                 <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
@@ -569,16 +597,147 @@ export default function Home() {
             </div>
 
             {/* 체중 변화 그래프 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="flex flex-col gap-3 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
+                  {(() => {
+                    const rawData = getWeightChartData();
+                    const chartData = [...rawData].sort((a, b) => 
+                      new Date(a.date).getTime() - new Date(b.date).getTime()
+                    );
+                    
+                    // 전체 데이터를 날짜순으로 정렬 (비교 기준 날짜 찾기용)
+                    const allDataSorted = [...allRecords]
+                      .filter(r => r.weight != null)
+                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+                    
+                    // 기간별 기준 상승/하락 계산
+                    const getWeightChangeText = () => {
+                      if (chartData.length === 0 || allDataSorted.length === 0) return null;
+                      
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      
+                      let compareDate: Date;
+                      let compareText: string;
+                      
+                      // 기간별 비교 기준 설정
+                      switch (weightPeriod) {
+                        case '7days':
+                          compareDate = new Date(today);
+                          compareDate.setDate(today.getDate() - 7);
+                          compareText = '일주일 전보다';
+                          break;
+                        case '1month':
+                          compareDate = new Date(today);
+                          compareDate.setMonth(today.getMonth() - 1);
+                          compareText = '한달 전보다';
+                          break;
+                        case 'ytd':
+                          compareDate = new Date(today.getFullYear(), 0, 1);
+                          compareText = '1월 1일보다';
+                          break;
+                        case '1year':
+                          compareDate = new Date(today);
+                          compareDate.setFullYear(today.getFullYear() - 1);
+                          compareText = '작년보다';
+                          break;
+                        case 'all':
+                          // 전체는 첫 번째 데이터와 마지막 데이터 비교
+                          if (allDataSorted.length < 2) return null;
+                          const firstData = allDataSorted[0];
+                          const latestData = allDataSorted[allDataSorted.length - 1];
+                          const firstWeight = firstData.weight;
+                          const currentWeight = latestData.weight;
+                          
+                          if (!firstWeight || !currentWeight) return null;
+                          
+                          const difference = currentWeight - firstWeight;
+                          const absDifference = Math.abs(difference);
+                          
+                          if (absDifference < 0.1) return null;
+                          
+                          const direction = difference > 0 ? '상승' : '하락';
+                          const weightText = absDifference.toFixed(1);
+                          
+                          return { 
+                            text: `처음 기록보다 ${direction}했습니다.`, 
+                            weight: weightText,
+                            prefix: '처음 기록보다'
+                          };
+                        default:
+                          return null;
+                      }
+                      
+                      // 비교 날짜 데이터 찾기 (전체 데이터에서 찾기)
+                      let compareWeight: number | null = null;
+                      
+                      if (weightPeriod === 'ytd') {
+                        // YTD: 1월 1일 이후의 첫 번째 데이터 찾기
+                        for (let i = 0; i < allDataSorted.length; i++) {
+                          const recordDate = new Date(allDataSorted[i].date);
+                          recordDate.setHours(0, 0, 0, 0);
+                          if (recordDate >= compareDate) {
+                            compareWeight = allDataSorted[i].weight;
+                            break;
+                          }
+                        }
+                      } else {
+                        // 7days, 1month, 1year: 비교 날짜 이전의 가장 가까운 데이터 찾기
+                        for (let i = allDataSorted.length - 1; i >= 0; i--) {
+                          const recordDate = new Date(allDataSorted[i].date);
+                          recordDate.setHours(0, 0, 0, 0);
+                          if (recordDate <= compareDate) {
+                            compareWeight = allDataSorted[i].weight;
+                            break;
+                          }
+                        }
+                      }
+                      
+                      // 현재(최신) 데이터 찾기 (필터링된 데이터의 마지막 항목 또는 전체 데이터의 마지막 항목)
+                      const latestData = chartData.length > 0 
+                        ? chartData[chartData.length - 1] 
+                        : allDataSorted[allDataSorted.length - 1];
+                      const currentWeight = latestData.weight;
+                      
+                      if (!compareWeight || !currentWeight) return null;
+                      
+                      const difference = currentWeight - compareWeight;
+                      const absDifference = Math.abs(difference);
+                      
+                      if (absDifference < 0.1) {
+                        return null;
+                      }
+                      
+                      const direction = difference > 0 ? '상승' : '하락';
+                      const weightText = absDifference.toFixed(1);
+                      
+                      return { 
+                        text: `${compareText} ${direction}했습니다.`, 
+                        weight: weightText,
+                        prefix: compareText
+                      };
+                    };
+                    
+                    const weightChangeText = getWeightChangeText();
+                    
+                    return weightChangeText ? (
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {weightChangeText.prefix}{' '}
+                        <span className="font-bold text-red-500">{weightChangeText.weight}kg</span>
+                        {' '}{weightChangeText.text.replace(weightChangeText.prefix + ' ', '')}
+                      </p>
+                    ) : null;
+                  })()}
+                </div>
                 <div className="flex gap-1.5 sm:gap-2">
                   <button
                     onClick={() => setWeightPeriod('7days')}
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '7days'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
                     7D
@@ -588,7 +747,7 @@ export default function Home() {
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '1month'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
                     1M
@@ -598,7 +757,7 @@ export default function Home() {
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '1year'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
                     1Y
@@ -608,7 +767,7 @@ export default function Home() {
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === 'ytd'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
                     YTD
@@ -618,7 +777,7 @@ export default function Home() {
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === 'all'
                         ? 'bg-blue-600 text-white'
-                        : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                        : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
                     전체
@@ -646,70 +805,72 @@ export default function Home() {
                   }
                   
                   return (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart 
-                      data={chartData}
-                      margin={{ top: 5, right: 5, left: 0, bottom: 25 }}
-                    >
-                      <defs>
-                        <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid 
-                        strokeDasharray="3 3" 
-                        stroke="#374151" 
-                        strokeOpacity={0.3}
-                        vertical={false}
-                      />
-                      <XAxis 
-                        dataKey="date" 
-                        stroke="#6B7280"
-                        tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                        tickLine={false}
-                        axisLine={{ stroke: '#374151' }}
-                        padding={{ left: 0, right: 0 }}
-                        interval={interval}
-                        tickFormatter={(value) => {
-                          if (!value) return '';
-                          const date = new Date(value);
-                          return `${date.getMonth() + 1}/${date.getDate()}`;
-                        }}
-                      />
-                      <YAxis 
-                        stroke="#6B7280"
-                        tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                        tickLine={false}
-                        axisLine={false}
-                        domain={['dataMin - 1', 'dataMax + 1']}
-                        tickFormatter={(value) => `${value}kg`}
-                        width={45}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#1F2937', 
-                          border: '1px solid #374151',
-                          borderRadius: '12px',
-                          padding: '8px 12px',
-                          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
-                        }}
-                        labelStyle={{ color: '#D1D5DB', fontSize: '12px', marginBottom: '4px' }}
-                        itemStyle={{ color: '#EF4444', fontSize: '14px', fontWeight: 'bold' }}
-                        formatter={(value: any) => [`${value} kg`, '체중']}
-                        cursor={{ stroke: '#EF4444', strokeWidth: 1, strokeDasharray: '5 5' }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="weight" 
-                        stroke="#EF4444" 
-                        strokeWidth={2}
-                        dot={false}
-                        activeDot={false}
-                        fill="url(#colorWeight)"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                    <>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart 
+                          data={chartData}
+                          margin={{ top: 5, right: 5, left: 0, bottom: 25 }}
+                        >
+                          <defs>
+                            <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid 
+                            strokeDasharray="3 3" 
+                            stroke="#374151" 
+                            strokeOpacity={0.3}
+                            vertical={false}
+                          />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#6B7280"
+                            tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                            tickLine={false}
+                            axisLine={{ stroke: '#374151' }}
+                            padding={{ left: 0, right: 0 }}
+                            interval={interval}
+                            tickFormatter={(value) => {
+                              if (!value) return '';
+                              const date = new Date(value);
+                              return `${date.getMonth() + 1}/${date.getDate()}`;
+                            }}
+                          />
+                          <YAxis 
+                            stroke="#6B7280"
+                            tick={{ fontSize: 11, fill: '#9CA3AF' }}
+                            tickLine={false}
+                            axisLine={false}
+                            domain={['dataMin - 1', 'dataMax + 1']}
+                            tickFormatter={(value) => `${value}kg`}
+                            width={45}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#1F2937', 
+                              border: '1px solid #374151',
+                              borderRadius: '12px',
+                              padding: '8px 12px',
+                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
+                            }}
+                            labelStyle={{ color: '#D1D5DB', fontSize: '12px', marginBottom: '4px' }}
+                            itemStyle={{ color: '#EF4444', fontSize: '14px', fontWeight: 'bold' }}
+                            formatter={(value: any) => [`${value} kg`, '체중']}
+                            cursor={{ stroke: '#EF4444', strokeWidth: 1, strokeDasharray: '5 5' }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="weight" 
+                            stroke="#EF4444" 
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={false}
+                            fill="url(#colorWeight)"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </>
                   );
                 })() : (
                   <div className="h-full flex items-center justify-center">
@@ -723,7 +884,7 @@ export default function Home() {
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
               {routineTemplates.map((routine, index) => (
                 <div key={routine.id}>
@@ -767,10 +928,10 @@ export default function Home() {
             </div>
 
             {/* 식사 기록 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 🍽️ 오늘의 식사
-              </label>
+              </h3>
               <div className="flex flex-wrap gap-4 mb-4">
                 <MealCheckbox
                   label="아침"
@@ -796,59 +957,83 @@ export default function Home() {
                 onChange={(e) => handleInputChange('meal_memo', e.target.value)}
                 placeholder="식사 메모 (선택사항)"
                 disabled={!isEditMode}
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
+                className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
                 rows={3}
               />
-            </div>
-
-            {/* 네비게이션 메뉴 - 고정 */}
-            <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <div className="flex items-center justify-around gap-2">
-                {/* AI Agent 버튼 */}
-                <Link
-                  href="/ai"
-                  className={`w-full px-4 py-3 text-base font-medium rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border ${
-                    pathname === '/ai'
-                      ? 'bg-blue-600 text-white border-blue-700 dark:border-blue-500'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-500'
-                  }`}
-                >
-                  <span>🚀</span>
-                  <span>AI</span>
-                </Link>
-
-                {/* Daily 버튼 */}
-                <Link
-                  href="/"
-                  className={`w-full px-4 py-3 text-base font-medium rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border ${
-                    pathname === '/'
-                      ? 'bg-blue-600 text-white border-blue-700 dark:border-blue-500'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-500'
-                  }`}
-                >
-                  <span>📅</span>
-                  <span>Daily</span>
-                </Link>
-
-                {/* Diary 버튼 */}
-                <Link
-                  href="/memo"
-                  className={`w-full px-4 py-3 text-base font-medium rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border ${
-                    pathname === '/memo'
-                      ? 'bg-blue-600 text-white border-blue-700 dark:border-blue-500'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-500'
-                  }`}
-                >
-                  <span>📝</span>
-                  <span>Diary</span>
-                </Link>
-              </div>
             </div>
             </div>
           </div>
       </div>
       
       <FooterNav />
+    </div>
+  );
+}
+
+// 원형 그래프 컴포넌트
+function CircularProgressChart({ 
+  progress, 
+  size = 36
+}: { 
+  progress: number; 
+  size?: number;
+}) {
+  const radius = (size - 8) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (progress / 100) * circumference;
+  
+  // 달성률에 따른 색상 결정
+  const getColor = (progress: number) => {
+    if (progress >= 80) return '#10B981'; // green
+    if (progress >= 60) return '#3B82F6'; // blue
+    if (progress >= 40) return '#F59E0B'; // amber
+    if (progress >= 20) return '#EF4444'; // red
+    return '#9CA3AF'; // gray
+  };
+
+  const color = getColor(progress);
+
+  return (
+    <div 
+      className="relative flex items-center justify-center" 
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={size}
+        height={size}
+        className="transform -rotate-90"
+      >
+        {/* 배경 원 */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="4"
+          fill="none"
+          className="text-gray-200 dark:text-gray-700"
+        />
+        {/* 진행률 원 */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth="4"
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500 ease-out"
+        />
+      </svg>
+      {/* 달성률 텍스트 (중앙) */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center text-[10px] font-medium pointer-events-none"
+        style={{ color }}
+      >
+        {Math.round(progress)}%
+      </div>
     </div>
   );
 }
@@ -886,21 +1071,49 @@ function RoutineItem({
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
 
-  // 로컬 스토리지에서 데이터 로드
+  // 로컬 스토리지에서 데이터 로드 및 변경 감지
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('routine-calendar-data');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const data: Record<string, Set<string>> = {};
-        Object.keys(parsed).forEach(date => {
-          data[date] = new Set(parsed[date]);
-        });
-        setCheckedDates(data);
+    const loadData = () => {
+      try {
+        const stored = localStorage.getItem('routine-calendar-data');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const data: Record<string, Set<string>> = {};
+          Object.keys(parsed).forEach(date => {
+            data[date] = new Set(parsed[date]);
+          });
+          setCheckedDates(data);
+        }
+      } catch (err) {
+        console.error('로컬 스토리지 로드 오류:', err);
       }
-    } catch (err) {
-      console.error('로컬 스토리지 로드 오류:', err);
-    }
+    };
+
+    // 초기 로드
+    loadData();
+
+    // storage 이벤트 리스너 (다른 탭에서의 변경 감지)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'routine-calendar-data') {
+        loadData();
+      }
+    };
+
+    // 커스텀 이벤트 리스너 (같은 탭에서의 변경 감지)
+    const handleCustomStorageChange = () => {
+      // 렌더링 중 상태 업데이트를 방지하기 위해 setTimeout 사용
+      setTimeout(() => {
+        loadData();
+      }, 0);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('routine-calendar-updated', handleCustomStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('routine-calendar-updated', handleCustomStorageChange);
+    };
   }, []);
 
   // 날짜 체크 상태 확인
@@ -910,13 +1123,19 @@ function RoutineItem({
 
   // 연속 체크한 날짜 수 계산
   const getConsecutiveDays = (routineId: string) => {
+    const getKoreaDateString = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
     let consecutiveCount = 0;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     let checkDate = new Date(today);
     
     while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = getKoreaDateString(checkDate);
       if (isDateChecked(dateStr, routineId)) {
         consecutiveCount++;
         checkDate.setDate(checkDate.getDate() - 1);
@@ -1007,21 +1226,121 @@ function RoutineItem({
   const isHexColor = routineColor.startsWith('#');
   const consecutiveDays = getConsecutiveDays(routineId);
   
+  // 오늘 날짜 확인 (한국 시간대 기준)
+  const getKoreaDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  
+  const today = new Date();
+  const todayDateStr = getKoreaDateString(today);
+  const isTodayChecked = isDateChecked(todayDateStr, routineId);
+  
+  // Supabase 클라이언트 싱글톤 사용
+  const supabase = getSupabase();
+  
+  // 오늘 날짜 체크/언체크 핸들러
+  const handleTodayToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // 아코디언 토글 방지
+    
+    if (disabled) return; // 비활성화 상태면 동작하지 않음
+    
+    const newChecked = !isTodayChecked;
+    
+    // 로컬 상태 업데이트
+    setCheckedDates(prev => {
+      const newData = { ...prev };
+      if (!newData[todayDateStr]) {
+        newData[todayDateStr] = new Set();
+      }
+      
+      const dateSet = new Set(newData[todayDateStr]);
+      if (newChecked) {
+        dateSet.add(routineId);
+      } else {
+        dateSet.delete(routineId);
+      }
+      
+      if (dateSet.size === 0) {
+        delete newData[todayDateStr];
+      } else {
+        newData[todayDateStr] = dateSet;
+      }
+      
+      // 로컬 스토리지에 저장
+      try {
+        const serializable: Record<string, string[]> = {};
+        Object.keys(newData).forEach(date => {
+          serializable[date] = Array.from(newData[date]);
+        });
+        localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
+        // 커스텀 이벤트 발생 (같은 탭에서 다른 컴포넌트에 알림)
+        window.dispatchEvent(new Event('routine-calendar-updated'));
+      } catch (err) {
+        console.error('로컬 스토리지 저장 오류:', err);
+      }
+      
+      return newData;
+    });
+    
+    // Supabase에 저장
+    if (supabase) {
+      try {
+        if (newChecked) {
+          // 체크: insert 또는 update
+          const { error } = await supabase
+            .from('daily_routine_checks')
+            .upsert({
+              date: todayDateStr,
+              routine_id: routineId,
+              checked: true
+            }, {
+              onConflict: 'date,routine_id'
+            });
+          
+          if (error) {
+            console.error('Supabase 저장 오류:', error);
+          }
+        } else {
+          // 언체크: delete
+          const { error } = await supabase
+            .from('daily_routine_checks')
+            .delete()
+            .eq('date', todayDateStr)
+            .eq('routine_id', routineId);
+          
+          if (error) {
+            console.error('Supabase 삭제 오류:', error);
+          }
+        }
+      } catch (err) {
+        console.error('Supabase 작업 오류:', err);
+      }
+    }
+  };
+  
   return (
     <div>
       <div 
         className="flex items-center gap-3 py-2 min-h-[44px] cursor-pointer"
           onClick={onExpandToggle}
       >
-        {/* 이모지 + 텍스트 영역 */}
+        {/* 원형 그래프 + 텍스트 영역 */}
         <div className="flex items-center gap-3 flex-1">
-        <span className="text-2xl">{emoji}</span>
+          <div className="flex-shrink-0">
+            <CircularProgressChart 
+              progress={getMonthProgress(currentYear, currentMonth, routineId)} 
+              size={36}
+            />
+          </div>
           <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
             {label}
           </span>
         </div>
         
-        {/* 연속 일수 + 슬라이더 */}
+        {/* 연속 일수 + 슬라이더 + 오늘 날짜 체크박스 */}
         <div className="flex items-center gap-2 shrink-0">
           {consecutiveDays > 0 && (
             <div
@@ -1053,36 +1372,31 @@ function RoutineItem({
               style={isHexColor ? { backgroundColor: routineColor } : {}}
             />
           </div>
+          {/* 오늘 날짜 체크박스 */}
+          <div 
+            className="flex items-center shrink-0"
+            onClick={disabled ? undefined : handleTodayToggle}
+          >
+            <input
+              type="checkbox"
+              checked={isTodayChecked}
+              onChange={(e) => {
+                e.stopPropagation();
+                if (!disabled) {
+                  handleTodayToggle(e as any);
+                }
+              }}
+              disabled={disabled}
+              className="w-5 h-5 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (disabled) {
+                  e.preventDefault();
+                }
+              }}
+            />
+          </div>
         </div>
-        
-        {/* 체크박스 */}
-        <label 
-          className="cursor-pointer shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!disabled) {
-              onChange();
-            }
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => {
-              e.stopPropagation();
-              if (!disabled) {
-                onChange();
-              }
-            }}
-            disabled={disabled}
-            className={`w-6 h-6 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded-md focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
-              isHexColor ? '' : `${colorClasses.text} focus:${colorClasses.ring}`
-            }`}
-            style={isHexColor ? {
-              accentColor: routineColor,
-            } : {}}
-          />
-        </label>
       </div>
       {!isLast && <div style={{ height: '0.5px' }} className="bg-gray-200 dark:bg-gray-600"></div>}
     </div>
@@ -1234,7 +1548,7 @@ function RoutineSettingModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[80vh] overflow-y-auto">
+      <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 루틴 설정</h2>
           <button
@@ -1250,20 +1564,20 @@ function RoutineSettingModal({
           {templates.map((template, index) => {
             
             return (
-            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-white dark:bg-gray-700 rounded-lg p-4 sm:p-5">
+            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-4 sm:p-5">
               <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
               <input
                 type="text"
                 value={template.emoji}
                 onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
-                className="w-full px-3 py-2.5 text-center bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                className="w-full px-3 py-2.5 text-center bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
                 maxLength={2}
               />
               <input
                 type="text"
                 value={template.label}
                 onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                className="flex-1 px-4 py-2.5 bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
               />
               <button
                 onClick={() => handleDelete(template.id)}
@@ -1412,14 +1726,37 @@ function RoutineCalendar({
       }
     };
     loadData();
-  }, [routineTemplates, getThreeMonths, supabase]);
 
-  // 토글이 열릴 때 현재 월을 중앙에 표시하도록 스크롤 위치 설정
+    // storage 이벤트 리스너 (다른 탭에서의 변경 감지)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'routine-calendar-data') {
+        loadData();
+      }
+    };
+
+    // 커스텀 이벤트 리스너 (같은 탭에서의 변경 감지)
+    const handleCustomStorageChange = () => {
+      // 렌더링 중 상태 업데이트를 방지하기 위해 setTimeout 사용
+      setTimeout(() => {
+        loadData();
+      }, 0);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('routine-calendar-updated', handleCustomStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('routine-calendar-updated', handleCustomStorageChange);
+    };
+  }, [routineTemplates, getThreeMonths, supabase, currentYear]);
+
+  // 토글이 열릴 때 오늘 날짜가 보이도록 스크롤 위치 설정
   useEffect(() => {
     if (isExpanded && calendarScrollRef.current) {
-      // 현재 월의 중간 날짜 (15일)를 기준으로 계산
-      const currentMonthMidDate = new Date(currentYear, currentMonth - 1, 15);
-      currentMonthMidDate.setHours(0, 0, 0, 0);
+      // 오늘 날짜를 기준으로 계산
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       
       // 연간 캘린더: 현재 년도의 1월 1일부터 시작
       const startYear = currentYear;
@@ -1434,8 +1771,8 @@ function RoutineCalendar({
       }
       firstMonday.setHours(0, 0, 0, 0);
       
-      // 현재 월의 중간 날짜가 몇 번째 주인지 계산 (0부터 시작)
-      const daysDiff = Math.floor((currentMonthMidDate.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24));
+      // 오늘 날짜가 몇 번째 주인지 계산 (0부터 시작)
+      const daysDiff = Math.floor((today.getTime() - firstMonday.getTime()) / (1000 * 60 * 60 * 24));
       const weekIndex = Math.floor(daysDiff / 7);
       
       // 약간의 지연을 두고 스크롤 (DOM 렌더링 완료 후)
@@ -1449,12 +1786,12 @@ function RoutineCalendar({
           // 주 너비: 37px (셀) + 4px (gap) = 41px
           const weekWidth = 37 + 4;
           
-          // 현재 월의 중간 주 시작 위치 (요일 헤더 포함)
-          const currentWeekStartPosition = headerWidth + (weekIndex * weekWidth);
+          // 오늘 날짜가 포함된 주 시작 위치 (요일 헤더 포함)
+          const todayWeekStartPosition = headerWidth + (weekIndex * weekWidth);
           
-          // 현재 월의 중간 주를 화면 정 중앙에 배치하기 위한 스크롤 위치 계산
-          // 스크롤 위치 = 현재 주 시작 위치 - (컨테이너 너비 / 2) + (주 너비 / 2)
-          const scrollPosition = Math.max(0, currentWeekStartPosition - (containerWidth / 2) + (weekWidth / 2));
+          // 오늘 날짜가 포함된 주를 화면 정 중앙에 배치하기 위한 스크롤 위치 계산
+          // 스크롤 위치 = 오늘 주 시작 위치 - (컨테이너 너비 / 2) + (주 너비 / 2)
+          const scrollPosition = Math.max(0, todayWeekStartPosition - (containerWidth / 2) + (weekWidth / 2));
           
           container.scrollLeft = scrollPosition;
         }
@@ -1472,6 +1809,8 @@ function RoutineCalendar({
         serializable[date] = Array.from(data[date]);
       });
       localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
+      // 커스텀 이벤트 발생 (같은 탭에서 다른 컴포넌트에 알림)
+      window.dispatchEvent(new Event('routine-calendar-updated'));
     } catch (err) {
       console.error('로컬 스토리지 저장 오류:', err);
     }
@@ -1614,15 +1953,21 @@ function RoutineCalendar({
 
   // 연속 체크한 날짜 수 계산 (현재 날짜 기준)
   const getConsecutiveDays = (routineId: string) => {
+    const getKoreaDateString = (date: Date): string => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
     let consecutiveCount = 0;
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     
     // 오늘부터 과거로 거슬러 올라가며 연속 체크된 날짜 계산
     let checkDate = new Date(today);
     
     while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = getKoreaDateString(checkDate);
       if (isDateChecked(dateStr, routineId)) {
         consecutiveCount++;
         // 하루 전으로 이동
@@ -1706,46 +2051,16 @@ function RoutineCalendar({
 
   return (
     <div className="bg-gray-50 dark:bg-gray-800 p-2 sm:p-3 w-full">
-      {/* 날짜 + 달성률 + 슬라이더 + 수정 버튼 일직선 */}
+      {/* 날짜 + 수정 버튼 일직선 */}
       <div className="flex items-center justify-between mb-3">
-        {/* 왼쪽: 날짜 + 연속 일수 */}
+        {/* 왼쪽: 날짜 */}
         <div className="flex items-center gap-2 shrink-0">
           <h5 className="text-base font-medium text-gray-900 dark:text-white shrink-0">
             {currentYear}년 {currentMonth}월
           </h5>
-        {consecutiveDays > 0 && (
-            <div
-              className={`px-2 py-1 text-xs font-medium rounded-full ${
-                isHexColor 
-                  ? '' 
-                  : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
-              }`}
-              style={isHexColor ? {
-                backgroundColor: colorClasses.bgLight,
-                color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-              } : {}}
-            >
-            {consecutiveDays}일 연속
-          </div>
-        )}
-      </div>
-        {/* 오른쪽: 슬라이더 + 수정 버튼 */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-24">
-              <div
-                className={isHexColor ? 'h-full transition-all duration-500 ease-out' : `h-full ${colorClasses.bg} transition-all duration-500 ease-out`}
-            style={{ 
-              width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
-                  backgroundColor: isHexColor ? routineColor : undefined,
-            }}
-          />
         </div>
-            <div
-              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0`}
-              style={isHexColor ? { backgroundColor: routineColor } : {}}
-            />
-          </div>
+        {/* 오른쪽: 수정 버튼 */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
             className={`px-3 py-1.5 text-sm text-white rounded-lg transition-all duration-200 hover:scale-105 shrink-0 ${
@@ -1796,7 +2111,7 @@ function RoutineCalendar({
             
             return (
               <div
-                className="bg-gray-800 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
+                className="bg-gray-800 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700"
                 style={{
                   padding: '8px',
                   display: 'grid',
@@ -1813,7 +2128,7 @@ function RoutineCalendar({
                     gridRow: 1,
                     gridColumn: 1,
                     backgroundColor: '#374151',
-                    borderRadius: '6px'
+                    borderRadius: '8px'
                   }}
                 />
                 
@@ -1834,7 +2149,7 @@ function RoutineCalendar({
                         gridColumnEnd: `span ${colSpan}`,
                         fontSize: '11px',
                         backgroundColor: '#374151',
-                        borderRadius: '6px'
+                        borderRadius: '8px'
                       }}
                     >
                       {header.year !== currentYear ? `${header.year}년 ` : ''}{header.month}월
@@ -1852,7 +2167,7 @@ function RoutineCalendar({
                       gridColumn: 1,
                       fontSize: '12px',
                       backgroundColor: '#374151',
-                      borderRadius: '6px'
+                      borderRadius: '8px'
                     }}
                   >
                     {weekdayName}
@@ -1864,7 +2179,14 @@ function RoutineCalendar({
                   return week.map((cell, weekdayIdx) => {
                     const { day, date, month, year } = cell;
                     const isChecked = isDateChecked(date, routineId);
-                    const isToday = date === new Date().toISOString().split('T')[0];
+                    // 한국 시간대 기준 오늘 날짜 확인
+                    const getKoreaDateString = (date: Date): string => {
+                      const year = date.getFullYear();
+                      const month = String(date.getMonth() + 1).padStart(2, '0');
+                      const day = String(date.getDate()).padStart(2, '0');
+                      return `${year}-${month}-${day}`;
+                    };
+                    const isToday = date === getKoreaDateString(new Date());
                     const isSaturday = weekdayIdx === 5; // 토요일
                     const isSunday = weekdayIdx === 6; // 일요일
                     
@@ -1910,7 +2232,7 @@ function RoutineCalendar({
                             width: '37px',
                             height: '32px',
                             backgroundColor: backgroundColor,
-                            borderRadius: '6px',
+                            borderRadius: '8px',
                             color: isChecked ? '#FFFFFF' : '#E5E7EB',
                             fontSize: '14px',
                             fontWeight: isChecked ? '700' : '500',

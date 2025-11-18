@@ -3,7 +3,7 @@
 export function AIAgentModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[85vh] overflow-y-auto">
+      <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent">
             🤖 AI Agent
@@ -25,29 +25,29 @@ export function AIAgentModal({ onClose }: { onClose: () => void }) {
           </p>
           
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">⚖️</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">체중 변화</div>
             </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">📋</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">데일리 루틴</div>
             </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">🍽️</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">식사 기록</div>
             </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">💰</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">재무 상태</div>
               <div className="text-xs text-yellow-400 dark:text-yellow-400 mt-1">준비중</div>
             </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">📊</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">가계부</div>
               <div className="text-xs text-yellow-400 dark:text-yellow-400 mt-1">준비중</div>
             </div>
-            <div className="bg-white dark:bg-gray-700/50 rounded-lg p-3 text-center">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700/50 rounded-lg p-3 text-center">
               <div className="text-2xl mb-1">📝</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">일기 분석</div>
             </div>
@@ -64,7 +64,7 @@ export function AIAgentModal({ onClose }: { onClose: () => void }) {
               조만간 당신의 라이프 코치가 되어드릴게요!
             </p>
             
-            <div className="bg-white dark:bg-gray-900 rounded-lg p-4 text-left border border-gray-200 dark:border-gray-700">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-900 rounded-lg p-4 text-left border border-gray-200 dark:border-gray-700">
               <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">🎯 예정된 기능</h4>
               <ul className="space-y-2 text-base text-gray-600 dark:text-gray-300">
                 <li className="flex items-start gap-2">

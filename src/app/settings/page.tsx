@@ -6,6 +6,141 @@ import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 
+// 원형 그래프 컴포넌트
+function CircularProgressChart({ 
+  progress, 
+  size = 60
+}: { 
+  progress: number; 
+  size?: number;
+}) {
+  const radius = (size - 8) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (progress / 100) * circumference;
+  
+  // 달성률에 따른 색상 결정
+  const getColor = (progress: number) => {
+    if (progress >= 80) return '#10B981'; // green
+    if (progress >= 60) return '#3B82F6'; // blue
+    if (progress >= 40) return '#F59E0B'; // amber
+    if (progress >= 20) return '#EF4444'; // red
+    return '#9CA3AF'; // gray
+  };
+
+  const color = getColor(progress);
+
+  return (
+    <div 
+      className="relative flex items-center justify-center" 
+      style={{ width: size, height: size }}
+    >
+      <svg
+        width={size}
+        height={size}
+        className="transform -rotate-90"
+      >
+        {/* 배경 원 */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="4"
+          fill="none"
+          className="text-gray-200 dark:text-gray-700"
+        />
+        {/* 진행률 원 */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth="4"
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500 ease-out"
+        />
+      </svg>
+      {/* 달성률 텍스트 (중앙) */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center text-sm font-medium pointer-events-none"
+        style={{ color }}
+      >
+        {Math.round(progress)}%
+      </div>
+    </div>
+  );
+}
+
+// 루틴 아이템 컴포넌트
+function RoutineItemWithChart({
+  template,
+  index,
+  progress,
+  onUpdate,
+  onMove,
+  onDelete,
+  canMoveUp,
+  canMoveDown,
+}: {
+  template: RoutineTemplate;
+  index: number;
+  progress: number;
+  onUpdate: (index: number, field: 'label', value: string) => void;
+  onMove: (index: number, direction: 'up' | 'down') => void;
+  onDelete: (index: number) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}) {
+  return (
+    <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
+      <div className="flex items-center gap-3 flex-wrap">
+        {/* 원형 그래프 */}
+        <div className="flex-shrink-0">
+          <CircularProgressChart 
+            progress={progress} 
+            size={60}
+          />
+        </div>
+        <input
+          type="text"
+          value={template.label}
+          onChange={(e) => onUpdate(index, 'label', e.target.value)}
+          className="flex-1 min-w-[120px] px-3 py-1 bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[44px] whitespace-nowrap overflow-hidden text-ellipsis"
+          placeholder="루틴 이름"
+        />
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => onMove(index, 'up')}
+            disabled={!canMoveUp}
+            className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
+            title="위로"
+          >
+            ↑
+          </button>
+          <button
+            onClick={() => onMove(index, 'down')}
+            disabled={!canMoveDown}
+            className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
+            title="아래로"
+          >
+            ↓
+          </button>
+          <button
+            onClick={() => onDelete(index)}
+            className="px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded min-h-[44px] whitespace-nowrap"
+            title="삭제"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface RoutineTemplate {
   id: string;
   emoji: string;
@@ -22,6 +157,7 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [routineProgress, setRoutineProgress] = useState<Record<string, number>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -55,6 +191,92 @@ export default function SettingsPage() {
   useEffect(() => {
     loadRoutineTemplates();
   }, [loadRoutineTemplates]);
+
+  // 현재 월의 루틴 달성률 계산
+  const loadRoutineProgress = useCallback(async () => {
+    if (!supabase || routineTemplates.length === 0) return;
+    
+    try {
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const currentMonth = currentDate.getMonth() + 1;
+      
+      // 현재 월의 모든 날짜 생성
+      const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+      const monthDates: string[] = [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        monthDates.push(dateStr);
+      }
+
+      // 루틴 템플릿 ID 목록 추출
+      const routineIds = routineTemplates.map(t => t.id);
+      
+      if (routineIds.length === 0) {
+        setRoutineProgress({});
+        return;
+      }
+
+      // 현재 월의 루틴 체크 데이터 가져오기
+      // routine_id가 템플릿 ID 목록에 포함된 것만 조회
+      // 먼저 모든 체크 데이터를 조회해서 확인
+      const { data: allChecks, error: allChecksError } = await supabase
+        .from('daily_routine_checks')
+        .select('date, routine_id, checked')
+        .in('date', monthDates)
+        .eq('checked', true);
+
+      if (allChecksError && allChecksError.code !== 'PGRST116') {
+        console.error('루틴 진행률 조회 오류:', allChecksError);
+        return;
+      }
+
+      // 디버깅: 조회된 데이터 확인
+      console.log('=== 루틴 진행률 계산 디버깅 ===');
+      console.log('현재 월:', currentYear, currentMonth);
+      console.log('월 전체 체크 데이터 (필터링 전):', allChecks);
+      console.log('루틴 템플릿 IDs:', routineTemplates.map(t => ({ id: t.id, label: t.label })));
+      console.log('루틴 ID 목록:', routineIds);
+      
+      // routine_id로 필터링
+      const checks = allChecks?.filter(c => routineIds.includes(c.routine_id)) || [];
+      console.log('필터링된 체크 데이터:', checks);
+      
+      // 각 routine_id별로 몇 개의 체크가 있는지 확인
+      const checksByRoutineId: Record<string, number> = {};
+      allChecks?.forEach(c => {
+        checksByRoutineId[c.routine_id] = (checksByRoutineId[c.routine_id] || 0) + 1;
+      });
+      console.log('routine_id별 체크 개수:', checksByRoutineId);
+
+      // 루틴별 달성률 계산
+      const progress: Record<string, number> = {};
+      routineTemplates.forEach(template => {
+        const matchingChecks = checks?.filter(c => c.routine_id === template.id) || [];
+        const checkedCount = matchingChecks.length;
+        const progressPercent = daysInMonth > 0 ? (checkedCount / daysInMonth) * 100 : 0;
+        progress[template.id] = Math.min(100, Math.max(0, progressPercent));
+        
+        // 디버깅: 각 루틴별 계산 결과
+        console.log(`루틴 "${template.label}" (ID: ${template.id}):`, {
+          checkedCount,
+          daysInMonth,
+          progressPercent: progressPercent.toFixed(2) + '%',
+          matchingChecks: matchingChecks.length > 0 ? matchingChecks.map(c => c.date) : '없음'
+        });
+      });
+
+      setRoutineProgress(progress);
+    } catch (err) {
+      console.error('루틴 진행률 계산 오류:', err);
+    }
+  }, [supabase, routineTemplates]);
+
+  useEffect(() => {
+    if (routineTemplates.length > 0) {
+      loadRoutineProgress();
+    }
+  }, [loadRoutineProgress]);
 
   const handleSave = async () => {
     if (!supabase) {
@@ -122,7 +344,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdate = (index: number, field: 'emoji' | 'label', value: string) => {
+  const handleUpdate = (index: number, field: 'label', value: string) => {
     const updated = [...routineTemplates];
     updated[index] = { ...updated[index], [field]: value };
     setRoutineTemplates(updated);
@@ -158,7 +380,7 @@ export default function SettingsPage() {
 
   if (!supabase) {
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-[480px] w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 sm:p-6">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-400 mb-4">
             ⚠️ 환경 변수 오류
@@ -172,7 +394,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 pb-20">
+    <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
@@ -229,54 +451,22 @@ export default function SettingsPage() {
             </div>
 
             <div className="space-y-3 mb-4">
-              {routineTemplates.map((template, index) => (
-                <div
-                  key={template.id}
-                  className="bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
-                >
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <input
-                      type="text"
-                      value={template.emoji}
-                      onChange={(e) => handleUpdate(index, 'emoji', e.target.value)}
-                      className="w-12 px-2 py-1 text-center bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[44px] flex-shrink-0"
-                      placeholder="이모지"
-                    />
-                    <input
-                      type="text"
-                      value={template.label}
-                      onChange={(e) => handleUpdate(index, 'label', e.target.value)}
-                      className="flex-1 min-w-[120px] px-3 py-1 bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[44px] whitespace-nowrap overflow-hidden text-ellipsis"
-                      placeholder="루틴 이름"
-                    />
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        onClick={() => handleMove(index, 'up')}
-                        disabled={index === 0}
-                        className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
-                        title="위로"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        onClick={() => handleMove(index, 'down')}
-                        disabled={index === routineTemplates.length - 1}
-                        className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
-                        title="아래로"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        onClick={() => handleDelete(index)}
-                        className="px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded min-h-[44px] whitespace-nowrap"
-                        title="삭제"
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {routineTemplates.map((template, index) => {
+                const progress = routineProgress[template.id] || 0;
+                return (
+                  <RoutineItemWithChart
+                    key={template.id}
+                    template={template}
+                    index={index}
+                    progress={progress}
+                    onUpdate={handleUpdate}
+                    onMove={handleMove}
+                    onDelete={handleDelete}
+                    canMoveUp={index > 0}
+                    canMoveDown={index < routineTemplates.length - 1}
+                  />
+                );
+              })}
             </div>
 
             {routineTemplates.length === 0 && (

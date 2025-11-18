@@ -241,7 +241,7 @@ export default function MemoPage() {
 
   if (!supabase) {
     return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-[480px] w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 sm:p-6">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-400 mb-4">
             ⚠️ 환경 변수 오류
@@ -257,7 +257,7 @@ export default function MemoPage() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <div className="min-h-screen bg-white dark:bg-gray-900 pb-20">
+    <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
@@ -275,7 +275,7 @@ export default function MemoPage() {
         )}
 
         {showEditor && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+          <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
             <div className="mb-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 제목
@@ -285,7 +285,7 @@ export default function MemoPage() {
                 value={formData.title || ''}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 placeholder="제목을 입력하세요"
-                className="w-full px-4 py-3 text-base bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
+                className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
               />
             </div>
             
@@ -299,7 +299,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('bold')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="굵게"
               >
                 <strong>B</strong>
@@ -307,7 +307,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('italic')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="기울임"
               >
                 <em>I</em>
@@ -315,7 +315,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('underline')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] min-w-[44px] flex items-center justify-center"
                 title="밑줄"
               >
                 <u>U</u>
@@ -324,7 +324,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('insertUnorderedList')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="글머리 기호"
               >
                 • 목록
@@ -332,7 +332,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('insertOrderedList')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="번호 목록"
               >
                 1. 목록
@@ -341,7 +341,7 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('formatBlock', '<h2>')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="제목"
               >
                 제목
@@ -349,14 +349,14 @@ export default function MemoPage() {
               <button
                 type="button"
                 onClick={() => formatText('removeFormat')}
-                className="px-4 py-3 text-sm bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
+                className="px-4 py-3 text-sm bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-500 min-h-[44px] flex items-center justify-center"
                 title="서식 제거"
               >
                 서식 제거
               </button>
             </div>
 
-            <div className="bg-white dark:bg-gray-700 border-x border-b border-gray-300 dark:border-gray-600 rounded-b-lg overflow-hidden">
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 border-x border-b border-gray-300 dark:border-gray-600 rounded-b-lg overflow-hidden">
               <div
                 ref={editorRef}
                 contentEditable
@@ -409,7 +409,7 @@ export default function MemoPage() {
               {displayedMemos.map((memo) => (
                 <div
                   key={memo.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5"
+                  className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex-1">
@@ -444,7 +444,7 @@ export default function MemoPage() {
                   <button
                     onClick={() => loadMemos(currentPage - 1)}
                     disabled={currentPage === 1 || isLoading}
-                    className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+                    className="px-4 py-2 text-sm font-medium bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
                   >
                     이전
                   </button>
@@ -469,7 +469,7 @@ export default function MemoPage() {
                               className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors min-h-[44px] min-w-[44px] ${
                                 currentPage === pageNum
                                   ? 'bg-blue-600 text-white'
-                                  : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
+                                  : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                               } disabled:opacity-50 disabled:cursor-not-allowed`}
                             >
                               {pageNum}
@@ -482,7 +482,7 @@ export default function MemoPage() {
                   <button
                     onClick={() => loadMemos(currentPage + 1)}
                     disabled={currentPage >= totalPages || isLoading}
-                    className="px-4 py-2 text-sm font-medium bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
+                    className="px-4 py-2 text-sm font-medium bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[44px]"
                   >
                     다음
                   </button>
