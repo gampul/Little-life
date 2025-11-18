@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTheme } from 'next-themes';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AIAgentModal } from '../components/AIAgentModal';
-import { ThemeToggle } from '../components/ThemeToggle';
 
 interface RoutineTemplate {
   id: string;
@@ -22,6 +22,12 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 루틴 템플릿 로드
   const loadRoutineTemplates = useCallback(async () => {
@@ -179,25 +185,51 @@ export default function SettingsPage() {
         )}
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 설정</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">⚙️ 설정</h2>
           </div>
 
           {/* 테마 설정 */}
           <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">테마</h3>
-            <div className="flex items-center justify-between">
-              <span className="text-gray-700 dark:text-gray-300">다크 모드</span>
-              <ThemeToggle />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 whitespace-nowrap">테마</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700 dark:text-gray-300 whitespace-nowrap">화이트 모드</span>
+                <button
+                  onClick={() => setTheme('light')}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center min-h-[44px] transition-colors ${
+                    mounted && theme === 'light'
+                      ? 'bg-gray-900 dark:bg-gray-700 text-white'
+                      : 'hover:bg-gray-500/20 dark:hover:bg-gray-400/20'
+                  }`}
+                  aria-label="화이트 모드"
+                >
+                  <span className="text-base">☀️</span>
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-700 dark:text-gray-300 whitespace-nowrap">다크 모드</span>
+                <button
+                  onClick={() => setTheme('dark')}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center min-h-[44px] transition-colors ${
+                    mounted && theme === 'dark'
+                      ? 'bg-gray-900 dark:bg-gray-700 text-white'
+                      : 'hover:bg-gray-500/20 dark:hover:bg-gray-400/20'
+                  }`}
+                  aria-label="다크 모드"
+                >
+                  <span className="text-base">🌙</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* 루틴 설정 */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">루틴 설정</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">루틴 설정</h3>
               <button
                 onClick={handleAdd}
-                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[44px] whitespace-nowrap flex-shrink-0"
               >
                 + 추가
               </button>
@@ -209,44 +241,46 @@ export default function SettingsPage() {
                   key={template.id}
                   className="bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600"
                 >
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <input
                       type="text"
                       value={template.emoji}
                       onChange={(e) => handleUpdate(index, 'emoji', e.target.value)}
-                      className="w-12 px-2 py-1 text-center bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded"
+                      className="w-12 px-2 py-1 text-center bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[44px] flex-shrink-0"
                       placeholder="이모지"
                     />
                     <input
                       type="text"
                       value={template.label}
                       onChange={(e) => handleUpdate(index, 'label', e.target.value)}
-                      className="flex-1 px-3 py-1 bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded"
+                      className="flex-1 min-w-[120px] px-3 py-1 bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[44px] whitespace-nowrap overflow-hidden text-ellipsis"
                       placeholder="루틴 이름"
                     />
-                    <button
-                      onClick={() => handleMove(index, 'up')}
-                      disabled={index === 0}
-                      className="px-2 py-1 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50"
-                      title="위로"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      onClick={() => handleMove(index, 'down')}
-                      disabled={index === routineTemplates.length - 1}
-                      className="px-2 py-1 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded disabled:opacity-50"
-                      title="아래로"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      onClick={() => handleDelete(index)}
-                      className="px-2 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded"
-                      title="삭제"
-                    >
-                      삭제
-                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => handleMove(index, 'up')}
+                        disabled={index === 0}
+                        className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
+                        title="위로"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => handleMove(index, 'down')}
+                        disabled={index === routineTemplates.length - 1}
+                        className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
+                        title="아래로"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => handleDelete(index)}
+                        className="px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded min-h-[44px] whitespace-nowrap"
+                        title="삭제"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

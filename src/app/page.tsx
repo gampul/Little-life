@@ -483,11 +483,11 @@ export default function Home() {
           />
         )}
 
-        <div className="space-y-6">
+        <div className="space-y-2">
           {/* 입력 섹션 */}
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
@@ -577,7 +577,7 @@ export default function Home() {
             </div>
 
             {/* 체중 변화 그래프 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
               <div className="flex flex-col gap-3 mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
                 <div className="flex gap-1.5 sm:gap-2">
@@ -731,7 +731,7 @@ export default function Home() {
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
               {routineTemplates.map((routine, index) => (
                 <div key={routine.id}>
@@ -775,7 +775,7 @@ export default function Home() {
             </div>
 
             {/* 식사 기록 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
               <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
                 🍽️ 오늘의 식사
               </label>
@@ -810,7 +810,7 @@ export default function Home() {
             </div>
 
             {/* 네비게이션 메뉴 - 고정 */}
-            <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-lg">
+            <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-lg">
               <div className="flex items-center justify-around gap-2">
                 {/* AI Agent 버튼 */}
                 <button

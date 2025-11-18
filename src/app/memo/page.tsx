@@ -270,7 +270,7 @@ export default function MemoPage() {
         )}
 
         {!showEditor && (
-          <div className="mb-6">
+          <div className="mb-2">
             <button
               onClick={handleWrite}
               className="w-full px-4 py-3 text-base font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2"
@@ -282,7 +282,7 @@ export default function MemoPage() {
         )}
 
         {showEditor && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-6 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
             <div className="mb-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 제목
@@ -405,12 +405,12 @@ export default function MemoPage() {
         )}
 
         {totalCount > 0 && (
-          <div className="mb-6 text-sm text-gray-600 dark:text-gray-400 text-center">
+          <div className="mb-2 text-sm text-gray-600 dark:text-gray-400 text-center">
             전체 {totalCount}개의 글
           </div>
         )}
 
-        <div className="space-y-6">
+        <div className="space-y-2">
           {displayedMemos.length > 0 ? (
             <>
               {displayedMemos.map((memo) => (
@@ -422,20 +422,20 @@ export default function MemoPage() {
                     <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex-1">
                       {memo.title || '제목 없음'}
                     </h3>
-                    <div className="flex gap-2">
+                    <div className="flex -mr-4 sm:-mr-5">
                       <button
                         onClick={() => handleEdit(memo)}
-                        className="px-4 py-3 text-sm font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center gap-2"
+                        className="px-0 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center -mr-4"
+                        aria-label="수정"
                       >
                         <span>✏️</span>
-                        <span>수정</span>
                       </button>
                       <button
                         onClick={() => handleDelete(memo)}
-                        className="px-4 py-3 text-sm font-medium bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center gap-2"
+                        className="px-0 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        aria-label="삭제"
                       >
                         <span>🗑️</span>
-                        <span>삭제</span>
                       </button>
                     </div>
                   </div>
@@ -447,7 +447,7 @@ export default function MemoPage() {
               ))}
               
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 mt-6 mb-6">
+                <div className="flex items-center justify-center gap-2 mt-2 mb-2">
                   <button
                     onClick={() => loadMemos(currentPage - 1)}
                     disabled={currentPage === 1 || isLoading}

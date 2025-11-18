@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 
 export interface GlobalNavProps {
@@ -11,6 +11,7 @@ export interface GlobalNavProps {
 export function GlobalNav(props: GlobalNavProps) {
   const { onAIAgentClick } = props;
   const pathname = usePathname();
+  const router = useRouter();
   const [imgError, setImgError] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const [imgSrc, setImgSrc] = useState('/little-life-logo.png');
@@ -22,6 +23,15 @@ export function GlobalNav(props: GlobalNavProps) {
       setImgSrc('/little-life-logo.svg');
     } else {
       setImgError(true);
+    }
+  };
+
+  const handleSettingsClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (pathname === '/settings') {
+      router.back();
+    } else {
+      router.push('/settings');
     }
   };
 
@@ -46,20 +56,21 @@ export function GlobalNav(props: GlobalNavProps) {
           </Link>
 
           {/* Settings 버튼 */}
-          <Link
-            href="/settings"
+          <button
+            onClick={handleSettingsClick}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
               pathname === '/settings'
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
             }`}
+            aria-label={pathname === '/settings' ? '취소' : '설정'}
           >
-            <span className="flex flex-col gap-0.5 items-center justify-center">
-              <span className="w-1 h-1 rounded-full bg-current"></span>
-              <span className="w-1 h-1 rounded-full bg-current"></span>
-              <span className="w-1 h-1 rounded-full bg-current"></span>
+            <span className="flex flex-col gap-1 items-center justify-center">
+              <span className="w-5 h-0.5 bg-current"></span>
+              <span className="w-5 h-0.5 bg-current"></span>
+              <span className="w-5 h-0.5 bg-current"></span>
             </span>
-          </Link>
+          </button>
         </div>
       </div>
     </nav>
