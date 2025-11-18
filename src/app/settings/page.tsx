@@ -5,7 +5,6 @@ import { useTheme } from 'next-themes';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
-import { AIAgentModal } from '../components/AIAgentModal';
 
 interface RoutineTemplate {
   id: string;
@@ -21,7 +20,6 @@ export default function SettingsPage() {
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -178,12 +176,7 @@ export default function SettingsPage() {
       <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {isAIAgentOpen && (
-          <AIAgentModal
-            onClose={() => setIsAIAgentOpen(false)}
-          />
-        )}
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm">
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">⚙️ 설정</h2>
           </div>
@@ -309,7 +302,7 @@ export default function SettingsPage() {
         </div>
       </div>
       
-      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
+      <FooterNav />
     </div>
   );
 }

@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
-import { AIAgentModal } from './components/AIAgentModal';
 
 interface DailyRecord {
   id?: string;
@@ -56,7 +55,6 @@ export default function Home() {
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [routineChecks, setRoutineChecks] = useState<RoutineCheck[]>([]);
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
-  const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
 
@@ -476,18 +474,12 @@ export default function Home() {
           />
         )}
 
-        {/* AI Agent 모달 */}
-        {isAIAgentOpen && (
-          <AIAgentModal
-            onClose={() => setIsAIAgentOpen(false)}
-          />
-        )}
 
         <div className="space-y-2">
           {/* 입력 섹션 */}
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
@@ -577,7 +569,7 @@ export default function Home() {
             </div>
 
             {/* 체중 변화 그래프 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="flex flex-col gap-3 mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
                 <div className="flex gap-1.5 sm:gap-2">
@@ -731,7 +723,7 @@ export default function Home() {
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
               {routineTemplates.map((routine, index) => (
                 <div key={routine.id}>
@@ -775,7 +767,7 @@ export default function Home() {
             </div>
 
             {/* 식사 기록 */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-4">
                 🍽️ 오늘의 식사
               </label>
@@ -810,17 +802,20 @@ export default function Home() {
             </div>
 
             {/* 네비게이션 메뉴 - 고정 */}
-            <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-lg">
+            <div className="sticky top-16 z-40 bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="flex items-center justify-around gap-2">
                 {/* AI Agent 버튼 */}
-                <button
-                  onClick={() => setIsAIAgentOpen(true)}
-                  className="w-full px-4 py-3 text-base font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-500"
-                  aria-label="AI Agent"
+                <Link
+                  href="/ai"
+                  className={`w-full px-4 py-3 text-base font-medium rounded-lg transition-colors min-h-[44px] flex items-center justify-center gap-2 border ${
+                    pathname === '/ai'
+                      ? 'bg-blue-600 text-white border-blue-700 dark:border-blue-500'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 border-gray-300 dark:border-gray-500'
+                  }`}
                 >
                   <span>🚀</span>
                   <span>AI</span>
-                </button>
+                </Link>
 
                 {/* Daily 버튼 */}
                 <Link
@@ -853,7 +848,7 @@ export default function Home() {
           </div>
       </div>
       
-      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
+      <FooterNav />
     </div>
   );
 }
@@ -1054,7 +1049,7 @@ function RoutineItem({
               />
             </div>
             <div
-              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0 shadow-sm' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0 shadow-sm`}
+              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0`}
               style={isHexColor ? { backgroundColor: routineColor } : {}}
             />
           </div>
@@ -1239,7 +1234,7 @@ function RoutineSettingModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[80vh] overflow-y-auto shadow-xl">
+      <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[480px] w-full max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 루틴 설정</h2>
           <button
@@ -1747,13 +1742,13 @@ function RoutineCalendar({
           />
         </div>
             <div
-              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0 shadow-sm' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0 shadow-sm`}
+              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0`}
               style={isHexColor ? { backgroundColor: routineColor } : {}}
             />
           </div>
           <button
             onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
-            className={`px-3 py-1.5 text-sm text-white rounded-lg transition-all duration-200 hover:scale-105 shadow-md shrink-0 ${
+            className={`px-3 py-1.5 text-sm text-white rounded-lg transition-all duration-200 hover:scale-105 shrink-0 ${
               isHexColor ? '' : `${colorClasses.button} ${colorClasses.buttonHover}`
             }`}
             style={isHexColor ? {
@@ -1801,7 +1796,7 @@ function RoutineCalendar({
             
             return (
               <div
-                className="bg-gray-800 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg"
+                className="bg-gray-800 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
                 style={{
                   padding: '8px',
                   display: 'grid',
@@ -1909,7 +1904,7 @@ function RoutineCalendar({
                             flex items-center justify-center relative shrink-0
                             cursor-pointer
                             transition-all duration-200 ease-in-out
-                            hover:scale-110 hover:shadow-lg hover:brightness-150 hover:z-10 hover:ring-2 hover:ring-blue-400
+                            hover:scale-110 hover:brightness-150 hover:z-10 hover:ring-2 hover:ring-blue-400
                           `}
                           style={{
                             width: '37px',

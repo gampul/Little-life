@@ -3,12 +3,9 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
-export interface FooterNavProps {
-  onAIAgentClick?: () => void;
-}
+export interface FooterNavProps {}
 
 export function FooterNav(props: FooterNavProps) {
-  const { onAIAgentClick } = props;
   const pathname = usePathname();
   const router = useRouter();
 
@@ -22,6 +19,7 @@ export function FooterNav(props: FooterNavProps) {
   };
 
   const navItems = [
+    { href: '/ai', label: 'AI', emoji: '🚀' },
     { href: '/', label: 'Daily', emoji: '📅' },
     { href: '/memo', label: 'Diary', emoji: '📝' },
     { href: '/account', label: '가계부', emoji: '💰' },
@@ -32,18 +30,6 @@ export function FooterNav(props: FooterNavProps) {
     <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
       <div className="max-w-[480px] mx-auto">
         <div className="flex items-center justify-around px-2 py-2">
-          {/* AI Agent 버튼 */}
-          {onAIAgentClick && (
-            <button
-              onClick={onAIAgentClick}
-              className="flex flex-col items-center justify-center w-[60px] h-[60px] rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-              aria-label="AI Agent"
-            >
-              <span className="text-2xl leading-none">🚀</span>
-              <span className="text-xs font-medium mt-0.5">AI</span>
-            </button>
-          )}
-          
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             

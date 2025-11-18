@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
-import { AIAgentModal } from '../components/AIAgentModal';
 
 interface Memo {
   id?: string;
@@ -22,7 +21,6 @@ export default function MemoPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [isAIAgentOpen, setIsAIAgentOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   
   // 페이지네이션 관련 상태
@@ -263,11 +261,6 @@ export default function MemoPage() {
       <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        {isAIAgentOpen && (
-          <AIAgentModal
-            onClose={() => setIsAIAgentOpen(false)}
-          />
-        )}
 
         {!showEditor && (
           <div className="mb-2">
@@ -282,7 +275,7 @@ export default function MemoPage() {
         )}
 
         {showEditor && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
             <div className="mb-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 제목
@@ -416,7 +409,7 @@ export default function MemoPage() {
               {displayedMemos.map((memo) => (
                 <div
                   key={memo.id}
-                  className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 shadow-sm"
+                  className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5"
                 >
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex-1">
@@ -514,7 +507,7 @@ export default function MemoPage() {
         </div>
       </div>
 
-      <FooterNav onAIAgentClick={() => setIsAIAgentOpen(true)} />
+      <FooterNav />
 
       <style jsx global>{`
         [contenteditable][data-placeholder]:empty:before {

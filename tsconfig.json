@@ -30,6 +30,7 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "loadMoreRecords_fixed.ts"
   ]
 }
