@@ -9,8 +9,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  TooltipProps,
 } from 'recharts';
+import type { TooltipProps } from 'recharts';
+import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 
 interface DailyRecord {
   id?: string;
@@ -35,7 +36,7 @@ const CustomTooltip = ({
   active, 
   payload,
   allRecords 
-}: TooltipProps<number, string> & { allRecords: DailyRecord[] }) => {
+}: TooltipProps<ValueType, NameType> & { allRecords: DailyRecord[] }) => {
   if (!active || !payload || payload.length === 0) return null;
 
   const data = payload[0].payload;
