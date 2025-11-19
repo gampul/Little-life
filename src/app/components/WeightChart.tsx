@@ -10,8 +10,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import type { TooltipProps } from 'recharts';
-import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 
 interface DailyRecord {
   id?: string;
@@ -36,7 +34,14 @@ const CustomTooltip = ({
   active, 
   payload,
   allRecords 
-}: TooltipProps<ValueType, NameType> & { allRecords: DailyRecord[] }) => {
+}: {
+  active?: boolean;
+  payload?: Array<{
+    payload: { date: string; weight: number };
+    value?: number;
+  }>;
+  allRecords: DailyRecord[];
+}) => {
   if (!active || !payload || payload.length === 0) return null;
 
   const data = payload[0].payload;
