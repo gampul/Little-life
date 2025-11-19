@@ -206,6 +206,25 @@ export default function Home() {
     loadRoutineTemplates();
   }, [loadRoutineTemplates]);
 
+  // 페이지 포커스 시 루틴 템플릿 다시 로드 (설정 페이지에서 변경 시 동기화)
+  useEffect(() => {
+    const handleFocus = () => {
+      loadRoutineTemplates();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    
+    // 주기적으로 루틴 템플릿 확인 (30초마다)
+    const interval = setInterval(() => {
+      loadRoutineTemplates();
+    }, 30000);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [loadRoutineTemplates]);
+
   // 초기 데이터 로드 (마운트 시 한 번만)
   useEffect(() => {
     loadDailyRecord(selectedDate);
@@ -508,10 +527,10 @@ export default function Home() {
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 {/* 날짜 입력 */}
                 <div 
-                  className="relative cursor-pointer overflow-hidden"
+                  className="relative cursor-pointer overflow-hidden flex-1"
                   onClick={(e) => {
                     e.preventDefault();
                     const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
@@ -535,7 +554,7 @@ export default function Home() {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                     style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -569,13 +588,13 @@ export default function Home() {
               }
               placeholder="체중"
               disabled={!isEditMode}
-              className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+              className="flex-1 px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
             />
             {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
+                className="flex-1 px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
                 aria-label="수정하기"
                   >
                 <span className="text-base">✏️</span>
@@ -584,7 +603,7 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="flex-1 px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label={isSaving ? '저장 중' : '저장'}
                   >
                 <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
@@ -929,9 +948,29 @@ export default function Home() {
 
             {/* 식사 기록 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                🍽️ 오늘의 식사
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  🍽️ 오늘의 식사
+                </h3>
+                {!isEditMode ? (
+                  <button
+                    onClick={handleEdit}
+                    className="text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    aria-label="수정하기"
+                  >
+                    ✏️
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={isSaving ? '저장 중' : '저장'}
+                  >
+                    {isSaving ? '⏳' : '💾'}
+                  </button>
+                )}
+              </div>
               <div className="flex flex-wrap gap-4 mb-4">
                 <MealCheckbox
                   label="아침"
@@ -1029,7 +1068,7 @@ function CircularProgressChart({
       </svg>
       {/* 달성률 텍스트 (중앙) */}
       <div 
-        className="absolute inset-0 flex items-center justify-center text-[10px] font-medium pointer-events-none"
+        className="absolute inset-0 flex items-center justify-center text-sm font-medium pointer-events-none"
         style={{ color }}
       >
         {Math.round(progress)}%
@@ -1070,51 +1109,59 @@ function RoutineItem({
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
+  const supabase = getSupabase();
 
-  // 로컬 스토리지에서 데이터 로드 및 변경 감지
+  // Supabase에서 데이터 로드
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
+      if (!supabase) return;
+      
       try {
-        const stored = localStorage.getItem('routine-calendar-data');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          const data: Record<string, Set<string>> = {};
-          Object.keys(parsed).forEach(date => {
-            data[date] = new Set(parsed[date]);
-          });
-          setCheckedDates(data);
+        // 현재 년도의 모든 날짜에 대한 체크 데이터 로드
+        const allDates: string[] = [];
+        for (let month = 1; month <= 12; month++) {
+          const daysInMonth = new Date(currentYear, month, 0).getDate();
+          for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${currentYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            allDates.push(dateStr);
+          }
         }
+
+        const { data: checks, error } = await supabase
+          .from('daily_routine_checks')
+          .select('date, routine_id, checked')
+          .in('date', allDates)
+          .eq('routine_id', routineId)
+          .eq('checked', true);
+
+        if (error) {
+          console.error('루틴 체크 데이터 로드 오류:', error);
+          return;
+        }
+
+        // 데이터를 Record<string, Set<string>> 형태로 변환
+        const data: Record<string, Set<string>> = {};
+        if (checks && checks.length > 0) {
+          checks.forEach((check: any) => {
+            if (!data[check.date]) {
+              data[check.date] = new Set();
+            }
+            data[check.date].add(check.routine_id);
+          });
+        }
+        
+        setCheckedDates(data);
       } catch (err) {
-        console.error('로컬 스토리지 로드 오류:', err);
+        console.error('데이터 로드 오류:', err);
       }
     };
 
-    // 초기 로드
     loadData();
-
-    // storage 이벤트 리스너 (다른 탭에서의 변경 감지)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'routine-calendar-data') {
-        loadData();
-      }
-    };
-
-    // 커스텀 이벤트 리스너 (같은 탭에서의 변경 감지)
-    const handleCustomStorageChange = () => {
-      // 렌더링 중 상태 업데이트를 방지하기 위해 setTimeout 사용
-      setTimeout(() => {
-        loadData();
-      }, 0);
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('routine-calendar-updated', handleCustomStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('routine-calendar-updated', handleCustomStorageChange);
-    };
-  }, []);
+    
+    // 주기적으로 업데이트 (30초마다)
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [supabase, routineId, currentYear]);
 
   // 날짜 체크 상태 확인
   const isDateChecked = (date: string, routineId: string) => {
@@ -1238,9 +1285,6 @@ function RoutineItem({
   const todayDateStr = getKoreaDateString(today);
   const isTodayChecked = isDateChecked(todayDateStr, routineId);
   
-  // Supabase 클라이언트 싱글톤 사용
-  const supabase = getSupabase();
-  
   // 오늘 날짜 체크/언체크 핸들러
   const handleTodayToggle = async (e: React.MouseEvent) => {
     e.stopPropagation(); // 아코디언 토글 방지
@@ -1248,42 +1292,6 @@ function RoutineItem({
     if (disabled) return; // 비활성화 상태면 동작하지 않음
     
     const newChecked = !isTodayChecked;
-    
-    // 로컬 상태 업데이트
-    setCheckedDates(prev => {
-      const newData = { ...prev };
-      if (!newData[todayDateStr]) {
-        newData[todayDateStr] = new Set();
-      }
-      
-      const dateSet = new Set(newData[todayDateStr]);
-      if (newChecked) {
-        dateSet.add(routineId);
-      } else {
-        dateSet.delete(routineId);
-      }
-      
-      if (dateSet.size === 0) {
-        delete newData[todayDateStr];
-      } else {
-        newData[todayDateStr] = dateSet;
-      }
-      
-      // 로컬 스토리지에 저장
-      try {
-        const serializable: Record<string, string[]> = {};
-        Object.keys(newData).forEach(date => {
-          serializable[date] = Array.from(newData[date]);
-        });
-        localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
-        // 커스텀 이벤트 발생 (같은 탭에서 다른 컴포넌트에 알림)
-        window.dispatchEvent(new Event('routine-calendar-updated'));
-      } catch (err) {
-        console.error('로컬 스토리지 저장 오류:', err);
-      }
-      
-      return newData;
-    });
     
     // Supabase에 저장
     if (supabase) {
@@ -1302,6 +1310,7 @@ function RoutineItem({
           
           if (error) {
             console.error('Supabase 저장 오류:', error);
+            return;
           }
         } else {
           // 언체크: delete
@@ -1313,12 +1322,40 @@ function RoutineItem({
           
           if (error) {
             console.error('Supabase 삭제 오류:', error);
+            return;
           }
         }
+        
+        // 상태 업데이트
+        setCheckedDates(prev => {
+          const newData = { ...prev };
+          if (!newData[todayDateStr]) {
+            newData[todayDateStr] = new Set();
+          }
+          
+          const dateSet = new Set(newData[todayDateStr]);
+          if (newChecked) {
+            dateSet.add(routineId);
+          } else {
+            dateSet.delete(routineId);
+          }
+          
+          if (dateSet.size === 0) {
+            delete newData[todayDateStr];
+          } else {
+            newData[todayDateStr] = dateSet;
+          }
+          
+          return newData;
+        });
       } catch (err) {
         console.error('Supabase 작업 오류:', err);
+        return;
       }
     }
+    
+    // 부모 컴포넌트의 onChange 호출 (체크박스 상태 업데이트)
+    onChange();
   };
   
   return (
@@ -1358,7 +1395,7 @@ function RoutineItem({
             </div>
           )}
           <div className="flex items-center gap-1.5">
-            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-24">
+            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-12">
               <div
                 className={isHexColor ? 'h-full transition-all duration-500 ease-out' : `h-full ${colorClasses.bg} transition-all duration-500 ease-out`}
                 style={{ 
@@ -1367,10 +1404,6 @@ function RoutineItem({
                 }}
               />
             </div>
-            <div
-              className={isHexColor ? 'w-3 h-3 rounded-full shrink-0' : `w-3 h-3 rounded-full ${colorClasses.bg} shrink-0`}
-              style={isHexColor ? { backgroundColor: routineColor } : {}}
-            />
           </div>
           {/* 오늘 날짜 체크박스 */}
           <div 
@@ -1664,92 +1697,57 @@ function RoutineCalendar({
     return months;
   }, [currentYear, currentMonth]);
 
-  // 로컬 스토리지에서 데이터 로드 및 Supabase 데이터 동기화
+  // Supabase에서 데이터 로드
   useEffect(() => {
     const loadData = async () => {
-      // 1. 로컬 스토리지에서 로드
-      let data: Record<string, Set<string>> = {};
+      if (!supabase) return;
+      
       try {
-        const stored = localStorage.getItem('routine-calendar-data');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          Object.keys(parsed).forEach(date => {
-            data[date] = new Set(parsed[date]);
+        // 현재 년도의 모든 날짜에 대한 체크 데이터 로드
+        const allDates: string[] = [];
+        for (let month = 1; month <= 12; month++) {
+          const daysInMonth = new Date(currentYear, month, 0).getDate();
+          for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${currentYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            allDates.push(dateStr);
+          }
+        }
+
+        const { data: checks, error } = await supabase
+          .from('daily_routine_checks')
+          .select('date, routine_id, checked')
+          .in('date', allDates)
+          .eq('routine_id', routineId)
+          .eq('checked', true);
+
+        if (error) {
+          console.error('루틴 체크 데이터 로드 오류:', error);
+          return;
+        }
+
+        // 데이터를 Record<string, Set<string>> 형태로 변환
+        const data: Record<string, Set<string>> = {};
+        if (checks && checks.length > 0) {
+          checks.forEach((check: any) => {
+            if (!data[check.date]) {
+              data[check.date] = new Set();
+            }
+            data[check.date].add(check.routine_id);
           });
         }
+        
+        setCheckedDates(data);
       } catch (err) {
-        console.error('로컬 스토리지 로드 오류:', err);
-      }
-
-      // 2. Supabase에서도 로드하여 병합 (기존 데이터 유지)
-      // 연간 단위 로드 (현재 년도의 1월 1일부터 12월 31일까지)
-      if (supabase) {
-        try {
-          const allDates: string[] = [];
-          
-          // 현재 년도의 1월부터 12월까지
-          for (let month = 1; month <= 12; month++) {
-            const daysInMonth = new Date(currentYear, month, 0).getDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-              const dateStr = `${currentYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              allDates.push(dateStr);
-            }
-          }
-
-          const { data: checks } = await supabase
-            .from('daily_routine_checks')
-            .select('date, routine_id, checked')
-            .in('date', allDates)
-            .eq('checked', true);
-
-          if (checks && checks.length > 0) {
-            checks.forEach((check: any) => {
-              if (!data[check.date]) {
-                data[check.date] = new Set();
-              }
-              data[check.date].add(check.routine_id);
-            });
-          }
-        } catch (err) {
-          console.error('Supabase 데이터 로드 오류:', err);
-        }
-      }
-
-      setCheckedDates(data);
-      // 로컬 스토리지에 병합된 데이터 저장
-      if (Object.keys(data).length > 0) {
-        const serializable: Record<string, string[]> = {};
-        Object.keys(data).forEach(date => {
-          serializable[date] = Array.from(data[date]);
-        });
-        localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
+        console.error('데이터 로드 오류:', err);
       }
     };
+    
     loadData();
-
-    // storage 이벤트 리스너 (다른 탭에서의 변경 감지)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'routine-calendar-data') {
-        loadData();
-      }
-    };
-
-    // 커스텀 이벤트 리스너 (같은 탭에서의 변경 감지)
-    const handleCustomStorageChange = () => {
-      // 렌더링 중 상태 업데이트를 방지하기 위해 setTimeout 사용
-      setTimeout(() => {
-        loadData();
-      }, 0);
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('routine-calendar-updated', handleCustomStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('routine-calendar-updated', handleCustomStorageChange);
-    };
-  }, [routineTemplates, getThreeMonths, supabase, currentYear]);
+    
+    // 주기적으로 업데이트 (30초마다)
+    const interval = setInterval(loadData, 30000);
+    return () => clearInterval(interval);
+  }, [supabase, routineId, currentYear]);
 
   // 토글이 열릴 때 오늘 날짜가 보이도록 스크롤 위치 설정
   useEffect(() => {
@@ -1801,20 +1799,6 @@ function RoutineCalendar({
     }
   }, [isExpanded, currentYear, currentMonth]);
 
-  // 로컬 스토리지에 데이터 저장
-  const saveToStorage = useCallback((data: Record<string, Set<string>>) => {
-    try {
-      const serializable: Record<string, string[]> = {};
-      Object.keys(data).forEach(date => {
-        serializable[date] = Array.from(data[date]);
-      });
-      localStorage.setItem('routine-calendar-data', JSON.stringify(serializable));
-      // 커스텀 이벤트 발생 (같은 탭에서 다른 컴포넌트에 알림)
-      window.dispatchEvent(new Event('routine-calendar-updated'));
-    } catch (err) {
-      console.error('로컬 스토리지 저장 오류:', err);
-    }
-  }, []);
 
   // 특정 월의 날짜 목록 생성
   const getMonthDays = (year: number, month: number) => {
@@ -1910,31 +1894,69 @@ function RoutineCalendar({
   };
 
   // 날짜 클릭 핸들러 (체크/언체크)
-  const handleDateToggle = (date: string, routineId: string) => {
+  const handleDateToggle = async (date: string, routineId: string) => {
     if (editModeRoutine !== routineId) return;
+    if (!supabase) return;
     
-    setCheckedDates(prev => {
-      const newData = { ...prev };
-      if (!newData[date]) {
-        newData[date] = new Set();
-      }
-      
-      const dateSet = new Set(newData[date]);
-      if (dateSet.has(routineId)) {
-        dateSet.delete(routineId);
+    const isCurrentlyChecked = isDateChecked(date, routineId);
+    const newChecked = !isCurrentlyChecked;
+    
+    try {
+      if (newChecked) {
+        // 체크: insert 또는 update
+        const { error } = await supabase
+          .from('daily_routine_checks')
+          .upsert({
+            date: date,
+            routine_id: routineId,
+            checked: true
+          }, {
+            onConflict: 'date,routine_id'
+          });
+        
+        if (error) {
+          console.error('Supabase 저장 오류:', error);
+          return;
+        }
       } else {
-        dateSet.add(routineId);
+        // 언체크: delete
+        const { error } = await supabase
+          .from('daily_routine_checks')
+          .delete()
+          .eq('date', date)
+          .eq('routine_id', routineId);
+        
+        if (error) {
+          console.error('Supabase 삭제 오류:', error);
+          return;
+        }
       }
       
-      if (dateSet.size === 0) {
-        delete newData[date];
-      } else {
-        newData[date] = dateSet;
-      }
-      
-      saveToStorage(newData);
-      return newData;
-    });
+      // 상태 업데이트
+      setCheckedDates(prev => {
+        const newData = { ...prev };
+        if (!newData[date]) {
+          newData[date] = new Set();
+        }
+        
+        const dateSet = new Set(newData[date]);
+        if (newChecked) {
+          dateSet.add(routineId);
+        } else {
+          dateSet.delete(routineId);
+        }
+        
+        if (dateSet.size === 0) {
+          delete newData[date];
+        } else {
+          newData[date] = dateSet;
+        }
+        
+        return newData;
+      });
+    } catch (err) {
+      console.error('예상치 못한 오류:', err);
+    }
   };
 
   // 월별 체크 비율 계산 (0~100%)
@@ -2063,12 +2085,7 @@ function RoutineCalendar({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
-            className={`px-3 py-1.5 text-sm text-white rounded-lg transition-all duration-200 hover:scale-105 shrink-0 ${
-              isHexColor ? '' : `${colorClasses.button} ${colorClasses.buttonHover}`
-            }`}
-            style={isHexColor ? {
-              backgroundColor: routineColor,
-            } : {}}
+            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors shrink-0"
           >
             {editModeRoutine === routineId ? '저장' : '수정'}
           </button>
