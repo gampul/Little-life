@@ -1,10 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { getSupabase } from '../lib/supabase';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
+
+// WeightChart를 동적 import로 로드 (SSR 방지)
+const WeightChart = dynamic(
+  () => import('./components/WeightChart'),
+  { ssr: false }
+);
 
 interface DailyRecord {
   id?: string;
@@ -14,7 +20,10 @@ interface DailyRecord {
   meal_lunch: boolean;
   meal_dinner: boolean;
   meal_memo: string;
+  meal_images?: string[];
   daily_memo: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface RoutineTemplate {
@@ -54,6 +63,13 @@ export default function Home() {
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
+  
+  // 식사 기록 목록
+  const [mealRecords, setMealRecords] = useState<DailyRecord[]>([]);
+  
+  // 그래프에서 선택된 날짜의 식사 메모
+  const [selectedChartDate, setSelectedChartDate] = useState<string | null>(null);
+  const [selectedDateMealMemo, setSelectedDateMealMemo] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<DailyRecord>({
     date: selectedDate,
@@ -62,8 +78,11 @@ export default function Home() {
     meal_lunch: false,
     meal_dinner: false,
     meal_memo: '',
+    meal_images: [],
     daily_memo: '',
   });
+
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const handleInputChange = (
     field: keyof DailyRecord,
@@ -73,6 +92,240 @@ export default function Home() {
       ...prev,
       [field]: value,
     }));
+  };
+
+  // Storage 테스트 함수
+  const testStorageConnection = async () => {
+    console.log('\n🧪 === Supabase Storage 연결 테스트 시작 ===');
+    
+    if (!supabase) {
+      console.error('❌ Supabase 클라이언트가 초기화되지 않았습니다.');
+      alert('❌ Supabase 연결 실패: 환경 변수를 확인해주세요.');
+      return;
+    }
+    
+    try {
+      // 1. Bucket 목록 조회
+      console.log('1️⃣ Storage Buckets 조회 중...');
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+      
+      if (bucketError) {
+        console.error('❌ Bucket 조회 실패:', bucketError);
+        alert(`❌ Storage 접근 오류:\n${bucketError.message}`);
+        return;
+      }
+      
+      console.log('✅ 사용 가능한 buckets:', buckets?.map(b => b.name) || []);
+      
+      // 2. meal-images bucket 확인
+      const mealImagesBucket = buckets?.find(b => b.name === 'meal-images');
+      
+      if (!mealImagesBucket) {
+        console.error('❌ meal-images bucket이 없습니다.');
+        console.log('📋 사용 가능한 buckets:', buckets?.map(b => b.name) || '없음');
+        alert(`❌ meal-images bucket이 없습니다!\n\n✨ 해결 방법:\n1. Supabase Dashboard → Storage\n2. "Create bucket" 클릭\n3. Name: meal-images\n4. Public: ✅ 체크\n5. Create 클릭\n\n현재 buckets: ${buckets?.map(b => b.name).join(', ') || '없음'}`);
+        return;
+      }
+      
+      console.log('✅ meal-images bucket 존재:', mealImagesBucket);
+      console.log('   - ID:', mealImagesBucket.id);
+      console.log('   - Public:', mealImagesBucket.public);
+      console.log('   - Created:', mealImagesBucket.created_at);
+      
+      // 3. Bucket 내 파일 목록 조회 (권한 테스트)
+      console.log('2️⃣ Bucket 읽기 권한 테스트 중...');
+      const { data: files, error: listError } = await supabase.storage
+        .from('meal-images')
+        .list('', { limit: 1 });
+      
+      if (listError) {
+        console.warn('⚠️ 파일 목록 조회 실패:', listError);
+        alert(`⚠️ Bucket 읽기 권한 오류:\n${listError.message}\n\n✨ RLS 정책을 확인해주세요:\nStorage → meal-images → Policies`);
+        return;
+      }
+      
+      console.log('✅ Bucket 읽기 권한 OK');
+      console.log('   - 파일 개수:', files?.length || 0);
+      
+      // 4. 최종 결과
+      console.log('\n🎉 === Storage 테스트 완료 ===');
+      console.log('✅ Supabase 연결: OK');
+      console.log('✅ meal-images bucket: OK');
+      console.log('✅ 읽기 권한: OK');
+      console.log('✅ 업로드 준비: 완료!\n');
+      
+      alert(`✅ Supabase Storage 정상 작동!\n\n📦 Bucket: meal-images\n🔓 Public: ${mealImagesBucket.public ? '예' : '아니오'}\n📁 저장된 파일: ${files?.length || 0}개\n\n✅ 사진 업로드가 가능합니다!`);
+      
+    } catch (error: any) {
+      console.error('❌ Storage 테스트 중 예외 발생:', error);
+      alert(`❌ 테스트 실패:\n${error.message || error}`);
+    }
+  };
+
+  // 이미지 업로드 핸들러
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    console.log('📤 업로드 시작:', files?.length, '개 파일');
+    
+    if (!files || files.length === 0) {
+      console.log('❌ 파일이 선택되지 않음');
+      return;
+    }
+    
+    if (!supabase) {
+      console.error('❌ Supabase 연결 없음');
+      alert('❌ Supabase 연결이 없습니다. 환경 변수를 확인해주세요.');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    const uploadedUrls: string[] = [];
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      // Storage bucket 존재 확인
+      console.log('🔍 Storage bucket 확인 중...');
+      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+      
+      if (bucketError) {
+        console.error('❌ Bucket 목록 조회 실패:', bucketError);
+        throw new Error(`Storage 접근 오류: ${bucketError.message}`);
+      }
+      
+      const mealImagesBucket = buckets?.find(b => b.id === 'meal-images');
+      if (!mealImagesBucket) {
+        console.error('❌ meal-images bucket이 없습니다');
+        console.log('📋 사용 가능한 buckets:', buckets?.map(b => b.id));
+        alert('❌ Storage bucket이 생성되지 않았습니다.\n\nDATABASE_SETUP.md 파일을 참고하여 다음을 실행하세요:\n1. Supabase SQL Editor에서 마이그레이션 실행\n2. Storage에서 meal-images bucket 생성');
+        return;
+      }
+      
+      console.log('✅ meal-images bucket 확인됨');
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        console.log(`📁 파일 ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+        
+        // 파일 크기 체크 (5MB 제한)
+        if (file.size > 5 * 1024 * 1024) {
+          console.warn(`⚠️ 파일 크기 초과: ${file.name}`);
+          alert(`❌ ${file.name}은(는) 너무 큽니다. 5MB 이하만 업로드 가능합니다.`);
+          errorCount++;
+          continue;
+        }
+
+        // 이미지 파일만 허용
+        if (!file.type.startsWith('image/')) {
+          console.warn(`⚠️ 이미지 파일 아님: ${file.name} (${file.type})`);
+          alert(`❌ ${file.name}은(는) 이미지 파일이 아닙니다.`);
+          errorCount++;
+          continue;
+        }
+
+        // 파일명 생성 (타임스탬프 + 랜덤)
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${userId}/${formData.date}/${fileName}`;
+        console.log(`📂 업로드 경로: ${filePath}`);
+
+        // Storage에 업로드
+        const { data, error } = await supabase.storage
+          .from('meal-images')
+          .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) {
+          console.error(`❌ 업로드 실패 (${file.name}):`, error);
+          console.error('- 에러 메시지:', error.message);
+          console.error('- 에러 상세:', error);
+          
+          let errorMsg = error.message;
+          if (error.message.includes('row-level security')) {
+            errorMsg = 'Storage 정책이 설정되지 않았습니다. DATABASE_SETUP.md를 참고하여 정책을 추가하세요.';
+          } else if (error.message.includes('not found')) {
+            errorMsg = 'Storage bucket을 찾을 수 없습니다.';
+          }
+          
+          alert(`❌ ${file.name} 업로드 실패:\n${errorMsg}`);
+          errorCount++;
+          continue;
+        }
+
+        console.log(`✅ 업로드 성공 (${file.name}):`, data);
+
+        // Public URL 가져오기
+        const { data: urlData } = supabase.storage
+          .from('meal-images')
+          .getPublicUrl(filePath);
+
+        console.log('🔗 Public URL:', urlData.publicUrl);
+        uploadedUrls.push(urlData.publicUrl);
+        successCount++;
+      }
+
+      if (uploadedUrls.length > 0) {
+        // formData에 이미지 URL 추가
+        setFormData(prev => ({
+          ...prev,
+          meal_images: [...(prev.meal_images || []), ...uploadedUrls]
+        }));
+
+        console.log('✅ 이미지 업로드 완료:', uploadedUrls);
+        alert(`✅ ${successCount}개 이미지 업로드 완료!`);
+      } else if (errorCount > 0) {
+        alert(`❌ 모든 이미지 업로드 실패 (${errorCount}개)`);
+      }
+    } catch (err: any) {
+      console.error('❌ 이미지 업로드 오류:', err);
+      console.error('- 에러 타입:', typeof err);
+      console.error('- 에러 메시지:', err?.message);
+      console.error('- 전체 에러:', err);
+      alert(`❌ 이미지 업로드 중 오류가 발생했습니다.\n\n${err?.message || '알 수 없는 오류'}`);
+    } finally {
+      setIsUploadingImage(false);
+      // input 초기화
+      e.target.value = '';
+      console.log('🏁 업로드 프로세스 종료');
+    }
+  };
+
+  // 이미지 삭제 핸들러
+  const handleImageDelete = async (imageUrl: string) => {
+    if (!supabase) return;
+    
+    try {
+      // URL에서 파일 경로 추출
+      const url = new URL(imageUrl);
+      const pathParts = url.pathname.split('/meal-images/');
+      if (pathParts.length < 2) return;
+      
+      const filePath = pathParts[1];
+
+      // Storage에서 삭제
+      const { error } = await supabase.storage
+        .from('meal-images')
+        .remove([filePath]);
+
+      if (error) {
+        console.error('이미지 삭제 오류:', error);
+        alert('❌ 이미지 삭제 실패');
+        return;
+      }
+
+      // formData에서 제거
+      setFormData(prev => ({
+        ...prev,
+        meal_images: (prev.meal_images || []).filter(url => url !== imageUrl)
+      }));
+
+      console.log('✅ 이미지 삭제 완료');
+    } catch (err) {
+      console.error('이미지 삭제 오류:', err);
+      alert('❌ 이미지 삭제 중 오류가 발생했습니다.');
+    }
   };
 
 
@@ -135,12 +388,25 @@ export default function Home() {
   const loadDailyRecord = useCallback(async (date: string) => {
     if (!supabase) return;
     try {
-      // 명시적으로 컬럼 지정 (title 컬럼 제외)
-      const { data, error } = await supabase
+      // meal_images 포함하여 조회 시도
+      let { data, error } = await supabase
         .from('daily_records')
-        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
         .eq('date', date)
         .maybeSingle();
+
+      // meal_images 컬럼이 없는 경우 재시도
+      if (error && error.code !== 'PGRST116' && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('⚠️ meal_images 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+        const result = await supabase
+          .from('daily_records')
+          .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .eq('date', date)
+          .maybeSingle();
+        
+        data = result.data ? { ...result.data, meal_images: [] } : null;
+        error = result.error;
+      }
 
       if (error && error.code !== 'PGRST116') {
         console.error('데이터 조회 오류');
@@ -152,7 +418,10 @@ export default function Home() {
       }
 
       if (data) {
-        setFormData(data);
+        setFormData({
+          ...data,
+          meal_images: data.meal_images || []
+        });
         setHasData(true);
         setIsEditMode(false);
       } else {
@@ -163,6 +432,7 @@ export default function Home() {
           meal_lunch: false,
           meal_dinner: false,
           meal_memo: '',
+          meal_images: [],
           daily_memo: '',
         });
         setHasData(false);
@@ -173,17 +443,75 @@ export default function Home() {
     }
   }, [supabase]);
 
+  // 식사 기록 로드
+  const loadMealRecords = useCallback(async () => {
+    if (!supabase) return;
+    try {
+      // meal_images 포함하여 조회 시도
+      let { data, error } = await supabase
+        .from('daily_records')
+        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
+        .order('date', { ascending: false })
+        .limit(50);
+
+      // meal_images 컬럼이 없는 경우 재시도
+      if (error && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('⚠️ meal_images 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+        const result = await supabase
+          .from('daily_records')
+          .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .order('date', { ascending: false })
+          .limit(50);
+        
+        data = result.data ? result.data.map(r => ({ ...r, meal_images: [] })) : null;
+        error = result.error;
+      }
+
+      if (error) {
+        console.error('식사 기록 조회 오류:', error);
+        return;
+      }
+
+      // 식사 관련 데이터가 있는 기록만 필터링 (최근 20개)
+      const filteredRecords = (data || [])
+        .filter(record => 
+          record.meal_breakfast || record.meal_lunch || record.meal_dinner || (record.meal_memo && record.meal_memo.trim() !== '')
+        )
+        .map(record => ({
+          ...record,
+          meal_images: record.meal_images || []
+        }))
+        .slice(0, 20);
+
+      setMealRecords(filteredRecords);
+    } catch (err) {
+      console.error('식사 기록 로드 오류:', err);
+    }
+  }, [supabase]);
+
   const loadAllRecords = useCallback(async () => {
     if (!supabase) {
       console.warn('Supabase 클라이언트가 없습니다.');
       return;
     }
     try {
-      // 명시적으로 컬럼 지정 (title 컬럼 제외)
-      const { data, error } = await supabase
+      // meal_images 포함하여 조회 시도
+      let { data, error } = await supabase
         .from('daily_records')
-        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
         .order('date', { ascending: true });
+
+      // meal_images 컬럼이 없는 경우 (마이그레이션 전) 재시도
+      if (error && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('⚠️ meal_images 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+        const result = await supabase
+          .from('daily_records')
+          .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .order('date', { ascending: true });
+        
+        data = result.data ? result.data.map(r => ({ ...r, meal_images: [] })) : null;
+        error = result.error;
+      }
 
       if (error) {
         console.error('전체 데이터 조회 오류');
@@ -194,9 +522,16 @@ export default function Home() {
         return;
       }
 
-      console.log('로드된 레코드 수:', data?.length || 0);
-      console.log('체중 데이터가 있는 레코드:', data?.filter(r => r.weight !== null).length || 0);
-      setAllRecords(data || []);
+      // 날짜 형식 정규화 (YYYY-MM-DD로 통일)
+      const normalizedData = (data || []).map(record => ({
+        ...record,
+        meal_images: record.meal_images || [], // meal_images가 없으면 빈 배열
+        date: record.date.includes('T') 
+          ? record.date.split('T')[0] 
+          : (record.date.includes(' ') ? record.date.split(' ')[0] : record.date)
+      }));
+      
+      setAllRecords(normalizedData);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -230,6 +565,7 @@ export default function Home() {
     loadDailyRecord(selectedDate);
     loadRoutineChecks(selectedDate);
     loadAllRecords();
+    loadMealRecords();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 빈 배열로 초기 마운트 시에만 실행
 
@@ -278,11 +614,11 @@ export default function Home() {
     setMessage('');
 
     try {
-      // 1. daily_records 저장
+      // 1. daily_records 저장 (formData.date 사용)
       const { data: existingData, error: checkError } = await supabase
         .from('daily_records')
         .select('id')
-        .eq('date', selectedDate)
+        .eq('date', formData.date)
         .maybeSingle();
 
       // ✅ 에러 상세 로깅 추가
@@ -303,7 +639,7 @@ export default function Home() {
             ...formData,
             updated_at: new Date().toISOString(),
           })
-          .eq('date', selectedDate);
+          .eq('date', formData.date);
 
         if (error) {
           console.error('=== 업데이트 에러 상세 ===');
@@ -330,11 +666,11 @@ export default function Home() {
         }
       }
 
-      // 2. 루틴 체크 저장
+      // 2. 루틴 체크 저장 (formData.date 사용)
       const { error: deleteError } = await supabase
         .from('daily_routine_checks')
         .delete()
-        .eq('date', selectedDate);
+        .eq('date', formData.date);
 
       if (deleteError) {
         console.error('=== 루틴 체크 삭제 에러 상세 ===');
@@ -349,7 +685,7 @@ export default function Home() {
       const checksToInsert = routineChecks
         .filter(check => check.checked)
         .map(check => ({
-          date: selectedDate,
+          date: formData.date,
           routine_id: check.routine_id,
           checked: true,
         }));
@@ -373,7 +709,48 @@ export default function Home() {
       setMessage('✅ 저장되었습니다!');
       setIsEditMode(false);
       setHasData(true);
+      // 저장된 날짜로 selectedDate 업데이트 (상단 날짜 필드와 동기화)
+      setSelectedDate(formData.date);
+      
+      // 날짜 형식 정규화
+      const normalizedFormData = {
+        ...formData,
+        date: formData.date.includes('T') 
+          ? formData.date.split('T')[0] 
+          : (formData.date.includes(' ') ? formData.date.split(' ')[0] : formData.date)
+      };
+      
+      // allRecords 즉시 업데이트 (저장된 데이터 반영)
+      setAllRecords(prev => {
+        // 이전 데이터도 날짜 형식 정규화
+        const normalizedPrev = prev.map(r => ({
+          ...r,
+          date: r.date.includes('T') ? r.date.split('T')[0] : (r.date.includes(' ') ? r.date.split(' ')[0] : r.date)
+        }));
+        
+        const existingIndex = normalizedPrev.findIndex(r => r.date === normalizedFormData.date);
+        if (existingIndex >= 0) {
+          // 기존 레코드 업데이트
+          const updated = [...normalizedPrev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            ...normalizedFormData,
+            updated_at: new Date().toISOString(),
+          } as DailyRecord;
+          return updated;
+        } else {
+          // 새 레코드 추가
+          return [...normalizedPrev, {
+            ...normalizedFormData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          } as DailyRecord];
+        }
+      });
+      
+      // 데이터 새로고침 (백그라운드에서 실행)
       loadAllRecords();
+      loadMealRecords();
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
       console.error('=== 최종 에러 캐치 ===');
@@ -824,72 +1201,16 @@ export default function Home() {
                   }
                   
                   return (
-                    <>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart 
-                          data={chartData}
-                          margin={{ top: 5, right: 5, left: 0, bottom: 25 }}
-                        >
-                          <defs>
-                            <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
-                              <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid 
-                            strokeDasharray="3 3" 
-                            stroke="#374151" 
-                            strokeOpacity={0.3}
-                            vertical={false}
-                          />
-                          <XAxis 
-                            dataKey="date" 
-                            stroke="#6B7280"
-                            tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                            tickLine={false}
-                            axisLine={{ stroke: '#374151' }}
-                            padding={{ left: 0, right: 0 }}
-                            interval={interval}
-                            tickFormatter={(value) => {
-                              if (!value) return '';
-                              const date = new Date(value);
-                              return `${date.getMonth() + 1}/${date.getDate()}`;
-                            }}
-                          />
-                          <YAxis 
-                            stroke="#6B7280"
-                            tick={{ fontSize: 11, fill: '#9CA3AF' }}
-                            tickLine={false}
-                            axisLine={false}
-                            domain={['dataMin - 1', 'dataMax + 1']}
-                            tickFormatter={(value) => `${value}kg`}
-                            width={45}
-                          />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: '#1F2937', 
-                              border: '1px solid #374151',
-                              borderRadius: '12px',
-                              padding: '8px 12px',
-                              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)'
-                            }}
-                            labelStyle={{ color: '#D1D5DB', fontSize: '12px', marginBottom: '4px' }}
-                            itemStyle={{ color: '#EF4444', fontSize: '14px', fontWeight: 'bold' }}
-                            formatter={(value: any) => [`${value} kg`, '체중']}
-                            cursor={{ stroke: '#EF4444', strokeWidth: 1, strokeDasharray: '5 5' }}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="weight" 
-                            stroke="#EF4444" 
-                            strokeWidth={2}
-                            dot={false}
-                            activeDot={false}
-                            fill="url(#colorWeight)"
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </>
+                    <WeightChart
+                      chartData={chartData}
+                      interval={interval}
+                      allRecords={allRecords}
+                      onDateClick={(date, mealMemo) => {
+                        console.log('🎯 차트 날짜 클릭:', date, '→ 메모:', mealMemo || '없음');
+                        setSelectedChartDate(date);
+                        setSelectedDateMealMemo(mealMemo);
+                      }}
+                    />
                   );
                 })() : (
                   <div className="h-full flex items-center justify-center">
@@ -900,6 +1221,44 @@ export default function Home() {
                   </div>
                 )}
               </div>
+              
+              {/* 선택된 날짜의 식사 메모 표시 */}
+              {selectedChartDate && (
+                <div className="mt-4 pt-4 border-t-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-base font-bold text-gray-900 dark:text-white">
+                      📅 {(() => {
+                        const date = new Date(selectedChartDate);
+                        return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+                      })()}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedChartDate(null);
+                        setSelectedDateMealMemo(null);
+                      }}
+                      className="text-lg text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+                      aria-label="닫기"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {selectedDateMealMemo ? (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-blue-300 dark:border-blue-700">
+                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">🍽️ 식사 메모</p>
+                      <p className="text-base text-gray-900 dark:text-white font-medium leading-relaxed">
+                        {selectedDateMealMemo}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 border-2 border-gray-300 dark:border-gray-600">
+                      <p className="text-base text-gray-600 dark:text-gray-300 italic text-center">
+                        이 날짜에는 식사 메모가 없습니다.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
@@ -948,29 +1307,99 @@ export default function Home() {
 
             {/* 식사 기록 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  🍽️ 오늘의 식사
+              <div className="flex items-center gap-3 mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white shrink-0">
+                  🍽️ 식사 기록
                 </h3>
-                {!isEditMode ? (
-                  <button
-                    onClick={handleEdit}
-                    className="text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-                    aria-label="수정하기"
+                
+                {/* 작은 날짜 선택 필드 */}
+                {isEditMode ? (
+                  <div 
+                    className="relative cursor-pointer overflow-hidden flex-1 min-w-[180px] max-w-[250px]"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
+                      if (input) {
+                        input.focus();
+                        if (input.showPicker) {
+                          try {
+                            input.showPicker();
+                          } catch (err) {
+                            input.click();
+                          }
+                        } else {
+                          input.click();
+                        }
+                      }
+                    }}
                   >
-                    ✏️
-                  </button>
+                    <input
+                      type="date"
+                      value={formData.date}
+                      onChange={async (e) => {
+                        const newDate = e.target.value;
+                        console.log('📅 식사 날짜 변경:', newDate);
+                        await loadDailyRecord(newDate);
+                        await loadRoutineChecks(newDate);
+                        setSelectedDate(newDate);
+                      }}
+                      className="w-full px-3 py-2 text-sm bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border border-blue-400 dark:border-blue-500 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                      style={{ color: 'transparent', WebkitAppearance: 'none' }}
+                    />
+                    {/* 날짜 포맷 표시 (오버레이) */}
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-1.5rem)]">
+                      📅 {(() => {
+                        const date = new Date(formData.date);
+                        const month = date.getMonth() + 1;
+                        const day = date.getDate();
+                        return `${month}/${day}`;
+                      })()}
+                    </div>
+                  </div>
                 ) : (
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label={isSaving ? '저장 중' : '저장'}
-                  >
-                    {isSaving ? '⏳' : '💾'}
-                  </button>
+                  <div className="flex-1 min-w-[180px] max-w-[250px] px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg font-medium flex items-center">
+                    📅 {(() => {
+                      const date = new Date(formData.date);
+                      const month = date.getMonth() + 1;
+                      const day = date.getDate();
+                      return `${month}/${day}`;
+                    })()}
+                  </div>
                 )}
+
+                {/* 수정/저장 버튼 + Storage 테스트 버튼 */}
+                <div className="ml-auto shrink-0 flex items-center gap-2">
+                  {/* Storage 테스트 버튼 */}
+                  <button
+                    onClick={testStorageConnection}
+                    className="text-sm px-2 py-1 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors border border-gray-300 dark:border-gray-600 rounded hover:border-blue-400 dark:hover:border-blue-500"
+                    aria-label="Storage 연결 테스트"
+                    title="Supabase Storage 연결 상태를 확인합니다"
+                  >
+                    🧪
+                  </button>
+                  
+                  {!isEditMode ? (
+                    <button
+                      onClick={handleEdit}
+                      className="text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                      aria-label="수정하기"
+                    >
+                      ✏️
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving}
+                      className="text-base text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={isSaving ? '저장 중' : '저장'}
+                    >
+                      {isSaving ? '⏳' : '💾'}
+                    </button>
+                  )}
+                </div>
               </div>
+              
               <div className="flex flex-wrap gap-4 mb-4">
                 <MealCheckbox
                   label="아침"
@@ -999,6 +1428,117 @@ export default function Home() {
                 className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 resize-none"
                 rows={3}
               />
+
+              {/* 이미지 업로드 */}
+              <div className="mt-4">
+                {isEditMode && (
+                  <div className="mb-3">
+                    <label className="flex items-center justify-center w-full px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-2 border-dashed border-blue-300 dark:border-blue-700 rounded-lg cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleImageUpload}
+                        disabled={isUploadingImage}
+                        className="hidden"
+                      />
+                      <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                        {isUploadingImage ? '📤 업로드 중...' : '📷 사진 추가 (최대 5MB)'}
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                {/* 이미지 미리보기 */}
+                {formData.meal_images && formData.meal_images.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {formData.meal_images.map((imageUrl, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={imageUrl}
+                          alt={`식사 사진 ${index + 1}`}
+                          className="w-full aspect-square object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                        />
+                        {isEditMode && (
+                          <button
+                            onClick={() => handleImageDelete(imageUrl)}
+                            className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label="이미지 삭제"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* 날짜별 식사 기록 목록 */}
+              {mealRecords.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+                    📅 최근 식사 기록
+                  </h4>
+                  <div className="space-y-3">
+                    {mealRecords.map((record) => {
+                      const recordDate = new Date(record.date);
+                      const formattedDate = `${recordDate.getFullYear()}년 ${recordDate.getMonth() + 1}월 ${recordDate.getDate()}일`;
+                      const meals = [];
+                      if (record.meal_breakfast) meals.push('아침');
+                      if (record.meal_lunch) meals.push('점심');
+                      if (record.meal_dinner) meals.push('저녁');
+                      
+                      return (
+                        <div
+                          key={record.id}
+                          className="bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
+                          onClick={async () => {
+                            console.log('📋 기록 클릭:', record.date);
+                            // 해당 날짜로 변경하고 데이터 로드
+                            await loadDailyRecord(record.date);
+                            await loadRoutineChecks(record.date);
+                            setSelectedDate(record.date);
+                            setIsEditMode(true);
+                            // 상단으로 스크롤
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                              {formattedDate}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              {meals.length > 0 && (
+                                <div className="flex gap-1.5">
+                                  {meals.map((meal, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
+                                    >
+                                      {meal}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                ✏️
+                              </span>
+                            </div>
+                          </div>
+                          {record.meal_memo && (
+                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">
+                              {record.meal_memo}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
             </div>
           </div>
@@ -1068,7 +1608,7 @@ function CircularProgressChart({
       </svg>
       {/* 달성률 텍스트 (중앙) */}
       <div 
-        className="absolute inset-0 flex items-center justify-center text-sm font-medium pointer-events-none"
+        className="absolute inset-0 flex items-center justify-center text-xs font-medium pointer-events-none"
         style={{ color }}
       >
         {Math.round(progress)}%
