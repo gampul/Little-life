@@ -48,10 +48,25 @@
 
 ### 2. 환경 변수 설정
 
+프로젝트 루트에 `.env.local` 파일을 생성하고 다음 변수들을 설정하세요:
+
 ```env
+# Supabase 설정
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# 날씨 API 설정 (선택사항)
+# OpenWeatherMap 무료 API 키 발급: https://openweathermap.org/api
+NEXT_PUBLIC_WEATHER_API_KEY=your_openweathermap_api_key
 ```
+
+**날씨 API 키 발급 방법:**
+1. [OpenWeatherMap](https://openweathermap.org/api) 사이트 방문
+2. 무료 계정 생성 (Free tier)
+3. API Keys 섹션에서 키 복사
+4. `.env.local` 파일에 `NEXT_PUBLIC_WEATHER_API_KEY`로 설정
+
+> ⚠️ 날씨 API 키가 없어도 앱은 정상 작동합니다. 단, 날씨 정보는 표시되지 않습니다.
 
 ### 3. 실행
 

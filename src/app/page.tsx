@@ -41,6 +41,13 @@ interface RoutineCheck {
 
 type PeriodFilter = '7days' | '1month' | '1year' | 'ytd' | 'all';
 
+interface WeatherData {
+  temperature: number;
+  description: string;
+  icon: string;
+  city: string;
+}
+
 export default function Home() {
   const userId = 'default_user'; // 실제 앱에서는 로그인한 사용자 ID 사용
 
@@ -84,6 +91,56 @@ export default function Home() {
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
+  // 날씨 관련 상태
+  const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [isLoadingWeather, setIsLoadingWeather] = useState(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
+  // 날씨 API 호출 함수
+  const fetchWeather = useCallback(async () => {
+    const apiKey = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
+    if (!apiKey) {
+      setWeatherError('날씨 API 키가 설정되지 않았습니다. .env.local 파일에 NEXT_PUBLIC_WEATHER_API_KEY를 추가해주세요.');
+      setIsLoadingWeather(false);
+      return;
+    }
+
+    setIsLoadingWeather(true);
+    setWeatherError(null);
+    try {
+      // 사용자의 위치를 가져오거나 기본값으로 서울 사용
+      // 실제로는 geolocation API를 사용하거나 사용자가 설정한 위치를 사용할 수 있습니다
+      const city = 'Seoul'; // 기본값: 서울
+      const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric&lang=kr`;
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('API 키가 유효하지 않습니다. OpenWeatherMap에서 발급한 키를 확인해주세요.');
+        } else if (response.status === 404) {
+          throw new Error('도시를 찾을 수 없습니다.');
+        } else {
+          throw new Error(errorData.message || '날씨 데이터를 가져오는데 실패했습니다.');
+        }
+      }
+
+      const data = await response.json();
+      setWeatherData({
+        temperature: Math.round(data.main.temp),
+        description: data.weather[0].description,
+        icon: data.weather[0].icon,
+        city: data.name,
+      });
+      setWeatherError(null);
+    } catch (error: any) {
+      console.error('날씨 데이터 가져오기 실패:', error);
+      setWeatherError(error.message || '날씨 정보를 불러올 수 없습니다.');
+    } finally {
+      setIsLoadingWeather(false);
+    }
+  }, []);
+
   const handleInputChange = (
     field: keyof DailyRecord,
     value: string | number
@@ -92,74 +149,6 @@ export default function Home() {
       ...prev,
       [field]: value,
     }));
-  };
-
-  // Storage 테스트 함수
-  const testStorageConnection = async () => {
-    console.log('\n🧪 === Supabase Storage 연결 테스트 시작 ===');
-    
-    if (!supabase) {
-      console.error('❌ Supabase 클라이언트가 초기화되지 않았습니다.');
-      alert('❌ Supabase 연결 실패: 환경 변수를 확인해주세요.');
-      return;
-    }
-    
-    try {
-      // 1. Bucket 목록 조회
-      console.log('1️⃣ Storage Buckets 조회 중...');
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      
-      if (bucketError) {
-        console.error('❌ Bucket 조회 실패:', bucketError);
-        alert(`❌ Storage 접근 오류:\n${bucketError.message}`);
-        return;
-      }
-      
-      console.log('✅ 사용 가능한 buckets:', buckets?.map(b => b.name) || []);
-      
-      // 2. meal-images bucket 확인
-      const mealImagesBucket = buckets?.find(b => b.name === 'meal-images');
-      
-      if (!mealImagesBucket) {
-        console.error('❌ meal-images bucket이 없습니다.');
-        console.log('📋 사용 가능한 buckets:', buckets?.map(b => b.name) || '없음');
-        alert(`❌ meal-images bucket이 없습니다!\n\n✨ 해결 방법:\n1. Supabase Dashboard → Storage\n2. "Create bucket" 클릭\n3. Name: meal-images\n4. Public: ✅ 체크\n5. Create 클릭\n\n현재 buckets: ${buckets?.map(b => b.name).join(', ') || '없음'}`);
-        return;
-      }
-      
-      console.log('✅ meal-images bucket 존재:', mealImagesBucket);
-      console.log('   - ID:', mealImagesBucket.id);
-      console.log('   - Public:', mealImagesBucket.public);
-      console.log('   - Created:', mealImagesBucket.created_at);
-      
-      // 3. Bucket 내 파일 목록 조회 (권한 테스트)
-      console.log('2️⃣ Bucket 읽기 권한 테스트 중...');
-      const { data: files, error: listError } = await supabase.storage
-        .from('meal-images')
-        .list('', { limit: 1 });
-      
-      if (listError) {
-        console.warn('⚠️ 파일 목록 조회 실패:', listError);
-        alert(`⚠️ Bucket 읽기 권한 오류:\n${listError.message}\n\n✨ RLS 정책을 확인해주세요:\nStorage → meal-images → Policies`);
-        return;
-      }
-      
-      console.log('✅ Bucket 읽기 권한 OK');
-      console.log('   - 파일 개수:', files?.length || 0);
-      
-      // 4. 최종 결과
-      console.log('\n🎉 === Storage 테스트 완료 ===');
-      console.log('✅ Supabase 연결: OK');
-      console.log('✅ meal-images bucket: OK');
-      console.log('✅ 읽기 권한: OK');
-      console.log('✅ 업로드 준비: 완료!\n');
-      
-      alert(`✅ Supabase Storage 정상 작동!\n\n📦 Bucket: meal-images\n🔓 Public: ${mealImagesBucket.public ? '예' : '아니오'}\n📁 저장된 파일: ${files?.length || 0}개\n\n✅ 사진 업로드가 가능합니다!`);
-      
-    } catch (error: any) {
-      console.error('❌ Storage 테스트 중 예외 발생:', error);
-      alert(`❌ 테스트 실패:\n${error.message || error}`);
-    }
   };
 
   // 이미지 업로드 핸들러
@@ -566,6 +555,7 @@ export default function Home() {
     loadRoutineChecks(selectedDate);
     loadAllRecords();
     loadMealRecords();
+    fetchWeather(); // 날씨 데이터 가져오기
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 빈 배열로 초기 마운트 시에만 실행
 
@@ -944,8 +934,8 @@ export default function Home() {
                       }
                     }}
                   />
-                  {/* 날짜 포맷 표시 (오버레이) - 한 줄로 정렬, 박스 안으로 제한 */}
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-base text-gray-900 dark:text-white font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-2rem)]">
+                  {/* 날짜 포맷 표시 (오버레이) - 한 줄로 정렬, 전체 텍스트 표시 */}
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-base text-gray-900 dark:text-white font-medium whitespace-nowrap">
                     {(() => {
                       const date = new Date(selectedDate);
                       const year = date.getFullYear();
@@ -965,13 +955,13 @@ export default function Home() {
               }
               placeholder="체중"
               disabled={!isEditMode}
-              className="flex-1 px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+              className="w-20 px-3 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
             />
             {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                className="flex-1 px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
+                className="w-12 px-2 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
                 aria-label="수정하기"
                   >
                 <span className="text-base">✏️</span>
@@ -980,13 +970,58 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                className="flex-1 px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="w-12 px-2 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label={isSaving ? '저장 중' : '저장'}
                   >
                 <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
                   </button>
                 )}
               </div>
+              {/* 날씨 정보 표시 */}
+              {weatherData && (
+                <div className="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                  <span className="text-lg">
+                    {weatherData.icon && (
+                      <img 
+                        src={`https://openweathermap.org/img/wn/${weatherData.icon}@2x.png`} 
+                        alt={weatherData.description}
+                        className="w-8 h-8"
+                      />
+                    )}
+                  </span>
+                  <span className="font-medium">{weatherData.temperature}°C</span>
+                  <span className="text-gray-500 dark:text-gray-400">•</span>
+                  <span>{weatherData.description}</span>
+                  <span className="text-gray-500 dark:text-gray-400">•</span>
+                  <span className="text-gray-600 dark:text-gray-400">{weatherData.city}</span>
+                </div>
+              )}
+              {isLoadingWeather && (
+                <div className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                  날씨 정보를 불러오는 중...
+                </div>
+              )}
+              {weatherError && !isLoadingWeather && (
+                <div className="mt-3 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-2">
+                    <span>⚠️</span>
+                    <div className="flex-1">
+                      <div className="font-medium mb-1">날씨 정보를 불러올 수 없습니다</div>
+                      <div className="text-amber-700 dark:text-amber-300">{weatherError}</div>
+                      <div className="mt-2 text-amber-600 dark:text-amber-400">
+                        <a 
+                          href="https://openweathermap.org/api" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="underline hover:text-amber-800 dark:hover:text-amber-200"
+                        >
+                          OpenWeatherMap에서 무료 API 키 발급하기 →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               {message && (
                 <div className="mt-3 text-center text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{message}</div>
               )}
@@ -1367,18 +1402,8 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* 수정/저장 버튼 + Storage 테스트 버튼 */}
+                {/* 수정/저장 버튼 */}
                 <div className="ml-auto shrink-0 flex items-center gap-2">
-                  {/* Storage 테스트 버튼 */}
-                  <button
-                    onClick={testStorageConnection}
-                    className="text-sm px-2 py-1 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors border border-gray-300 dark:border-gray-600 rounded hover:border-blue-400 dark:hover:border-blue-500"
-                    aria-label="Storage 연결 테스트"
-                    title="Supabase Storage 연결 상태를 확인합니다"
-                  >
-                    🧪
-                  </button>
-                  
                   {!isEditMode ? (
                     <button
                       onClick={handleEdit}
@@ -1523,7 +1548,21 @@ export default function Home() {
                                   ))}
                                 </div>
                               )}
-                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                              <span 
+                                className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                onClick={async (e) => {
+                                  e.stopPropagation(); // 부모 div의 클릭 이벤트 방지
+                                  console.log('✏️ 수정 아이콘 클릭:', record.date);
+                                  // 해당 날짜로 변경하고 데이터 로드
+                                  await loadDailyRecord(record.date);
+                                  await loadRoutineChecks(record.date);
+                                  setSelectedDate(record.date);
+                                  setIsEditMode(true);
+                                  // 상단으로 스크롤
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                title="수정하기"
+                              >
                                 ✏️
                               </span>
                             </div>
