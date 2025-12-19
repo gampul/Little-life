@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
+import { LoadingScreen } from './components/LoadingScreen';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -90,6 +91,9 @@ export default function Home() {
   });
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  // 초기 로딩 상태
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // 날씨 관련 상태
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
@@ -551,11 +555,20 @@ export default function Home() {
 
   // 초기 데이터 로드 (마운트 시 한 번만)
   useEffect(() => {
-    loadDailyRecord(selectedDate);
-    loadRoutineChecks(selectedDate);
-    loadAllRecords();
-    loadMealRecords();
-    fetchWeather(); // 날씨 데이터 가져오기
+    const initializeData = async () => {
+      await Promise.all([
+        loadDailyRecord(selectedDate),
+        loadRoutineChecks(selectedDate),
+        loadAllRecords(),
+        loadMealRecords(),
+        fetchWeather()
+      ]);
+      // 최소 1.5초 로딩 화면 표시 후 해제
+      setTimeout(() => {
+        setIsInitialLoading(false);
+      }, 1500);
+    };
+    initializeData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 빈 배열로 초기 마운트 시에만 실행
 
@@ -871,6 +884,11 @@ export default function Home() {
     );
   }
 
+  // 초기 로딩 중일 때 로딩 화면 표시
+  if (isInitialLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
@@ -921,7 +939,7 @@ export default function Home() {
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full px-4 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    className="w-full px-4 py-3 text-base bg-transparent text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                     style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -955,13 +973,13 @@ export default function Home() {
               }
               placeholder="체중"
               disabled={!isEditMode}
-              className="w-20 px-3 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+              className="w-20 px-3 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
             />
             {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                className="w-12 px-2 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
+                className="w-12 px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
                 aria-label="수정하기"
                   >
                 <span className="text-base">✏️</span>
@@ -970,7 +988,7 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                className="w-12 px-2 py-3 text-base bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="w-12 px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label={isSaving ? '저장 중' : '저장'}
                   >
                 <span className="text-base">{isSaving ? '⏳' : '💾'}</span>
@@ -1167,7 +1185,7 @@ export default function Home() {
                     onClick={() => setWeightPeriod('7days')}
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '7days'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-red-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
@@ -1177,7 +1195,7 @@ export default function Home() {
                     onClick={() => setWeightPeriod('1month')}
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '1month'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-red-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
@@ -1187,7 +1205,7 @@ export default function Home() {
                     onClick={() => setWeightPeriod('1year')}
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === '1year'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-red-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
@@ -1197,7 +1215,7 @@ export default function Home() {
                     onClick={() => setWeightPeriod('ytd')}
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === 'ytd'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-red-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
@@ -1207,7 +1225,7 @@ export default function Home() {
                     onClick={() => setWeightPeriod('all')}
                     className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                       weightPeriod === 'all'
-                        ? 'bg-blue-600 text-white'
+                        ? 'bg-red-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                     }`}
                   >
