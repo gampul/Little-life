@@ -7,6 +7,8 @@ const __dirname = path.dirname(__filename);
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   outputFileTracingRoot: __dirname, // 현재 디렉토리를 루트로 명시
+  // Turbopack 설정 (Next.js 16 기본)
+  turbopack: {},
   // 빌드 시점에 환경 변수 확인 (디버깅용)
   webpack: (config, { isServer }) => {
     if (!isServer) {
