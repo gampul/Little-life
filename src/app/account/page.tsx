@@ -9,6 +9,9 @@ import {
   Line,
   BarChart,
   Bar,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -48,6 +51,11 @@ interface DivisionSummary {
   [key: string]: string | number;
 }
 
+interface CategorySummary {
+  period: string;
+  [key: string]: string | number;
+}
+
 // 숫자 포맷 함수
 const formatNumber = (num: number): string => {
   if (num >= 100000000) {
@@ -67,7 +75,7 @@ export default function AccountPage() {
   const supabase = getSupabase();
   const [records, setRecords] = useState<FinanceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'owner' | 'division' | 'add'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'owner' | 'division' | 'category' | 'add'>('overview');
   const [message, setMessage] = useState('');
 
   // 신규 등록 폼 상태
@@ -106,8 +114,27 @@ export default function AccountPage() {
   // 기본 카테고리 목록 (순서 유지)
   const defaultCategories = ['S&P', 'DOW', 'REITs', 'CC', 'NASDAQ', 'ROBOT'];
 
+  // 종목명 선택 아코디언 상태
+  const [isStockOpen, setIsStockOpen] = useState(false);
+  const [isCustomStock, setIsCustomStock] = useState(false);
+  const [customStockInput, setCustomStockInput] = useState('');
+
+  // 기본 종목명 목록
+  const defaultStocks = [
+    'Tigier 리츠부동산 인프라&ACE 미국 S&P500채권혼합액티브',
+    'ACE 미국 S&P 500',
+    'SOL 미국배당다우존스',
+    'RISE 미국나스닥 100',
+    'KODEX 미국배당커브드콜액티브',
+    '미국 SPEC',
+    'KODEX 미국휴머노이드로봇',
+  ];
+
   // 계좌유형 선택 아코디언 상태
   const [isDivisionOpen, setIsDivisionOpen] = useState(false);
+
+  // 계좌유형별 상세보기 토글 상태
+  const [expandedDivisions, setExpandedDivisions] = useState<{ [key: string]: boolean }>({});
 
   // 기본 계좌유형 목록
   const defaultDivisions = [
@@ -233,6 +260,27 @@ export default function AccountPage() {
     });
   };
 
+  // Category별 기간별 합계 데이터
+  const getCategorySummary = (): CategorySummary[] => {
+    const categories = [...new Set(records.map((r) => r.category).filter(Boolean))];
+    const periods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
+      const monthA = parseInt(a.replace('2025. ', ''));
+      const monthB = parseInt(b.replace('2025. ', ''));
+      return monthA - monthB;
+    });
+
+    return periods.map((period) => {
+      const result: CategorySummary = { period: period.replace('2025. ', '') };
+      categories.forEach((category) => {
+        const catRecords = records.filter(
+          (r) => r.period === period && r.category === category
+        );
+        result[category] = catRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+      });
+      return result;
+    });
+  };
+
   // 신규 레코드 저장
   const handleSaveRecord = async () => {
     if (!supabase) {
@@ -276,6 +324,7 @@ export default function AccountPage() {
   // 고유 Owner 목록
   const uniqueOwners = [...new Set(records.map((r) => r.owner))];
   const uniqueDivisions = [...new Set(records.map((r) => r.division))];
+  const uniqueCategories = [...new Set(records.map((r) => r.category).filter(Boolean))];
 
   // 기간 목록 생성 (기존 + 미래 기간)
   const getAvailablePeriods = (): string[] => {
@@ -387,6 +436,32 @@ export default function AccountPage() {
     }
   };
 
+  // 종목명 목록 생성 (기본값 + 데이터에서 추출된 종목)
+  const getAvailableStocks = (): string[] => {
+    const recordStocks = [...new Set(records.map((r) => r.stock).filter(Boolean))];
+    const allStocks = [...new Set([...defaultStocks, ...recordStocks])];
+    return allStocks;
+  };
+
+  const availableStocks = getAvailableStocks();
+
+  // 종목명 선택 핸들러
+  const handleStockSelect = (stock: string) => {
+    setNewRecord({ ...newRecord, stock });
+    setIsStockOpen(false);
+    setIsCustomStock(false);
+  };
+
+  // 커스텀 종목명 추가 핸들러
+  const handleCustomStockAdd = () => {
+    if (customStockInput.trim()) {
+      setNewRecord({ ...newRecord, stock: customStockInput.trim() });
+      setCustomStockInput('');
+      setIsCustomStock(false);
+      setIsStockOpen(false);
+    }
+  };
+
   // 색상 배열
   const ownerColors: { [key: string]: string } = {
     '김희창': '#3B82F6',
@@ -406,6 +481,20 @@ export default function AccountPage() {
     'ISA': 'ISA',
   };
 
+  // 카테고리별 색상
+  const categoryColors: { [key: string]: string } = {
+    'S&P': '#3B82F6',
+    'DOW': '#10B981',
+    'REITs': '#F59E0B',
+    'CC': '#EC4899',
+    'NASDAQ': '#8B5CF6',
+    'ROBOT': '#14B8A6',
+  };
+
+  // Legend 컴포넌트용 더미 (사용되지 않지만 import 유지)
+  void Legend;
+  void getCategorySummary;
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20 flex items-center justify-center">
@@ -423,7 +512,7 @@ export default function AccountPage() {
           {/* 제목 */}
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
-              💰 나만의 금융투자 포트폴리오
+              💰 금융투자 포트폴리오
             </h1>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               투자 현황을 기록하고 분석하세요.
@@ -434,21 +523,22 @@ export default function AccountPage() {
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-2">
             <div className="flex gap-1">
               {[
-                { key: 'overview', label: '📊 전체' },
-                { key: 'owner', label: '👤 소유자별' },
-                { key: 'division', label: '📁 계좌별' },
-                { key: 'add', label: '➕ 등록' },
+                { key: 'overview', label: '전체', emoji: '📊' },
+                { key: 'category', label: '비중', emoji: '📈' },
+                { key: 'owner', label: '소유자', emoji: '👤' },
+                { key: 'division', label: '계좌', emoji: '📁' },
+                { key: 'add', label: '등록', emoji: '➕' },
               ].map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                  className={`flex-1 px-2 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+                  className={`flex-1 px-0.5 py-2 text-xs sm:text-sm font-medium rounded-lg transition-colors whitespace-nowrap ${
                     activeTab === tab.key
                       ? 'bg-red-600 text-white'
                       : 'bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
-                  {tab.label}
+                  <span className="hidden sm:inline">{tab.emoji} </span>{tab.label}
                 </button>
               ))}
             </div>
@@ -457,14 +547,173 @@ export default function AccountPage() {
           {/* 전체 현황 탭 */}
           {activeTab === 'overview' && (
             <>
-              {/* 기간별 배당금 & 평가금액 그래프 */}
+              {/* 총 자산 요약 - 통합 */}
               <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
-                  📈 기간별 평가금액 추이
+                {(() => {
+                  const periodSummary = getPeriodSummary();
+                  const latestPeriod = periodSummary.slice(-1)[0];
+                  const prevPeriod = periodSummary.slice(-2, -1)[0];
+                  
+                  // 변동 금액 및 퍼센트 계산
+                  const valueDiff = latestPeriod && prevPeriod 
+                    ? latestPeriod.totalValue - prevPeriod.totalValue
+                    : 0;
+                  const valueChangePercent = latestPeriod && prevPeriod && prevPeriod.totalValue > 0
+                    ? ((valueDiff / prevPeriod.totalValue) * 100)
+                    : 0;
+                  const isPositive = valueDiff >= 0;
+                  
+                  // 최신 월 구하기
+                  const latestMonth = latestPeriod?.period || '12';
+                  
+                  // 배당금 관련 계산
+                  const dividendDiff = latestPeriod && prevPeriod 
+                    ? latestPeriod.totalDividend - prevPeriod.totalDividend
+                    : 0;
+                  const isDividendPositive = dividendDiff >= 0;
+                  
+                  // 2025년 누적 배당금 계산
+                  const yearlyDividend = periodSummary.reduce((sum, p) => sum + p.totalDividend, 0);
+                  
+                  // 2025년 누적 입출금 계산
+                  const yearlyInOut = records.reduce((sum, r) => sum + (r.in_out || 0), 0);
+                  
+                  // 2025년 8월 기준 평가금액 (수익률 기준점)
+                  const augustPeriod = periodSummary.find(p => p.period === '8');
+                  const augustValue = augustPeriod?.totalValue || 0;
+                  
+                  // 8월 이후 입출금 합계 계산 (9월, 10월, 11월, 12월)
+                  const inOutAfterAugust = records
+                    .filter(r => {
+                      const month = parseInt(r.period.split('. ')[1] || '0');
+                      return month > 8;
+                    })
+                    .reduce((sum, r) => sum + (r.in_out || 0), 0);
+                  
+                  // 2025년 수익률 계산: (현재 평가금액 - 8월 평가금액 - 8월 이후 입출금) / 8월 평가금액 * 100
+                  const currentValue = latestPeriod?.totalValue || 0;
+                  const profitLoss = currentValue - augustValue - inOutAfterAugust;
+                  const profitRate = augustValue > 0 ? ((profitLoss / augustValue) * 100) : 0;
+                  const isProfitPositive = profitLoss >= 0;
+                  
+                  // 전월 수익률 계산 (전월이 있는 경우)
+                  let prevProfitLoss = 0;
+                  let prevProfitRate = 0;
+                  let profitDiff = 0;
+                  let profitRateDiff = 0;
+                  
+                  if (prevPeriod && augustValue > 0) {
+                    const prevValue = prevPeriod.totalValue;
+                    // 전월까지의 입출금 (9월 ~ 전월)
+                    const prevMonth = parseInt(prevPeriod.period || '0');
+                    const inOutUntilPrevMonth = records
+                      .filter(r => {
+                        const month = parseInt(r.period.split('. ')[1] || '0');
+                        return month > 8 && month <= prevMonth;
+                      })
+                      .reduce((sum, r) => sum + (r.in_out || 0), 0);
+                    
+                    prevProfitLoss = prevValue - augustValue - inOutUntilPrevMonth;
+                    prevProfitRate = ((prevProfitLoss / augustValue) * 100);
+                    
+                    // 전월 대비 차이
+                    profitDiff = profitLoss - prevProfitLoss;
+                    profitRateDiff = profitRate - prevProfitRate;
+                  }
+                  
+                  return latestPeriod ? (
+                    <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
+                      {/* 총 평가금액 */}
+                      <div className="text-sm text-gray-900 dark:text-white mb-1">
+                        {latestMonth}월(최근) 총평가금액
+                      </div>
+                      <div className="flex items-baseline gap-2 flex-wrap mb-4">
+                        <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {latestPeriod.totalValue.toLocaleString()}원
+                        </span>
+                        {prevPeriod && (
+                          <span className="text-sm text-gray-700 dark:text-gray-300">
+                            ({isPositive ? '+' : ''}{valueDiff.toLocaleString()}원, {isPositive ? '+' : ''}{valueChangePercent.toFixed(1)}%)
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* 상세 정보 */}
+                      <div className="space-y-2.5 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        {/* 12월 배당금 */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-900 dark:text-white">{latestMonth}월 배당금</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                              {latestPeriod.totalDividend.toLocaleString()}원
+                            </span>
+                            {prevPeriod && dividendDiff !== 0 && (
+                              <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
+                                ({isDividendPositive ? '+' : ''}{dividendDiff.toLocaleString()})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* 2025년 누적 배당금 */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-900 dark:text-white">2025년 누적 배당금</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {yearlyDividend.toLocaleString()}원
+                          </span>
+                        </div>
+                        
+                        {/* 2025년 누적 입출금 */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-900 dark:text-white">2025년 누적 입출금</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {yearlyInOut.toLocaleString()}원
+                          </span>
+                        </div>
+                        
+                        {/* 2025년 수익률 */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-900 dark:text-white">2025년 수익률</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                              {isProfitPositive ? '+' : ''}{profitRate.toFixed(1)}%
+                            </span>
+                            <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
+                              ({isProfitPositive ? '+' : ''}{profitLoss.toLocaleString()}원)
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* 전월 대비 수익률 */}
+                        {prevPeriod && profitRateDiff !== 0 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-900 dark:text-white">전월 대비</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                {profitRateDiff >= 0 ? '+' : ''}{profitRateDiff.toFixed(1)}%
+                              </span>
+                              <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
+                                ({profitDiff >= 0 ? '+' : ''}{profitDiff.toLocaleString()}원)
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">데이터가 없습니다.</p>
+                  );
+                })()}
+              </div>
+
+              {/* 기간별 배당금 & 평가금액 그래프 */}
+              <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+                  📈 총자산 추이
                 </h2>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={getPeriodSummary()}>
+                    <LineChart data={getPeriodSummary()} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
                       <XAxis 
                         dataKey="period" 
@@ -474,6 +723,7 @@ export default function AccountPage() {
                       <YAxis 
                         tick={{ fill: '#9CA3AF', fontSize: 10 }}
                         tickFormatter={(v) => formatNumber(v)}
+                        width={50}
                       />
                       <Tooltip
                         contentStyle={{
@@ -485,7 +735,6 @@ export default function AccountPage() {
                         formatter={(value: number) => [formatCurrency(value), '']}
                         labelFormatter={(label) => `${label}월`}
                       />
-                      <Legend />
                       <Line
                         type="monotone"
                         dataKey="totalValue"
@@ -502,7 +751,7 @@ export default function AccountPage() {
               {/* 기간별 배당금 그래프 */}
               <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
-                  💵 기간별 배당금 추이
+                  💵 배당금 추이
                 </h2>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
@@ -527,52 +776,16 @@ export default function AccountPage() {
                         formatter={(value: number) => [formatCurrency(value), '']}
                         labelFormatter={(label) => `${label}월`}
                       />
-                      <Legend />
                       <Bar
                         dataKey="totalDividend"
                         name="배당금"
                         fill="#10B981"
                         radius={[4, 4, 0, 0]}
+                        background={false}
                       />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </div>
-
-              {/* 총 자산 요약 */}
-              <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
-                  💎 최신 현황 요약
-                </h2>
-                {(() => {
-                  const latestPeriod = getPeriodSummary().slice(-1)[0];
-                  const prevPeriod = getPeriodSummary().slice(-2, -1)[0];
-                  const valueChange = latestPeriod && prevPeriod 
-                    ? ((latestPeriod.totalValue - prevPeriod.totalValue) / prevPeriod.totalValue * 100).toFixed(1)
-                    : '0';
-                  
-                  return latestPeriod ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                          {formatNumber(latestPeriod.totalValue)}
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">총 평가금액</div>
-                        <div className={`text-xs mt-1 ${parseFloat(valueChange) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                          {parseFloat(valueChange) >= 0 ? '▲' : '▼'} {Math.abs(parseFloat(valueChange))}%
-                        </div>
-                      </div>
-                      <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                          {formatNumber(latestPeriod.totalDividend)}
-                        </div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">월 배당금</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-gray-500 text-center py-4">데이터가 없습니다.</p>
-                  );
-                })()}
               </div>
             </>
           )}
@@ -606,7 +819,6 @@ export default function AccountPage() {
                       formatter={(value: number) => [formatCurrency(value), '']}
                       labelFormatter={(label) => `${label}월`}
                     />
-                    <Legend />
                     {uniqueOwners.map((owner) => (
                       <Bar
                         key={owner}
@@ -684,7 +896,6 @@ export default function AccountPage() {
                       ]}
                       labelFormatter={(label) => `${label}월`}
                     />
-                    <Legend formatter={(value) => divisionLabels[value] || value} />
                     {uniqueDivisions.map((division) => (
                       <Bar
                         key={division}
@@ -700,32 +911,356 @@ export default function AccountPage() {
 
               {/* 계좌유형별 최신 현황 */}
               <div className="mt-6 space-y-3">
-                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">최신 현황</h3>
-                {uniqueDivisions.map((division) => {
-                  const divRecords = records.filter(
-                    (r) => r.division === division && r.period === '2025. 12'
-                  );
-                  const total = divRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+                {(() => {
+                  // 최신 기간과 전월 기간 구하기
+                  const allPeriods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
+                    const [yearA, monthA] = a.split('. ').map(Number);
+                    const [yearB, monthB] = b.split('. ').map(Number);
+                    if (yearA !== yearB) return yearB - yearA;
+                    return monthB - monthA;
+                  });
+                  const latestPeriod = allPeriods[0] || '2025. 12';
+                  const prevPeriod = allPeriods[1] || '';
+                  const latestMonth = latestPeriod.split('. ')[1] || '12';
+
                   return (
-                    <div
-                      key={division}
-                      className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: divisionColors[division] || '#6B7280' }}
-                        />
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
-                          {divisionLabels[division] || division}
+                    <>
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {latestMonth}월 현황 (최신)
+                      </h3>
+                      {uniqueDivisions.map((division) => {
+                        // 최신 기간 데이터
+                        const divRecords = records.filter(
+                          (r) => r.division === division && r.period === latestPeriod
+                        );
+                        const total = divRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+                        const totalDividend = divRecords.reduce((sum, r) => sum + (r.dividend || 0), 0);
+                        
+                        // 전월 데이터
+                        const prevRecords = records.filter(
+                          (r) => r.division === division && r.period === prevPeriod
+                        );
+                        const prevTotal = prevRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+                        
+                        // 변동 계산
+                        const diff = total - prevTotal;
+                        const diffPercent = prevTotal > 0 ? ((diff / prevTotal) * 100) : 0;
+                        const isPositive = diff >= 0;
+                        
+                        const isExpanded = expandedDivisions[division] || false;
+                        
+                        return (
+                          <div key={division} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg overflow-hidden">
+                            {/* 헤더 - 클릭하면 토글 */}
+                            <button
+                              onClick={() => setExpandedDivisions(prev => ({
+                                ...prev,
+                                [division]: !prev[division]
+                              }))}
+                              className="w-full p-3 hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-colors text-left"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: divisionColors[division] || '#6B7280' }}
+                                  />
+                                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {divisionLabels[division] || division}
+                                  </span>
+                                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    ({divRecords.length}종목)
+                                  </span>
+                                </div>
+                                <svg
+                                  className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                              
+                              {/* 평가금액 */}
+                              <div className="flex items-center justify-between text-sm mb-1">
+                                <span className="text-gray-600 dark:text-gray-400">{latestMonth}월 총평가금액</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold text-gray-900 dark:text-white">
+                                    {total.toLocaleString()}원
+                                  </span>
+                                  {prevTotal > 0 && (
+                                    <span className={`text-xs ${isPositive ? 'text-green-600' : 'text-red-600'}`}>
+                                      ({isPositive ? '+' : ''}{diff.toLocaleString()}원, {isPositive ? '+' : ''}{diffPercent.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {/* 배당금 */}
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-gray-600 dark:text-gray-400">{latestMonth}월 배당금</span>
+                                <span className="font-medium text-green-600 dark:text-green-400">
+                                  {totalDividend.toLocaleString()}원
+                                </span>
+                              </div>
+                            </button>
+                            
+                            {/* 상세 종목 리스트 */}
+                            {isExpanded && divRecords.length > 0 && (
+                              <div className="border-t border-gray-200 dark:border-gray-600">
+                                {divRecords.map((record, idx) => (
+                                  <div
+                                    key={`${record.stock}-${idx}`}
+                                    className="flex items-center justify-between px-4 py-2 text-xs border-b border-gray-100 dark:border-gray-600 last:border-b-0"
+                                  >
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      <span className="text-gray-400">•</span>
+                                      <span className="text-gray-700 dark:text-gray-300 truncate">
+                                        {record.stock}
+                                      </span>
+                                      {record.category && (
+                                        <span className="text-[10px] bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded flex-shrink-0">
+                                          {record.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-gray-900 dark:text-white font-medium ml-2 flex-shrink-0">
+                                      {(record.value || 0).toLocaleString()}원
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* 카테고리별 탭 */}
+          {activeTab === 'category' && (
+            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
+              <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
+                📈 투자비중
+              </h2>
+
+              {/* 카테고리별 원형 차트 */}
+              <div>
+                {(() => {
+                  // 최신 기간 찾기
+                  const periods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
+                    const [yearA, monthA] = a.split('. ').map(Number);
+                    const [yearB, monthB] = b.split('. ').map(Number);
+                    if (yearA !== yearB) return yearB - yearA;
+                    return monthB - monthA;
+                  });
+                  const latestPeriod = periods[0];
+                  
+                  // 최신 기간의 카테고리별 합계 데이터
+                  const pieData = uniqueCategories.map((category) => {
+                    const catRecords = records.filter(
+                      (r) => r.category === category && r.period === latestPeriod
+                    );
+                    const total = catRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+                    return {
+                      name: category,
+                      value: total,
+                      color: categoryColors[category] || '#6B7280',
+                    };
+                  }).filter((item) => item.value > 0);
+
+                  const totalValue = pieData.reduce((sum, item) => sum + item.value, 0);
+
+                  return pieData.length > 0 ? (
+                    <>
+                      <div className="text-center text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        기준: {latestPeriod}
+                      </div>
+                      <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={pieData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={95}
+                              paddingAngle={4}
+                              dataKey="value"
+                              label={({ name, percent, cx, cy, midAngle, outerRadius }) => {
+                                const RADIAN = Math.PI / 180;
+                                const radius = outerRadius + 25;
+                                const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                const pct = (percent * 100).toFixed(0);
+                                if (percent < 0.005) return null; // 0.5% 미만만 라벨 숨김
+                                return (
+                                  <text
+                                    x={x}
+                                    y={y}
+                                    fill="#374151"
+                                    textAnchor={x > cx ? 'start' : 'end'}
+                                    dominantBaseline="central"
+                                    fontSize={16}
+                                    fontWeight={500}
+                                  >
+                                    {`${name} ${pct}%`}
+                                  </text>
+                                );
+                              }}
+                              labelLine={{
+                                stroke: '#9CA3AF',
+                                strokeWidth: 1,
+                              }}
+                            >
+                              {pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: '#FFFFFF',
+                                border: '1px solid #E5E7EB',
+                                borderRadius: '8px',
+                                color: '#1F2937',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                              }}
+                              formatter={(value: number) => [formatCurrency(value), '']}
+                              labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      {/* 총합 표시 */}
+                      <div className="text-center mt-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-300">총 평가금액: </span>
+                        <span className="text-lg font-bold text-gray-900 dark:text-white">
+                          {formatCurrency(totalValue)}
                         </span>
                       </div>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {formatCurrency(total)}
-                      </span>
-                    </div>
+                      {/* 범례 리스트 */}
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        {pieData.map((item) => (
+                          <div
+                            key={item.name}
+                            className="flex items-center justify-between bg-white dark:bg-gray-600 rounded-lg p-2.5 shadow-sm border border-gray-100 dark:border-gray-500"
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="text-sm font-medium text-gray-800 dark:text-gray-100">
+                                {item.name}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                              {formatNumber(item.value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">데이터가 없습니다.</p>
                   );
-                })}
+                })()}
+              </div>
+
+              {/* 카테고리별 최근 3개월 데이터 표 */}
+              <div className="mt-6">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">📊 최근 3개월 추이</h2>
+                {(() => {
+                  // 최근 3개월 기간 가져오기
+                  const allPeriods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
+                    const [yearA, monthA] = a.split('. ').map(Number);
+                    const [yearB, monthB] = b.split('. ').map(Number);
+                    if (yearA !== yearB) return yearB - yearA;
+                    return monthB - monthA;
+                  });
+                  const recentPeriods = allPeriods.slice(0, 3).reverse(); // 오래된 순으로 정렬
+
+                  // 카테고리별 데이터 집계
+                  const latestPeriod = recentPeriods[recentPeriods.length - 1];
+                  const tableData = uniqueCategories.map((category) => {
+                    const periodValues: { [key: string]: number } = {};
+                    recentPeriods.forEach((period) => {
+                      const catRecords = records.filter(
+                        (r) => r.category === category && r.period === period
+                      );
+                      periodValues[period] = catRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+                    });
+                    return {
+                      category,
+                      color: categoryColors[category] || '#6B7280',
+                      periodValues,
+                      latestValue: periodValues[latestPeriod] || 0,
+                    };
+                  }).filter((item) => {
+                    // 최근 3개월 중 하나라도 값이 있는 카테고리만 표시
+                    return recentPeriods.some((p) => item.periodValues[p] > 0);
+                  }).sort((a, b) => b.latestValue - a.latestValue); // 최신 금액 기준 내림차순 정렬
+
+                  return tableData.length > 0 && recentPeriods.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 dark:border-gray-600">
+                            <th className="text-left py-2 px-2 text-gray-600 dark:text-gray-400 font-medium">카테고리</th>
+                            {recentPeriods.map((period) => (
+                              <th key={period} className="text-right py-2 px-2 text-gray-600 dark:text-gray-400 font-medium">
+                                {period.replace('2025. ', '')}월
+                              </th>
+                            ))}
+                            <th className="text-right py-2 px-2 text-gray-600 dark:text-gray-400 font-medium">변동</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableData.map((row) => {
+                            const firstValue = row.periodValues[recentPeriods[0]] || 0;
+                            const lastValue = row.periodValues[recentPeriods[recentPeriods.length - 1]] || 0;
+                            const change = firstValue > 0 ? ((lastValue - firstValue) / firstValue * 100) : 0;
+                            
+                            return (
+                              <tr key={row.category} className="border-b border-gray-100 dark:border-gray-700">
+                                <td className="py-2 px-2">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-2.5 h-2.5 rounded-full"
+                                      style={{ backgroundColor: row.color }}
+                                    />
+                                    <span className="font-medium text-gray-900 dark:text-white">{row.category}</span>
+                                  </div>
+                                </td>
+                                {recentPeriods.map((period) => (
+                                  <td key={period} className="text-right py-2 px-2 text-gray-700 dark:text-gray-300">
+                                    {row.periodValues[period] > 0 ? formatNumber(row.periodValues[period]) : '-'}
+                                  </td>
+                                ))}
+                                <td className="text-right py-2 px-2">
+                                  {change !== 0 ? (
+                                    <span className={`font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                      {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-center py-4">최근 3개월 데이터가 없습니다.</p>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -1187,18 +1722,129 @@ export default function AccountPage() {
                   )}
                 </div>
 
-                {/* 종목명 */}
-                <div>
+                {/* 종목명 - 아코디언 선택 */}
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    종목명 *
+                    📊 종목명 *
                   </label>
-                  <input
-                    type="text"
-                    placeholder="예: ACE 미국 S&P 500"
-                    value={newRecord.stock}
-                    onChange={(e) => setNewRecord({ ...newRecord, stock: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
+                  
+                  {/* 선택된 종목명 표시 / 토글 버튼 */}
+                  <button
+                    type="button"
+                    onClick={() => setIsStockOpen(!isStockOpen)}
+                    className="w-full px-3 py-2.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-left flex items-center justify-between focus:ring-2 focus:ring-blue-500 outline-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-600"
+                  >
+                    <span className={`truncate ${newRecord.stock ? 'text-gray-900 dark:text-white' : 'text-gray-400 dark:text-gray-500'}`}>
+                      {newRecord.stock || '종목을 선택하세요'}
+                    </span>
+                    <svg
+                      className={`w-5 h-5 text-gray-500 transition-transform flex-shrink-0 ${isStockOpen ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* 아코디언 드롭다운 */}
+                  {isStockOpen && (
+                    <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      {/* 종목명 목록 */}
+                      {availableStocks.map((stock) => {
+                        const isDefault = defaultStocks.includes(stock);
+                        return (
+                          <button
+                            key={stock}
+                            type="button"
+                            onClick={() => handleStockSelect(stock)}
+                            className={`w-full px-4 py-2.5 text-sm text-left flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors ${
+                              newRecord.stock === stock
+                                ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 font-medium'
+                                : 'text-gray-900 dark:text-white'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2 truncate">
+                              {newRecord.stock === stock && (
+                                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                              <span className="truncate">{stock}</span>
+                            </span>
+                            {isDefault && (
+                              <span className="text-xs bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400 px-2 py-0.5 rounded-full flex-shrink-0 ml-2">
+                                기본
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+
+                      {/* 구분선 */}
+                      <div className="border-t border-gray-200 dark:border-gray-600 my-1" />
+
+                      {/* 직접 입력 옵션 */}
+                      {!isCustomStock ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomStock(true)}
+                          className="w-full px-4 py-2.5 text-sm text-left text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          새 종목 추가...
+                        </button>
+                      ) : (
+                        <div className="p-3 space-y-2">
+                          <input
+                            type="text"
+                            placeholder="예: KODEX 200"
+                            value={customStockInput}
+                            onChange={(e) => setCustomStockInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleCustomStockAdd();
+                              }
+                            }}
+                            className="w-full px-3 py-2 text-sm bg-gray-50 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCustomStockAdd}
+                              className="flex-1 px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                            >
+                              추가
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomStock(false);
+                                setCustomStockInput('');
+                              }}
+                              className="px-3 py-1.5 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 외부 클릭 시 닫기 */}
+                  {isStockOpen && (
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => {
+                        setIsStockOpen(false);
+                        setIsCustomStock(false);
+                      }}
+                    />
+                  )}
                 </div>
 
                 {/* 수량 & 입출금 */}
@@ -1292,3 +1938,5 @@ export default function AccountPage() {
     </div>
   );
 }
+
+
