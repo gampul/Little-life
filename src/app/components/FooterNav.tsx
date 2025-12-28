@@ -22,7 +22,7 @@ export function FooterNav(props: FooterNavProps) {
     { href: '/ai', label: 'AI', emoji: '🚀' },
     { href: '/', label: 'Daily', emoji: '📅' },
     { href: '/memo', label: 'Diary', emoji: '📝' },
-    { href: '/account', label: '가계부', emoji: '💰' },
+    { href: '/account', label: 'Property', emoji: '💰' },
     { href: '/settings', label: '', emoji: null, isDots: true },
   ];
 
