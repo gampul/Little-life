@@ -1271,12 +1271,12 @@ export default function AccountPage() {
                               outerRadius={95}
                               paddingAngle={4}
                               dataKey="value"
-                              label={({ name, percent, cx, cy, midAngle, outerRadius }) => {
+                              label={({ name, percent, cx, cy, midAngle, outerRadius }: any) => {
                                 const RADIAN = Math.PI / 180;
-                                const radius = outerRadius + 25;
-                                const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                                const pct = (percent * 100).toFixed(0);
+                                const radius = (outerRadius as number) + 25;
+                                const x = (cx as number) + radius * Math.cos(-(midAngle as number) * RADIAN);
+                                const y = (cy as number) + radius * Math.sin(-(midAngle as number) * RADIAN);
+                                const pct = ((percent as number) * 100).toFixed(0);
                                 if (percent < 0.005) return null; // 0.5% 미만만 라벨 숨김
                                 return (
                                   <text
