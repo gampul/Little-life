@@ -9,6 +9,7 @@ import {
   Line,
   BarChart,
   Bar,
+  ComposedChart,
   PieChart,
   Pie,
   Cell,
@@ -52,6 +53,11 @@ interface DivisionSummary {
 }
 
 interface CategorySummary {
+  period: string;
+  [key: string]: string | number;
+}
+
+interface StockSummary {
   period: string;
   [key: string]: string | number;
 }
@@ -276,6 +282,27 @@ export default function AccountPage() {
           (r) => r.period === period && r.category === category
         );
         result[category] = catRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+      });
+      return result;
+    });
+  };
+
+  // Stock별 기간별 합계 데이터
+  const getStockSummary = (): StockSummary[] => {
+    const stocks = [...new Set(records.map((r) => r.stock).filter(Boolean))];
+    const periods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
+      const monthA = parseInt(a.replace('2025. ', ''));
+      const monthB = parseInt(b.replace('2025. ', ''));
+      return monthA - monthB;
+    });
+
+    return periods.map((period) => {
+      const result: StockSummary = { period: period.replace('2025. ', '') };
+      stocks.forEach((stock) => {
+        const stockRecords = records.filter(
+          (r) => r.period === period && r.stock === stock
+        );
+        result[stock] = stockRecords.reduce((sum, r) => sum + (r.value || 0), 0);
       });
       return result;
     });
@@ -707,13 +734,13 @@ export default function AccountPage() {
               </div>
 
               {/* 기간별 배당금 & 평가금액 그래프 */}
-              <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-4">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+              <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-1 sm:p-2">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
                   📈 총자산 추이
                 </h2>
-                <div className="h-64">
+                <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={getPeriodSummary()} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <ComposedChart data={getPeriodSummary()} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
                       <XAxis 
                         dataKey="period" 
@@ -721,9 +748,22 @@ export default function AccountPage() {
                         tickFormatter={(v) => `${v}월`}
                       />
                       <YAxis 
+                        yAxisId="left"
                         tick={{ fill: '#9CA3AF', fontSize: 10 }}
                         tickFormatter={(v) => formatNumber(v)}
-                        width={50}
+                        width={40}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fill: '#6B7280', fontSize: 10 }}
+                        tickFormatter={(v) => formatNumber(v)}
+                        width={40}
+                        axisLine={false}
+                        tickLine={false}
+                        domain={[0, 1000000]}
                       />
                       <Tooltip
                         contentStyle={{
@@ -732,10 +772,26 @@ export default function AccountPage() {
                           borderRadius: '8px',
                           color: '#fff',
                         }}
-                        formatter={(value: number) => [formatCurrency(value), '']}
+                        formatter={(value: number, name: string) => {
+                          if (name === '평가금액') {
+                            return [formatCurrency(value), '평가금액'];
+                          } else if (name === '배당금') {
+                            return [formatCurrency(value), '배당금'];
+                          }
+                          return [formatCurrency(value), name];
+                        }}
                         labelFormatter={(label) => `${label}월`}
                       />
+                      <Bar
+                        yAxisId="right"
+                        dataKey="totalDividend"
+                        name="배당금"
+                        fill="#6B7280"
+                        radius={[4, 4, 0, 0]}
+                        background={false}
+                      />
                       <Line
+                        yAxisId="left"
                         type="monotone"
                         dataKey="totalValue"
                         name="평가금액"
@@ -743,50 +799,11 @@ export default function AccountPage() {
                         strokeWidth={2}
                         dot={{ fill: '#3B82F6', r: 4 }}
                       />
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* 기간별 배당금 그래프 */}
-              <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-                <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
-                  💵 배당금 추이
-                </h2>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={getPeriodSummary()}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
-                      <XAxis 
-                        dataKey="period" 
-                        tick={{ fill: '#9CA3AF', fontSize: 12 }}
-                        tickFormatter={(v) => `${v}월`}
-                      />
-                      <YAxis 
-                        tick={{ fill: '#9CA3AF', fontSize: 10 }}
-                        tickFormatter={(v) => formatNumber(v)}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1F2937',
-                          border: 'none',
-                          borderRadius: '8px',
-                          color: '#fff',
-                        }}
-                        formatter={(value: number) => [formatCurrency(value), '']}
-                        labelFormatter={(label) => `${label}월`}
-                      />
-                      <Bar
-                        dataKey="totalDividend"
-                        name="배당금"
-                        fill="#10B981"
-                        radius={[4, 4, 0, 0]}
-                        background={false}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
             </>
           )}
 
