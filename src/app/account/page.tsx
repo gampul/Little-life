@@ -308,6 +308,168 @@ export default function AccountPage() {
     });
   };
 
+  // CSV 파일 업로드 핸들러
+  const handleCSVFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const csvContent = e.target?.result as string;
+      await handleUpdateFromCSV(csvContent);
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  // CSV 데이터로 업데이트
+  const handleUpdateFromCSV = async (csvContent?: string) => {
+    if (!supabase) {
+      setMessage('❌ Supabase 연결이 설정되지 않았습니다.');
+      return;
+    }
+
+    try {
+      // CSV 내용이 제공되지 않으면 기본 데이터 사용
+      if (!csvContent) {
+        const defaultCSV = [
+          '기간,owner,division,category,stock,QTY,in&out,dividend,value,note,1열,2열,3열',
+          '2025. 8,김희창,P,REITs,Tigier 리츠부동산 인프라&ACE 미국 S&P500 채권혼합액티브,,,"163,086","31,949,405",,,,',
+          '2025. 8,김희창,P,S&P,ACE 미국 S&P 500,,,"80,678","32,563,960",,,,',
+          '2025. 8,김희창,P,DOW,SOL 미국배당다우존스,,,"65,912","26,738,630",,,,',
+          '2025. 8,김희창,P,CC,KODEX 미국배당커버드콜액티브,,,"44,528","4,851,120",,,,',
+          '2025. 8,민수진,P,NASDAQ,RISE 미국나스닥 100,,,0,"4,183,900",,,,',
+          '2025. 8,김희창,G,ROBOT,KODEX 미국휴머노이드로봇,,,"8,999","19,606,850",,,,',
+          '2025. 8,김희창,ISA,CC,KODEX 미국배당커브드콜액티브,,,"11,592","1,545,700",,,,',
+          '2025. 8,김희창,G,SPEC,미국 SPEC,,,0,"800,000",,,,',
+          '2025. 9,김희창,P,REITs,Tigier 리츠부동산 인프라&ACE 미국 S&P500채권혼합액티브,,,"163,086","32,540,000",,,,',
+          '2025. 9,김희창,P,S&P,ACE 미국 S&P 500,,,,"33,720,000",,,,',
+          '2025. 9,김희창,P,DOW,SOL 미국배당다우존스,,,"75,968","26,435,000",,,,',
+          '2025. 9,김희창,P,CC,KODEX 미국배당커버드콜액티브,,,"44,804","5,020,000",,,,',
+          '2025. 9,민수진,P,NASDAQ,RISE 미국나스닥 100,,"500,000",,"4,800,000",,,,',
+          '2025. 9,김희창,G,ROBOT,KODEX 미국휴머노이드로봇,,"-527,851",,"21,104,495",,,,',
+          '2025. 9,김희창,ISA,CC,KODEX 미국배당커브드콜액티브,,,"11,960","1,585,000",,,,',
+          '2025. 9,김희창,G,SPEC,미국 SPEC,,,,"1,140,000",,,,',
+          '2025. 10,김희창,P,REITs,Tigier 리츠부동산 인프라&ACE 미국 S&P500채권혼합액티브,,,"164,703","33,634,620",,,,',
+          '2025. 10,김희창,P,S&P,ACE 미국 S&P 500,,,"83,700","33,845,670",,,,',
+          '2025. 10,김희창,P,DOW,SOL 미국배당다우존스,,,"80,954","26,637,550",,,,',
+          '2025. 10,김희창,P,CC,KODEX 미국배당커버드콜액티브,,,"39,168","5,114,280",,,,',
+          '2025. 10,민수진,P,NASDAQ,RISE 미국나스닥 100,,,,"4,500,000",,,,',
+          '2025. 10,김희창,G,ROBOT,KODEX 미국휴머노이드로봇,,,,"22,000,000",,,,',
+          '2025. 10,김희창,ISA,CC,KODEX 미국배당커브드콜액티브,,,"7,584","1,629,550",,,,',
+          '2025. 10,김희창,G,SPEC,미국 SPEC,,,,"1,140,000",,,,',
+          '2025. 11,김희창,P,REITs,Tigier 리츠부동산 인프라&ACE 미국 S&P500채권혼합액티브,,,"164,703","34,153,185",,,,',
+          '2025. 11,김희창,P,S&P,ACE 미국 S&P 500,,,,"36,240,810",,,,',
+          '2025. 11,김희창,P,DOW,SOL 미국배당다우존스,,,"83,700","27,951,300",,,,',
+          '2025. 11,김희창,P,CC,KODEX 미국배당커버드콜액티브,,,"39,703","5,255,040",,,,',
+          '2025. 11,민수진,P,NASDAQ,RISE 미국나스닥 100,,,,"6,500,000",,,,',
+          '2025. 11,김희창,G,ROBOT,KODEX 미국휴머노이드로봇,,"-22,000,000",,0,,,,,',
+          '2025. 11,김희창,ISA,CC,KODEX 미국배당커브드콜액티브,,,"7,584","1,674,400",,,,',
+          '2025. 11,김희창,G,SPEC,미국 SPEC,,,,"1,140,000",,,,',
+          '2025. 12,김희창,P,REITs,Tigier 리츠부동산 인프라&ACE 미국 S&P500채권혼합액티브,,"3,000,000","164,703","37,148,323",,,,',
+          '2025. 12,김희창,P,S&P,ACE 미국 S&P 500,,,,"36,101,955",,,,',
+          '2025. 12,김희창,P,DOW,SOL 미국배당다우존스,,,"83,615","28,393,720",,,,',
+          '2025. 12,김희창,P,CC,KODEX 미국배당커버드콜액티브,,,"39,984","5,370,335",,,,',
+          '2025. 12,민수진,P,NASDAQ,RISE 미국나스닥 100,,"1,500,000",,"6,700,000",,,,',
+          '2025. 12,김희창,G,S&P,ACE 미국 S&P 500,,"19,000,000",,"18,964,260",,,,',
+          '2025. 12,김사랑,G,S&P,ACE 미국 S&P 500,,"20,000,000",,"19,974,375",,,,',
+          '2025. 12,김희창,ISA,CC,KODEX 미국배당커브드콜액티브,,,"7,742","1,658,800",,,,',
+          '2025. 12,김희창,G,SPEC,미국 SPEC,,,,"1,160,000",,,,',
+        ];
+        csvContent = defaultCSV.join('\n');
+      }
+
+      // CSV 파싱 (따옴표 처리 포함)
+      const parseCSVLine = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      const lines = csvContent.split('\n').filter(line => line.trim());
+      if (lines.length < 2) {
+        setMessage('❌ CSV 파일 형식이 올바르지 않습니다.');
+        return;
+      }
+
+      const headers = parseCSVLine(lines[0]);
+      const records: FinanceRecord[] = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length < 9) continue; // 최소 필수 필드 확인
+
+        const parseNumber = (str: string): number => {
+          if (!str || str.trim() === '' || str === '-') return 0;
+          const cleaned = str.replace(/,/g, '').replace(/"/g, '').trim();
+          return parseFloat(cleaned) || 0;
+        };
+
+        const record: FinanceRecord = {
+          period: values[0]?.replace(/"/g, '').trim() || '',
+          owner: values[1]?.replace(/"/g, '').trim() || '',
+          division: values[2]?.replace(/"/g, '').trim() || '',
+          category: values[3]?.replace(/"/g, '').trim() || '',
+          stock: values[4]?.replace(/"/g, '').trim() || '',
+          qty: parseNumber(values[5] || '0'),
+          in_out: parseNumber(values[6] || '0'),
+          dividend: parseNumber(values[7] || '0'),
+          value: parseNumber(values[8] || '0'),
+          growth_rate: 0,
+          memo: values[9]?.replace(/"/g, '').trim() || '',
+        };
+
+        if (record.period && record.owner && record.stock) {
+          records.push(record);
+        }
+      }
+
+      if (records.length === 0) {
+        setMessage('❌ 파싱된 데이터가 없습니다.');
+        return;
+      }
+
+      // 기존 데이터 삭제
+      const { error: deleteError } = await supabase
+        .from('finance_records')
+        .delete()
+        .neq('id', ''); // 모든 레코드 삭제
+
+      if (deleteError) {
+        console.error('삭제 오류:', deleteError);
+        // 삭제 실패해도 계속 진행
+      }
+
+      // 새 데이터 삽입
+      const { error: insertError } = await supabase
+        .from('finance_records')
+        .insert(records);
+
+      if (insertError) throw insertError;
+
+      setMessage(`✅ ${records.length}개의 레코드가 업데이트되었습니다!`);
+      loadRecords();
+      
+      setTimeout(() => setMessage(''), 5000);
+    } catch (error) {
+      console.error('CSV 업데이트 실패:', error);
+      setMessage('❌ CSV 업데이트에 실패했습니다.');
+    }
+  };
+
   // 신규 레코드 저장
   const handleSaveRecord = async () => {
     if (!supabase) {
@@ -1285,9 +1447,28 @@ export default function AccountPage() {
           {/* 신규 등록 탭 */}
           {activeTab === 'add' && (
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
-                ➕ 신규 투자 기록 등록
-              </h2>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                  ➕ 신규 투자 기록 등록
+                </h2>
+                <div className="flex gap-2">
+                  <label className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer">
+                    📊 CSV 파일 업로드
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleCSVFileUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    onClick={() => handleUpdateFromCSV()}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    📋 기본 CSV 데이터 적용
+                  </button>
+                </div>
+              </div>
 
               {message && (
                 <div
@@ -1955,5 +2136,3 @@ export default function AccountPage() {
     </div>
   );
 }
-
-
