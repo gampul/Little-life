@@ -19,9 +19,9 @@ export function FooterNav(props: FooterNavProps) {
   };
 
   const navItems = [
-    { href: '/ai', label: 'AI', emoji: '🚀' },
     { href: '/', label: 'Daily', emoji: '📅' },
     { href: '/memo', label: 'Diary', emoji: '📝' },
+    { href: '/expense', label: 'Exp-trx', emoji: '💳' },
     { href: '/account', label: 'Property', emoji: '💰' },
     { href: '/settings', label: '', emoji: null, isDots: true },
   ];

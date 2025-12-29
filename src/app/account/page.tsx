@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { getSupabase } from '../../lib/supabase';
@@ -83,6 +83,32 @@ export default function AccountPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'owner' | 'division' | 'category' | 'add'>('overview');
   const [message, setMessage] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // 다크모드 감지
+  useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+    checkDarkMode();
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  // 카테고리 토글 상태 (최근 3개월 추이 테이블)
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  
+  // 파이 차트 월 선택 상태
+  const [selectedPiePeriod, setSelectedPiePeriod] = useState<string>('');
+  
+  // Overview 월 선택 상태
+  const [selectedOverviewPeriod, setSelectedOverviewPeriod] = useState<string>('');
+  const [isOverviewDropdownOpen, setIsOverviewDropdownOpen] = useState(false);
+  
+  // Division(계좌유형별) 월 선택 상태
+  const [selectedDivisionPeriod, setSelectedDivisionPeriod] = useState<string>('');
+  const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
 
   // 신규 등록 폼 상태
   const [newRecord, setNewRecord] = useState<Omit<FinanceRecord, 'id'>>({
@@ -740,24 +766,35 @@ export default function AccountPage() {
               <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
                 {(() => {
                   const periodSummary = getPeriodSummary();
-                  const latestPeriod = periodSummary.slice(-1)[0];
-                  const prevPeriod = periodSummary.slice(-2, -1)[0];
+                  
+                  // 모든 기간 목록 (최신순)
+                  const allPeriods = [...periodSummary].reverse();
+                  
+                  // 선택된 기간 또는 최신 기간
+                  const selectedPeriodData = selectedOverviewPeriod 
+                    ? periodSummary.find(p => p.period === selectedOverviewPeriod)
+                    : periodSummary.slice(-1)[0];
+                  const selectedIndex = periodSummary.findIndex(p => p.period === selectedPeriodData?.period);
+                  const prevPeriodData = selectedIndex > 0 ? periodSummary[selectedIndex - 1] : null;
+                  
+                  const currentPeriod = selectedPeriodData;
+                  const prevPeriod = prevPeriodData;
                   
                   // 변동 금액 및 퍼센트 계산
-                  const valueDiff = latestPeriod && prevPeriod 
-                    ? latestPeriod.totalValue - prevPeriod.totalValue
+                  const valueDiff = currentPeriod && prevPeriod 
+                    ? currentPeriod.totalValue - prevPeriod.totalValue
                     : 0;
-                  const valueChangePercent = latestPeriod && prevPeriod && prevPeriod.totalValue > 0
+                  const valueChangePercent = currentPeriod && prevPeriod && prevPeriod.totalValue > 0
                     ? ((valueDiff / prevPeriod.totalValue) * 100)
                     : 0;
                   const isPositive = valueDiff >= 0;
                   
-                  // 최신 월 구하기
-                  const latestMonth = latestPeriod?.period || '12';
+                  // 선택된 월 구하기
+                  const currentMonth = currentPeriod?.period || '12';
                   
                   // 배당금 관련 계산
-                  const dividendDiff = latestPeriod && prevPeriod 
-                    ? latestPeriod.totalDividend - prevPeriod.totalDividend
+                  const dividendDiff = currentPeriod && prevPeriod 
+                    ? currentPeriod.totalDividend - prevPeriod.totalDividend
                     : 0;
                   const isDividendPositive = dividendDiff >= 0;
                   
@@ -771,17 +808,18 @@ export default function AccountPage() {
                   const augustPeriod = periodSummary.find(p => p.period === '8');
                   const augustValue = augustPeriod?.totalValue || 0;
                   
-                  // 8월 이후 입출금 합계 계산 (9월, 10월, 11월, 12월)
-                  const inOutAfterAugust = records
+                  // 선택된 월까지의 입출금 합계 계산
+                  const selectedMonth = parseInt(currentPeriod?.period || '12');
+                  const inOutUntilSelected = records
                     .filter(r => {
                       const month = parseInt(r.period.split('. ')[1] || '0');
-                      return month > 8;
+                      return month > 8 && month <= selectedMonth;
                     })
                     .reduce((sum, r) => sum + (r.in_out || 0), 0);
                   
-                  // 2025년 수익률 계산: (현재 평가금액 - 8월 평가금액 - 8월 이후 입출금) / 8월 평가금액 * 100
-                  const currentValue = latestPeriod?.totalValue || 0;
-                  const profitLoss = currentValue - augustValue - inOutAfterAugust;
+                  // 선택된 월 기준 수익률 계산
+                  const selectedValue = currentPeriod?.totalValue || 0;
+                  const profitLoss = selectedValue - augustValue - inOutUntilSelected;
                   const profitRate = augustValue > 0 ? ((profitLoss / augustValue) * 100) : 0;
                   const isProfitPositive = profitLoss >= 0;
                   
@@ -810,15 +848,50 @@ export default function AccountPage() {
                     profitRateDiff = profitRate - prevProfitRate;
                   }
                   
-                  return latestPeriod ? (
+                  return currentPeriod ? (
                     <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
                       {/* 총 평가금액 */}
-                      <div className="text-sm text-gray-900 dark:text-white mb-1">
-                        {latestMonth}월(최근) 총평가금액
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="relative">
+                          <button
+                            onClick={() => setIsOverviewDropdownOpen(!isOverviewDropdownOpen)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-sm font-medium shadow-md hover:shadow-lg transition-all"
+                          >
+                            <span>📅</span>
+                            <span>{currentMonth}월</span>
+                            {(selectedOverviewPeriod === '' || selectedOverviewPeriod === allPeriods[0]?.period) && (
+                              <span className="text-indigo-200 text-xs">(최근)</span>
+                            )}
+                            <svg className={`w-4 h-4 transition-transform ${isOverviewDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                          {isOverviewDropdownOpen && (
+                            <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 min-w-[120px] overflow-hidden">
+                              {allPeriods.map((p, idx) => (
+                                <button
+                                  key={p.period}
+                                  onClick={() => {
+                                    setSelectedOverviewPeriod(p.period);
+                                    setIsOverviewDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-between ${
+                                    currentPeriod?.period === p.period ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                                  }`}
+                                >
+                                  <span>{p.period}월</span>
+                                  {idx === 0 && <span className="text-xs text-indigo-500">최근</span>}
+                                  {currentPeriod?.period === p.period && <span>✓</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-base font-semibold text-gray-900 dark:text-white">총평가금액</span>
                       </div>
                       <div className="flex items-baseline gap-2 flex-wrap mb-4">
                         <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {latestPeriod.totalValue.toLocaleString()}원
+                          {currentPeriod.totalValue.toLocaleString()}원
                         </span>
                         {prevPeriod && (
                           <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -829,12 +902,12 @@ export default function AccountPage() {
                       
                       {/* 상세 정보 */}
                       <div className="space-y-2.5 pt-3 border-t border-gray-200 dark:border-gray-700">
-                        {/* 12월 배당금 */}
+                        {/* 선택된 월 배당금 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">{latestMonth}월 배당금</span>
+                          <span className="text-sm text-gray-900 dark:text-white">{currentMonth}월 배당금</span>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {latestPeriod.totalDividend.toLocaleString()}원
+                              {currentPeriod.totalDividend.toLocaleString()}원
                             </span>
                             {prevPeriod && dividendDiff !== 0 && (
                               <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
@@ -1091,33 +1164,74 @@ export default function AccountPage() {
               {/* 계좌유형별 최신 현황 */}
               <div className="mt-6 space-y-3">
                 {(() => {
-                  // 최신 기간과 전월 기간 구하기
-                  const allPeriods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
+                  // 모든 기간 (최신순)
+                  const allPeriodsList = [...new Set(records.map((r) => r.period))].sort((a, b) => {
                     const [yearA, monthA] = a.split('. ').map(Number);
                     const [yearB, monthB] = b.split('. ').map(Number);
                     if (yearA !== yearB) return yearB - yearA;
                     return monthB - monthA;
                   });
-                  const latestPeriod = allPeriods[0] || '2025. 12';
-                  const prevPeriod = allPeriods[1] || '';
-                  const latestMonth = latestPeriod.split('. ')[1] || '12';
+                  
+                  // 선택된 기간 또는 최신 기간
+                  const currentPeriodDiv = selectedDivisionPeriod || allPeriodsList[0] || '2025. 12';
+                  const currentIndex = allPeriodsList.indexOf(currentPeriodDiv);
+                  const prevPeriodDiv = allPeriodsList[currentIndex + 1] || '';
+                  const currentMonthDiv = currentPeriodDiv.split('. ')[1] || '12';
 
                   return (
                     <>
-                      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {latestMonth}월 현황 (최신)
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <button
+                            onClick={() => setIsDivisionDropdownOpen(!isDivisionDropdownOpen)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full text-sm font-medium shadow-md hover:shadow-lg transition-all"
+                          >
+                            <span>📅</span>
+                            <span>{currentMonthDiv}월</span>
+                            {(selectedDivisionPeriod === '' || selectedDivisionPeriod === allPeriodsList[0]) && (
+                              <span className="text-indigo-200 text-xs">(최신)</span>
+                            )}
+                            <svg className={`w-4 h-4 transition-transform ${isDivisionDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                          {isDivisionDropdownOpen && (
+                            <div className="absolute top-full left-0 mt-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 min-w-[120px] overflow-hidden">
+                              {allPeriodsList.map((p, idx) => {
+                                const monthLabel = p.split('. ')[1] || '';
+                                return (
+                                  <button
+                                    key={p}
+                                    onClick={() => {
+                                      setSelectedDivisionPeriod(p);
+                                      setIsDivisionDropdownOpen(false);
+                                    }}
+                                    className={`w-full px-4 py-2.5 text-left text-sm hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-between ${
+                                      currentPeriodDiv === p ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                                    }`}
+                                  >
+                                    <span>{monthLabel}월</span>
+                                    {idx === 0 && <span className="text-xs text-indigo-500">최신</span>}
+                                    {currentPeriodDiv === p && <span>✓</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-base font-semibold text-gray-900 dark:text-white">현황</span>
+                      </div>
                       {uniqueDivisions.map((division) => {
-                        // 최신 기간 데이터
+                        // 선택된 기간 데이터
                         const divRecords = records.filter(
-                          (r) => r.division === division && r.period === latestPeriod
+                          (r) => r.division === division && r.period === currentPeriodDiv
                         );
                         const total = divRecords.reduce((sum, r) => sum + (r.value || 0), 0);
                         const totalDividend = divRecords.reduce((sum, r) => sum + (r.dividend || 0), 0);
                         
                         // 전월 데이터
                         const prevRecords = records.filter(
-                          (r) => r.division === division && r.period === prevPeriod
+                          (r) => r.division === division && r.period === prevPeriodDiv
                         );
                         const prevTotal = prevRecords.reduce((sum, r) => sum + (r.value || 0), 0);
                         
@@ -1163,7 +1277,7 @@ export default function AccountPage() {
                               
                               {/* 평가금액 */}
                               <div className="flex items-center justify-between text-sm mb-1">
-                                <span className="text-gray-600 dark:text-gray-400">{latestMonth}월 총평가금액</span>
+                                <span className="text-gray-600 dark:text-gray-400">{currentMonthDiv}월 총평가금액</span>
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold text-gray-900 dark:text-white">
                                     {total.toLocaleString()}원
@@ -1178,7 +1292,7 @@ export default function AccountPage() {
                               
                               {/* 배당금 */}
                               <div className="flex items-center justify-between text-sm">
-                                <span className="text-gray-600 dark:text-gray-400">{latestMonth}월 배당금</span>
+                                <span className="text-gray-600 dark:text-gray-400">{currentMonthDiv}월 배당금</span>
                                 <span className="font-medium text-green-600 dark:text-green-400">
                                   {totalDividend.toLocaleString()}원
                                 </span>
@@ -1231,19 +1345,21 @@ export default function AccountPage() {
               {/* 카테고리별 원형 차트 */}
               <div>
                 {(() => {
-                  // 최신 기간 찾기
+                  // 모든 기간 정렬 (최신순)
                   const periods = [...new Set(records.map((r) => r.period))].sort((a, b) => {
                     const [yearA, monthA] = a.split('. ').map(Number);
                     const [yearB, monthB] = b.split('. ').map(Number);
                     if (yearA !== yearB) return yearB - yearA;
                     return monthB - monthA;
                   });
-                  const latestPeriod = periods[0];
                   
-                  // 최신 기간의 카테고리별 합계 데이터
+                  // 선택된 기간 또는 최신 기간
+                  const currentPeriod = selectedPiePeriod || periods[0];
+                  
+                  // 선택된 기간의 카테고리별 합계 데이터
                   const pieData = uniqueCategories.map((category) => {
                     const catRecords = records.filter(
-                      (r) => r.category === category && r.period === latestPeriod
+                      (r) => r.category === category && r.period === currentPeriod
                     );
                     const total = catRecords.reduce((sum, r) => sum + (r.value || 0), 0);
                     return {
@@ -1257,8 +1373,27 @@ export default function AccountPage() {
 
                   return pieData.length > 0 ? (
                     <>
+                      {/* 월 선택 버튼 */}
+                      <div className="flex items-center justify-center gap-2 mb-4 flex-wrap">
+                        {periods.slice(0, 6).map((period) => {
+                          const monthLabel = period.replace(/^\d{4}\. /, '') + '월';
+                          return (
+                            <button
+                              key={period}
+                              onClick={() => setSelectedPiePeriod(period)}
+                              className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                                currentPeriod === period
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                              }`}
+                            >
+                              {monthLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
                       <div className="text-center text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        기준: {latestPeriod}
+                        기준: {currentPeriod}
                       </div>
                       <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
@@ -1282,7 +1417,7 @@ export default function AccountPage() {
                                   <text
                                     x={x}
                                     y={y}
-                                    fill="#374151"
+                                    fill={isDarkMode ? '#F3F4F6' : '#374151'}
                                     textAnchor={x > cx ? 'start' : 'end'}
                                     dominantBaseline="central"
                                     fontSize={16}
@@ -1293,7 +1428,7 @@ export default function AccountPage() {
                                 );
                               }}
                               labelLine={{
-                                stroke: '#9CA3AF',
+                                stroke: isDarkMode ? '#D1D5DB' : '#9CA3AF',
                                 strokeWidth: 1,
                               }}
                             >
@@ -1310,7 +1445,7 @@ export default function AccountPage() {
                                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                               }}
                               formatter={(value: number) => [formatCurrency(value), '']}
-                              labelStyle={{ color: '#374151', fontWeight: 'bold' }}
+                              labelStyle={{ color: isDarkMode ? '#F3F4F6' : '#374151', fontWeight: 'bold' }}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -1404,33 +1539,98 @@ export default function AccountPage() {
                             const firstValue = row.periodValues[recentPeriods[0]] || 0;
                             const lastValue = row.periodValues[recentPeriods[recentPeriods.length - 1]] || 0;
                             const change = firstValue > 0 ? ((lastValue - firstValue) / firstValue * 100) : 0;
+                            const isExpanded = expandedCategories.has(row.category);
+                            
+                            // 소유자 + 계좌 조합별 세부 데이터
+                            const ownerDivisionDetails: { owner: string; division: string; periodValues: { [key: string]: number } }[] = [];
+                            const categoryRecords = records.filter(r => r.category === row.category);
+                            const ownerDivisionPairs = [...new Set(categoryRecords.map(r => `${r.owner}|${r.division}`))];
+                            ownerDivisionPairs.forEach(pair => {
+                              const [owner, division] = pair.split('|');
+                              const periodValues: { [key: string]: number } = {};
+                              recentPeriods.forEach(period => {
+                                const pairRecords = records.filter(r => r.category === row.category && r.owner === owner && r.division === division && r.period === period);
+                                periodValues[period] = pairRecords.reduce((sum, r) => sum + (r.value || 0), 0);
+                              });
+                              if (recentPeriods.some(p => periodValues[p] > 0)) {
+                                ownerDivisionDetails.push({ owner, division, periodValues });
+                              }
+                            });
+                            // 소유자 이름 순, 같은 소유자면 계좌 이름 순으로 정렬
+                            ownerDivisionDetails.sort((a, b) => {
+                              if (a.owner !== b.owner) return a.owner.localeCompare(b.owner, 'ko');
+                              return a.division.localeCompare(b.division, 'ko');
+                            });
                             
                             return (
-                              <tr key={row.category} className="border-b border-gray-100 dark:border-gray-700">
-                                <td className="py-2 px-2">
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className="w-2.5 h-2.5 rounded-full"
-                                      style={{ backgroundColor: row.color }}
-                                    />
-                                    <span className="font-medium text-gray-900 dark:text-white">{row.category}</span>
-                                  </div>
-                                </td>
-                                {recentPeriods.map((period) => (
-                                  <td key={period} className="text-right py-2 px-2 text-gray-700 dark:text-gray-300">
-                                    {row.periodValues[period] > 0 ? formatNumber(row.periodValues[period]) : '-'}
+                              <React.Fragment key={row.category}>
+                                <tr 
+                                  className="border-b border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                                  onClick={() => {
+                                    const newSet = new Set(expandedCategories);
+                                    if (isExpanded) {
+                                      newSet.delete(row.category);
+                                    } else {
+                                      newSet.add(row.category);
+                                    }
+                                    setExpandedCategories(newSet);
+                                  }}
+                                >
+                                  <td className="py-2 px-2">
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="w-2.5 h-2.5 rounded-full"
+                                        style={{ backgroundColor: row.color }}
+                                      />
+                                      <span className="font-medium text-gray-900 dark:text-white">{row.category}</span>
+                                    </div>
                                   </td>
-                                ))}
-                                <td className="text-right py-2 px-2">
-                                  {change !== 0 ? (
-                                    <span className={`font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                      {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-400">-</span>
-                                  )}
-                                </td>
-                              </tr>
+                                  {recentPeriods.map((period) => (
+                                    <td key={period} className="text-right py-2 px-2 text-gray-700 dark:text-gray-300">
+                                      {row.periodValues[period] > 0 ? formatNumber(row.periodValues[period]) : '-'}
+                                    </td>
+                                  ))}
+                                  <td className="text-right py-2 px-2">
+                                    {change !== 0 ? (
+                                      <span className={`font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-400">-</span>
+                                    )}
+                                  </td>
+                                </tr>
+                                
+                                {/* 확장된 세부 내역: 소유자 + 계좌 조합 */}
+                                {isExpanded && ownerDivisionDetails.map((detail, idx) => {
+                                  const detailFirst = detail.periodValues[recentPeriods[0]] || 0;
+                                  const detailLast = detail.periodValues[recentPeriods[recentPeriods.length - 1]] || 0;
+                                  const detailChange = detailFirst > 0 ? ((detailLast - detailFirst) / detailFirst * 100) : 0;
+                                  return (
+                                    <tr key={`${detail.owner}-${detail.division}-${idx}`} className="bg-gray-50/80 dark:bg-gray-700/30 border-b border-gray-100 dark:border-gray-700">
+                                      <td className="py-1.5 px-2 pl-8">
+                                        <span className="text-sm text-gray-700 dark:text-gray-300">
+                                          {detail.owner} {detail.division}
+                                        </span>
+                                      </td>
+                                      {recentPeriods.map((period) => (
+                                        <td key={period} className="text-right py-1.5 px-2 text-sm text-gray-600 dark:text-gray-400">
+                                          {detail.periodValues[period] > 0 ? formatNumber(detail.periodValues[period]) : '-'}
+                                        </td>
+                                      ))}
+                                      <td className="text-right py-1.5 px-2">
+                                        {detailChange !== 0 ? (
+                                          <span className={`text-xs ${detailChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {detailChange >= 0 ? '▲' : '▼'} {Math.abs(detailChange).toFixed(1)}%
+                                          </span>
+                                        ) : (
+                                          <span className="text-gray-400 text-xs">-</span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </React.Fragment>
                             );
                           })}
                         </tbody>
