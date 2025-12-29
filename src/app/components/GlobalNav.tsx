@@ -4,12 +4,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useRef } from 'react';
 
-export interface GlobalNavProps {
-  onAIAgentClick?: () => void;
-}
+export interface GlobalNavProps {}
 
 export function GlobalNav(props: GlobalNavProps) {
-  const { onAIAgentClick } = props;
   const pathname = usePathname();
   const router = useRouter();
   const [imgError, setImgError] = useState(false);
@@ -40,36 +37,20 @@ export function GlobalNav(props: GlobalNavProps) {
       <div className="max-w-[480px] mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* 로고/타이틀 */}
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2">
-              {!imgError && (
-                <img
-                  ref={imgRef}
-                  src={imgSrc}
-                  alt="Little Life"
-                  className="h-12 w-auto object-contain max-w-[240px]"
-                  onError={handleImageError}
-                />
-              )}
-              <span className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
-                Little Life
-              </span>
-            </Link>
-            
-            {/* AI 버튼 */}
-            <Link
-              href="/ai"
-              className={`relative flex items-center justify-center w-10 h-10 rounded-full shadow-md transition-all duration-300 hover:scale-110 ${
-                pathname === '/ai'
-                  ? 'bg-gradient-to-br from-violet-600 to-indigo-700 ring-2 ring-violet-300'
-                  : 'bg-gradient-to-br from-violet-500 to-indigo-600 hover:from-violet-600 hover:to-indigo-700'
-              }`}
-              aria-label="AI 도우미"
-            >
-              <span className="text-lg">🚀</span>
-              <span className="absolute inset-0 rounded-full bg-violet-400 opacity-0 animate-ping" style={{ animationDuration: '2s' }}></span>
-            </Link>
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            {!imgError && (
+              <img
+                ref={imgRef}
+                src={imgSrc}
+                alt="Little Life"
+                className="h-12 w-auto object-contain max-w-[240px]"
+                onError={handleImageError}
+              />
+            )}
+            <span className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+              Little Life
+            </span>
+          </Link>
 
           {/* Settings 버튼 */}
           <button

@@ -110,6 +110,9 @@ export default function AccountPage() {
   const [selectedDivisionPeriod, setSelectedDivisionPeriod] = useState<string>('');
   const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
 
+  // 월별 상세 드롭다운 상태 (총자산 추이 아래)
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
   // 신규 등록 폼 상태
   const [newRecord, setNewRecord] = useState<Omit<FinanceRecord, 'id'>>({
     period: '',
@@ -798,11 +801,19 @@ export default function AccountPage() {
                     : 0;
                   const isDividendPositive = dividendDiff >= 0;
                   
-                  // 2025년 누적 배당금 계산
-                  const yearlyDividend = periodSummary.reduce((sum, p) => sum + p.totalDividend, 0);
+                  // 선택한 월까지 누적 배당금 계산
+                  const selectedMonthNum = parseInt(currentMonth);
+                  const cumulativeDividend = periodSummary
+                    .filter(p => parseInt(p.period) <= selectedMonthNum)
+                    .reduce((sum, p) => sum + p.totalDividend, 0);
                   
-                  // 2025년 누적 입출금 계산
-                  const yearlyInOut = records.reduce((sum, r) => sum + (r.in_out || 0), 0);
+                  // 선택한 월까지 누적 입출금 계산
+                  const cumulativeInOut = records
+                    .filter(r => {
+                      const month = parseInt(r.period.split('. ')[1] || '0');
+                      return month <= selectedMonthNum;
+                    })
+                    .reduce((sum, r) => sum + (r.in_out || 0), 0);
                   
                   // 2025년 8월 기준 평가금액 (수익률 기준점)
                   const augustPeriod = periodSummary.find(p => p.period === '8');
@@ -917,19 +928,19 @@ export default function AccountPage() {
                           </div>
                         </div>
                         
-                        {/* 2025년 누적 배당금 */}
+                        {/* 해당월까지 누적 배당금 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">2025년 누적 배당금</span>
+                          <span className="text-sm text-gray-900 dark:text-white">2025년 {currentMonth}월 누적 배당금</span>
                           <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {yearlyDividend.toLocaleString()}원
+                            {cumulativeDividend.toLocaleString()}원
                           </span>
                         </div>
                         
-                        {/* 2025년 누적 입출금 */}
+                        {/* 해당월까지 누적 입출금 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">2025년 누적 입출금</span>
+                          <span className="text-sm text-gray-900 dark:text-white">2025년 {currentMonth}월 누적 입출금</span>
                           <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {yearlyInOut.toLocaleString()}원
+                            {cumulativeInOut.toLocaleString()}원
                           </span>
                         </div>
                         
@@ -1036,6 +1047,184 @@ export default function AccountPage() {
                       />
                     </ComposedChart>
                   </ResponsiveContainer>
+                </div>
+                
+                {/* 메모 목록 */}
+                {(() => {
+                  const memoRecords = records.filter(r => r.memo && r.memo.trim() !== '');
+                  if (memoRecords.length === 0) return null;
+                  
+                  // 월별로 그룹화
+                  const memosByMonth = memoRecords.reduce((acc, record) => {
+                    const parts = record.period.split('. ');
+                    const year = parts[0]?.slice(-2) || '25';
+                    const month = parts[1] || record.period;
+                    const key = `${year}.${month}`;
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(record);
+                    return acc;
+                  }, {} as Record<string, FinanceRecord[]>);
+                  
+                  const sortedMonths = Object.keys(memosByMonth).sort((a, b) => {
+                    const [yearA, monthA] = a.split('.').map(Number);
+                    const [yearB, monthB] = b.split('.').map(Number);
+                    if (yearA !== yearB) return yearB - yearA;
+                    return monthB - monthA;
+                  });
+                  
+                  return (
+                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-2 flex items-center gap-1">
+                        📝 투자 메모
+                      </h3>
+                      <div className="space-y-2">
+                        {sortedMonths.map(monthKey => (
+                          <div key={monthKey}>
+                            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">{monthKey}월</span>
+                            <ul className="ml-3 mt-1 space-y-1">
+                              {memosByMonth[monthKey].map((record, idx) => (
+                                <li key={idx} className="text-xs text-gray-700 dark:text-gray-300 flex items-start gap-2">
+                                  <span className="text-amber-500">•</span>
+                                  <span>
+                                    <span className="font-medium text-gray-900 dark:text-white">{record.stock}</span>
+                                    <span className="text-gray-500 dark:text-gray-400"> - {record.memo}</span>
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* 월별 상세 내역 드롭다운 */}
+              <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                  <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+                    📊 월별 상세 내역
+                  </h2>
+                </div>
+                <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {(() => {
+                    // 연도.월별로 그룹화 (예: "25.12")
+                    const monthlyData = records.reduce((acc, record) => {
+                      const parts = record.period.split('. ');
+                      const year = parts[0]?.slice(-2) || '25'; // 2025 → 25
+                      const month = parts[1] || record.period;
+                      const key = `${year}.${month}`;
+                      if (!acc[key]) {
+                        acc[key] = [];
+                      }
+                      acc[key].push(record);
+                      return acc;
+                    }, {} as Record<string, FinanceRecord[]>);
+
+                    // 월 정렬 (내림차순: 25.12 > 25.11 > ...)
+                    const sortedMonths = Object.keys(monthlyData).sort((a, b) => {
+                      const [yearA, monthA] = a.split('.').map(Number);
+                      const [yearB, monthB] = b.split('.').map(Number);
+                      if (yearA !== yearB) return yearB - yearA;
+                      return monthB - monthA;
+                    });
+
+                    return sortedMonths.map((monthKey) => {
+                      const monthRecords = monthlyData[monthKey];
+                      const isExpanded = expandedMonths.has(monthKey);
+                      const totalDividend = monthRecords.reduce((sum, r) => sum + r.dividend, 0);
+                      const totalValue = monthRecords.reduce((sum, r) => sum + r.value, 0);
+                      const totalInOut = monthRecords.reduce((sum, r) => sum + r.in_out, 0);
+
+                      return (
+                        <div key={monthKey}>
+                          {/* 월별 헤더 (클릭 가능) */}
+                          <button
+                            onClick={() => {
+                              const newSet = new Set(expandedMonths);
+                              if (isExpanded) {
+                                newSet.delete(monthKey);
+                              } else {
+                                newSet.add(monthKey);
+                              }
+                              setExpandedMonths(newSet);
+                            }}
+                            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="font-semibold text-gray-900 dark:text-white">
+                                {monthKey}월
+                              </span>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                ({monthRecords.length}건)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="text-gray-500 dark:text-gray-400">
+                                입출금 <span className={totalInOut >= 0 ? 'text-blue-600' : 'text-red-500'}>{totalInOut >= 0 ? '+' : ''}{totalInOut.toLocaleString()}원</span>
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400">
+                                배당 <span className="text-green-600">{formatNumber(totalDividend)}</span>
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400">
+                                평가 <span className="font-medium text-gray-900 dark:text-white">{formatNumber(totalValue)}</span>
+                              </span>
+                            </div>
+                          </button>
+
+                          {/* 상세 내역 (펼침 시) */}
+                          {isExpanded && (
+                            <div className="bg-gray-50 dark:bg-gray-900/50">
+                              {/* 테이블 헤더 */}
+                              <div className="grid grid-cols-7 gap-2 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                <span>소유자</span>
+                                <span>구분</span>
+                                <span>카테고리</span>
+                                <span>종목명</span>
+                                <span className="text-right">입출금</span>
+                                <span className="text-right">배당금</span>
+                                <span className="text-right">현재금액</span>
+                              </div>
+                              {/* 데이터 행 */}
+                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {monthRecords.map((record, idx) => (
+                                  <div key={record.id || idx} className="grid grid-cols-7 gap-2 px-4 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-800/50">
+                                    <span className="text-gray-900 dark:text-white truncate">{record.owner}</span>
+                                    <span className="text-gray-600 dark:text-gray-400 truncate">{record.division}</span>
+                                    <span className="text-gray-600 dark:text-gray-400 truncate">{record.category}</span>
+                                    <span className="text-gray-900 dark:text-white truncate font-medium">{record.stock}</span>
+                                    <span className={`text-right ${record.in_out > 0 ? 'text-blue-600' : record.in_out < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                      {record.in_out !== 0 ? (record.in_out > 0 ? '+' : '') + record.in_out.toLocaleString() : '-'}
+                                    </span>
+                                    <span className={`text-right ${record.dividend > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                      {record.dividend > 0 ? record.dividend.toLocaleString() : '-'}
+                                    </span>
+                                    <span className="text-right font-medium text-gray-900 dark:text-white">
+                                      {record.value.toLocaleString()}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* 합계 행 */}
+                              <div className="grid grid-cols-7 gap-2 px-4 py-3 text-xs font-bold bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-600">
+                                <span className="text-gray-900 dark:text-white col-span-4">합계</span>
+                                <span className={`text-right ${totalInOut > 0 ? 'text-blue-600' : totalInOut < 0 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                                  {totalInOut !== 0 ? (totalInOut > 0 ? '+' : '') + totalInOut.toLocaleString() : '-'}
+                                </span>
+                                <span className="text-right text-green-600">
+                                  {totalDividend > 0 ? totalDividend.toLocaleString() : '-'}
+                                </span>
+                                <span className="text-right text-gray-900 dark:text-white">
+                                  {totalValue.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 

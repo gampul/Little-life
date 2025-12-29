@@ -1,29 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 export interface FooterNavProps {}
 
 export function FooterNav(props: FooterNavProps) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  const handleSettingsClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (pathname === '/settings') {
-      router.back();
-    } else {
-      router.push('/settings');
-    }
-  };
 
   const navItems = [
     { href: '/', label: 'Daily', emoji: '📅' },
     { href: '/memo', label: 'Diary', emoji: '📝' },
     { href: '/expense', label: 'Exp-trx', emoji: '💳' },
     { href: '/account', label: 'Property', emoji: '💰' },
-    { href: '/settings', label: '', emoji: null, isDots: true },
+    { href: '/ai', label: 'AI', emoji: '🤖' },
   ];
 
   return (
@@ -32,28 +22,6 @@ export function FooterNav(props: FooterNavProps) {
         <div className="flex items-center justify-around px-2 py-2">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
-            
-            // 점3개 버튼은 별도 처리
-            if (item.isDots) {
-              return (
-                <button
-                  key={item.href}
-                  onClick={handleSettingsClick}
-                  className={`flex flex-col items-center justify-center w-[60px] h-[60px] rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-gray-900 dark:bg-gray-700 text-white dark:text-white'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  }`}
-                  aria-label={isActive ? '취소' : '설정'}
-                >
-                  <span className="flex flex-col gap-0.5 items-center justify-center">
-                    <span className="w-1 h-1 rounded-full bg-current"></span>
-                    <span className="w-1 h-1 rounded-full bg-current"></span>
-                    <span className="w-1 h-1 rounded-full bg-current"></span>
-                  </span>
-                </button>
-              );
-            }
             
             return (
               <Link
