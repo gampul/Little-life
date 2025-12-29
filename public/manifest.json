@@ -1,0 +1,37 @@
+{
+  "name": "Little Life - Economic Freedom",
+  "short_name": "Little Life",
+  "description": "경제적 자유를 위한 자산 관리 앱",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FEFCF7",
+  "theme_color": "#1E3A5F",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/little-life-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/little-life-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/little-life-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/little-life-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
+
