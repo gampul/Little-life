@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef, ChangeEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
@@ -44,6 +45,8 @@ const formatDate = (dateStr?: string): string => {
 };
 
 export default function MemoPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = getSupabase();
   const [showEditor, setShowEditor] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -235,6 +238,39 @@ export default function MemoPage() {
     loadMemos(1);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // URL에서 edit 파라미터 처리 (상세 페이지에서 수정 버튼 클릭 시)
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (editId && supabase) {
+      // 해당 메모를 로드하고 수정 모드로 진입
+      const loadMemoForEdit = async () => {
+        const { data, error } = await supabase
+          .from('memos')
+          .select('*')
+          .eq('id', editId)
+          .single();
+        
+        if (!error && data) {
+          setFormData({
+            title: data.title || '',
+            content: data.content || '',
+          });
+          setEditingId(data.id);
+          setShowEditor(true);
+          // 에디터에 내용 설정
+          setTimeout(() => {
+            if (editorRef.current) {
+              editorRef.current.innerHTML = data.content || '';
+            }
+          }, 100);
+          // URL에서 edit 파라미터 제거
+          router.replace('/memo', { scroll: false });
+        }
+      };
+      loadMemoForEdit();
+    }
+  }, [searchParams, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 좋아요 토글
   const handleLike = (memoId: string) => {
     setLikedMemos(prev => {
@@ -387,12 +423,20 @@ export default function MemoPage() {
     const isLiked = likedMemos.has(memo.id || '');
     const likeCount = (memo.likes || 0) + (isLiked ? 1 : 0);
 
+    // 카드 클릭 시 상세 페이지로 이동
+    const handleCardClick = () => {
+      if (memo.id) {
+        router.push(`/memo/${memo.id}`);
+      }
+    };
+
     if (viewMode === 'compact') {
       // 컴팩트 뷰
       return (
         <div
           key={memo.id}
-          className="flex items-center gap-3 py-3 border-b border-gray-200 dark:border-gray-700 last:border-b-0"
+          onClick={handleCardClick}
+          className="flex items-center gap-3 py-3 border-b border-gray-200 dark:border-gray-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors -mx-2 px-2 rounded-lg"
         >
           <div className="flex-1 min-w-0">
             <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white truncate">
@@ -404,13 +448,13 @@ export default function MemoPage() {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={() => handleEdit(memo)}
+              onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
               className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
             >
               ✏️
             </button>
             <button
-              onClick={() => handleDelete(memo)}
+              onClick={(e) => { e.stopPropagation(); handleDelete(memo); }}
               className="p-2 text-gray-400 hover:text-red-500 transition-colors"
             >
               🗑️
@@ -425,7 +469,8 @@ export default function MemoPage() {
       return (
         <div
           key={memo.id}
-          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+          onClick={handleCardClick}
+          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
         >
           {thumbnail && (
             <div className="aspect-video bg-gray-100 dark:bg-gray-700 overflow-hidden">
@@ -442,7 +487,7 @@ export default function MemoPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
                 <button
-                  onClick={() => handleLike(memo.id || '')}
+                  onClick={(e) => { e.stopPropagation(); handleLike(memo.id || ''); }}
                   className={`flex items-center gap-1 ${isLiked ? 'text-red-500' : ''}`}
                 >
                   {isLiked ? '❤️' : '🤍'} {likeCount}
@@ -450,8 +495,8 @@ export default function MemoPage() {
                 <span>💬 {memo.comments || 0}</span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => handleEdit(memo)} className="p-1 text-gray-400 hover:text-blue-500">✏️</button>
-                <button onClick={() => handleDelete(memo)} className="p-1 text-gray-400 hover:text-red-500">🗑️</button>
+                <button onClick={(e) => { e.stopPropagation(); handleEdit(memo); }} className="p-1 text-gray-400 hover:text-blue-500">✏️</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(memo); }} className="p-1 text-gray-400 hover:text-red-500">🗑️</button>
               </div>
             </div>
           </div>
@@ -463,7 +508,8 @@ export default function MemoPage() {
     return (
       <div
         key={memo.id}
-        className="py-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0"
+        onClick={handleCardClick}
+        className="py-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors -mx-2 px-2 rounded-lg"
       >
         <div className="flex gap-3">
           {/* 콘텐츠 영역 */}
@@ -479,7 +525,7 @@ export default function MemoPage() {
             </p>
             <div className="flex items-center gap-4 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               <button
-                onClick={() => handleLike(memo.id || '')}
+                onClick={(e) => { e.stopPropagation(); handleLike(memo.id || ''); }}
                 className={`flex items-center gap-1 transition-colors ${isLiked ? 'text-red-500' : 'hover:text-red-500'}`}
               >
                 {isLiked ? '❤️' : '🤍'} {likeCount}
@@ -488,13 +534,13 @@ export default function MemoPage() {
                 💬 {memo.comments || 0}
               </span>
               <button
-                onClick={() => handleEdit(memo)}
+                onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
                 className="ml-auto text-gray-400 hover:text-blue-500 transition-colors"
               >
                 ✏️
               </button>
               <button
-                onClick={() => handleDelete(memo)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(memo); }}
                 className="text-gray-400 hover:text-red-500 transition-colors"
               >
                 🗑️
