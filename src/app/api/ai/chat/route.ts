@@ -107,16 +107,35 @@ function summarizeData(data: {
     ? `최근 30일 수입: ${totalIncome.toLocaleString()}원, 지출: ${totalExpense.toLocaleString()}원\n카테고리별 지출: ${Object.entries(categoryExpense).map(([k, v]) => `${k}: ${v.toLocaleString()}원`).join(', ')}`
     : '가계부 기록이 없습니다.';
 
-  // Property 요약
+  // Property 요약 (상세 정보 포함)
   let totalAsset = 0;
+  let totalDividend = 0;
+  let totalInOut = 0;
   const latestMonth = data.property[0]?.record_month;
   const latestRecords = data.property.filter(p => p.record_month === latestMonth);
   latestRecords.forEach(p => {
     totalAsset += Number(p.current_value) || 0;
+    totalDividend += Number(p.dividend) || 0;
+    totalInOut += Number(p.in_out) || 0;
   });
 
   const propertySummary = latestRecords.length > 0
-    ? `총 자산: ${totalAsset.toLocaleString()}원 (${latestMonth} 기준)\n보유 계좌/자산: ${latestRecords.length}개`
+    ? `[${latestMonth} 기준 자산 현황]
+총 자산: ${totalAsset.toLocaleString()}원
+총 배당금: ${totalDividend.toLocaleString()}원
+총 입출금: ${totalInOut >= 0 ? '+' : ''}${totalInOut.toLocaleString()}원
+
+[개별 자산 목록]
+${latestRecords.slice(0, 20).map(p => {
+  const parts = [];
+  if (p.owner) parts.push(`소유자: ${p.owner}`);
+  if (p.category) parts.push(`분류: ${p.category}`);
+  if (p.stock) parts.push(`종목: ${p.stock}`);
+  if (p.current_value) parts.push(`현재가치: ${Number(p.current_value).toLocaleString()}원`);
+  if (p.dividend) parts.push(`배당금: ${Number(p.dividend).toLocaleString()}원`);
+  if (p.in_out) parts.push(`입출금: ${Number(p.in_out) >= 0 ? '+' : ''}${Number(p.in_out).toLocaleString()}원`);
+  return `- ${parts.join(', ')}`;
+}).join('\n')}`
     : '자산 기록이 없습니다.';
 
   return `
