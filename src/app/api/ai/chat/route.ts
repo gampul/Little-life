@@ -416,6 +416,9 @@ export async function POST(request: NextRequest) {
 
       // 각 함수 호출 실행
       for (const toolCall of firstMessage.tool_calls) {
+        // 타입 가드: function 타입인 경우만 처리
+        if (toolCall.type !== 'function') continue;
+        
         const functionName = toolCall.function.name;
         const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
         
