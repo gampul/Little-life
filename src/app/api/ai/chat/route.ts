@@ -467,7 +467,43 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('AI Chat Error:', error);
     return NextResponse.json({ 
-      error: error.message || 'AI 응답 생성 중 오류가 발생했습니다.' 
+      error: error.message || 'AI 응답 생성 중 오류가 발생했습니다.',
+      debug: {
+        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      }
     }, { status: 500 });
+  }
+}
+
+// 디버그용 엔드포인트 - 환경변수 및 데이터 확인
+export async function GET() {
+  try {
+    const envCheck = {
+      supabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      supabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      openaiKey: !!process.env.OPENAI_API_KEY,
+    };
+
+    // 각 테이블 데이터 개수 확인
+    const [daily, memos, expense, finance] = await Promise.all([
+      supabase.from('daily_records').select('id', { count: 'exact', head: true }),
+      supabase.from('memos').select('id', { count: 'exact', head: true }),
+      supabase.from('expense_records').select('id', { count: 'exact', head: true }),
+      supabase.from('finance_records').select('id', { count: 'exact', head: true }),
+    ]);
+
+    return NextResponse.json({
+      envCheck,
+      dataCounts: {
+        daily_records: daily.count ?? daily.error?.message,
+        memos: memos.count ?? memos.error?.message,
+        expense_records: expense.count ?? expense.error?.message,
+        finance_records: finance.count ?? finance.error?.message,
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
