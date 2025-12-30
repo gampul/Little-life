@@ -75,9 +75,12 @@ export default function AIPage() {
 
       const data = await response.json();
 
-      // 디버그: 데이터 개수 콘솔에 출력
+      // 디버그: Function Calling 정보 콘솔에 출력
       if (data.debug) {
-        console.log('📊 AI 데이터 현황:', data.debug);
+        console.log('🔧 AI 모드:', data.debug.mode);
+        if (data.functionsUsed?.length > 0) {
+          console.log('📊 호출된 함수:', data.functionsUsed);
+        }
       }
 
       if (data.error) {
@@ -85,8 +88,8 @@ export default function AIPage() {
       }
 
       // 디버그 정보를 응답에 추가 (개발용)
-      const debugText = data.debug 
-        ? `\n\n---\n📊 [데이터 현황] Daily: ${data.debug.daily}개, Diary: ${data.debug.diary}개, Expense: ${data.debug.expense}개, Property: ${data.debug.property}개`
+      const debugText = data.functionsUsed?.length > 0
+        ? `\n\n---\n🔧 [Function Calling] ${data.functionsUsed.join(', ')}`
         : '';
 
       const assistantMessage: Message = {

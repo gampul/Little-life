@@ -13,160 +13,351 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// 사용자 데이터 수집 함수
-async function collectUserData() {
+// ============================================
+// Function Calling용 도구 정의
+// ============================================
+const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'getDailyData',
+      description: '사용자의 일상 기록을 조회합니다 (체중, 운동, 수면, 기분 등). 건강, 루틴, 체중, 운동, 수면 관련 질문에 사용하세요.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'number',
+            description: '조회할 일수 (기본: 7일)'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getDiaryData',
+      description: '사용자의 일기/메모를 조회합니다. 일기, 메모, 기록, 생각 관련 질문에 사용하세요.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: '조회할 개수 (기본: 5개)'
+          },
+          keyword: {
+            type: 'string',
+            description: '검색할 키워드'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getExpenseData',
+      description: '사용자의 가계부 데이터를 조회합니다. 지출, 수입, 돈, 소비, 저축, 카테고리별 지출 관련 질문에 사용하세요.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days: {
+            type: 'number',
+            description: '조회할 일수 (기본: 30일)'
+          },
+          category: {
+            type: 'string',
+            description: '조회할 카테고리 (예: 식비, 교통비)'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getPropertyData',
+      description: '사용자의 자산/투자 데이터를 조회합니다. 자산, 주식, 투자, 배당금, 수익률, 포트폴리오 관련 질문에 사용하세요.',
+      parameters: {
+        type: 'object',
+        properties: {
+          stockName: {
+            type: 'string',
+            description: '조회할 종목명 (예: 삼성전자)'
+          },
+          owner: {
+            type: 'string',
+            description: '조회할 소유자명'
+          }
+        },
+        required: []
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'getAllSummary',
+      description: '모든 데이터의 요약을 조회합니다. 전체 현황, 종합 분석, 리포트 관련 질문에 사용하세요.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: []
+      }
+    }
+  }
+];
+
+// ============================================
+// 개별 데이터 조회 함수들
+// ============================================
+
+// Daily 데이터 조회
+async function getDailyData(days: number = 7) {
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const pastDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   
-  // Daily 루틴 데이터 (최근 30일)
-  const { data: dailyData } = await supabase
+  const { data, error } = await supabase
     .from('daily_records')
     .select('*')
-    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
+    .gte('date', pastDate.toISOString().split('T')[0])
     .order('date', { ascending: false })
-    .limit(30);
+    .limit(days);
 
-  // Diary 메모 데이터 (최근 10개)
-  const { data: diaryData } = await supabase
-    .from('memos')
-    .select('title, content, created_at')
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  // Expense 가계부 데이터 (최근 30일)
-  const { data: expenseData } = await supabase
-    .from('expense_records')
-    .select('*')
-    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-    .order('date', { ascending: false });
-
-  // Property 자산 데이터 (최신)
-  const { data: propertyData, error: propertyError } = await supabase
-    .from('finance_records')
-    .select('*')
-    .order('period', { ascending: false })
-    .limit(100);
-
-  // 디버깅: 에러 로그
-  if (propertyError) {
-    console.error('Property data fetch error:', propertyError);
+  if (error) {
+    console.error('Daily data fetch error:', error);
+    return { error: error.message };
   }
-  console.log('Property data count:', propertyData?.length || 0);
+
+  if (!data || data.length === 0) {
+    return { message: '일상 기록이 없습니다.' };
+  }
+
+  const summary = data.map(d => {
+    const parts = [];
+    if (d.date) parts.push(`날짜: ${d.date}`);
+    if (d.weight) parts.push(`체중: ${d.weight}kg`);
+    if (d.wake_time) parts.push(`기상: ${d.wake_time}`);
+    if (d.sleep_time) parts.push(`취침: ${d.sleep_time}`);
+    if (d.exercise) parts.push(`운동: ${d.exercise}`);
+    if (d.mood) parts.push(`기분: ${d.mood}`);
+    if (d.meals) parts.push(`식사: ${d.meals}`);
+    if (d.water) parts.push(`물: ${d.water}잔`);
+    if (d.memo) parts.push(`메모: ${d.memo}`);
+    return parts.join(', ');
+  });
 
   return {
-    daily: dailyData || [],
-    diary: diaryData || [],
-    expense: expenseData || [],
-    property: propertyData || [],
+    count: data.length,
+    period: `최근 ${days}일`,
+    records: summary
   };
 }
 
-// 데이터 요약 생성
-function summarizeData(data: {
-  daily: any[];
-  diary: any[];
-  expense: any[];
-  property: any[];
-}) {
-  // Daily 요약 (실제 데이터 포함)
-  const dailySummary = data.daily.length > 0 
-    ? data.daily.slice(0, 10).map(d => {
-        const parts = [];
-        if (d.date) parts.push(`날짜: ${d.date}`);
-        if (d.weight) parts.push(`체중: ${d.weight}kg`);
-        if (d.wake_time) parts.push(`기상: ${d.wake_time}`);
-        if (d.sleep_time) parts.push(`취침: ${d.sleep_time}`);
-        if (d.exercise) parts.push(`운동: ${d.exercise}`);
-        if (d.mood) parts.push(`기분: ${d.mood}`);
-        if (d.meals) parts.push(`식사: ${d.meals}`);
-        if (d.water) parts.push(`물: ${d.water}잔`);
-        if (d.memo) parts.push(`메모: ${d.memo}`);
-        return `- ${parts.join(', ')}`;
-      }).join('\n')
-    : '일상 기록이 없습니다.';
+// Diary 데이터 조회
+async function getDiaryData(limit: number = 5, keyword?: string) {
+  let query = supabase
+    .from('memos')
+    .select('title, content, created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
-  // Diary 요약 (내용 확장)
-  const diarySummary = data.diary.length > 0
-    ? data.diary.map(d => {
-        const text = d.content?.replace(/<[^>]*>/g, '') || '';
-        return `- [${d.created_at?.split('T')[0] || '날짜없음'}] ${d.title || '제목없음'}: ${text.slice(0, 500)}`;
-      }).join('\n')
-    : '일기 기록이 없습니다.';
+  const { data, error } = await query;
 
-  // Expense 요약
+  if (error) {
+    console.error('Diary data fetch error:', error);
+    return { error: error.message };
+  }
+
+  if (!data || data.length === 0) {
+    return { message: '일기 기록이 없습니다.' };
+  }
+
+  let filteredData = data;
+  if (keyword) {
+    filteredData = data.filter(d => 
+      d.title?.includes(keyword) || d.content?.includes(keyword)
+    );
+  }
+
+  const summary = filteredData.map(d => {
+    const text = d.content?.replace(/<[^>]*>/g, '') || '';
+    return {
+      date: d.created_at?.split('T')[0],
+      title: d.title || '제목없음',
+      content: text.slice(0, 300)
+    };
+  });
+
+  return {
+    count: summary.length,
+    keyword: keyword || '없음',
+    records: summary
+  };
+}
+
+// Expense 데이터 조회
+async function getExpenseData(days: number = 30, category?: string) {
+  const now = new Date();
+  const pastDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  
+  let query = supabase
+    .from('expense_records')
+    .select('*')
+    .gte('date', pastDate.toISOString().split('T')[0])
+    .order('date', { ascending: false });
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Expense data fetch error:', error);
+    return { error: error.message };
+  }
+
+  if (!data || data.length === 0) {
+    return { message: '가계부 기록이 없습니다.' };
+  }
+
+  let filteredData = data;
+  if (category) {
+    filteredData = data.filter(d => d.category?.includes(category));
+  }
+
   let totalIncome = 0;
   let totalExpense = 0;
   const categoryExpense: { [key: string]: number } = {};
-  
-  data.expense.forEach(e => {
+
+  filteredData.forEach(e => {
     const amount = Number(e.amount) || 0;
     if (e.type === 'income') {
       totalIncome += amount;
     } else {
       totalExpense += amount;
-      const category = e.category || '기타';
-      categoryExpense[category] = (categoryExpense[category] || 0) + amount;
+      const cat = e.category || '기타';
+      categoryExpense[cat] = (categoryExpense[cat] || 0) + amount;
     }
   });
 
-  const expenseSummary = data.expense.length > 0
-    ? `최근 30일 수입: ${totalIncome.toLocaleString()}원, 지출: ${totalExpense.toLocaleString()}원\n카테고리별 지출: ${Object.entries(categoryExpense).map(([k, v]) => `${k}: ${v.toLocaleString()}원`).join(', ')}`
-    : '가계부 기록이 없습니다.';
+  return {
+    period: `최근 ${days}일`,
+    filterCategory: category || '전체',
+    totalIncome: `${totalIncome.toLocaleString()}원`,
+    totalExpense: `${totalExpense.toLocaleString()}원`,
+    balance: `${(totalIncome - totalExpense).toLocaleString()}원`,
+    categoryBreakdown: Object.entries(categoryExpense).map(([k, v]) => `${k}: ${v.toLocaleString()}원`),
+    recordCount: filteredData.length
+  };
+}
 
-  // Property 요약 (상세 정보 포함)
+// Property 데이터 조회
+async function getPropertyData(stockName?: string, owner?: string) {
+  const { data, error } = await supabase
+    .from('finance_records')
+    .select('*')
+    .order('period', { ascending: false })
+    .limit(100);
+
+  if (error) {
+    console.error('Property data fetch error:', error);
+    return { error: error.message };
+  }
+
+  if (!data || data.length === 0) {
+    return { message: '자산 기록이 없습니다.' };
+  }
+
+  // 최신 기간 데이터만 필터
+  const latestPeriod = data[0]?.period;
+  let latestRecords = data.filter(p => p.period === latestPeriod);
+
+  // 종목명 필터
+  if (stockName) {
+    latestRecords = latestRecords.filter(p => p.stock?.includes(stockName));
+  }
+
+  // 소유자 필터
+  if (owner) {
+    latestRecords = latestRecords.filter(p => p.owner?.includes(owner));
+  }
+
   let totalAsset = 0;
   let totalDividend = 0;
   let totalInOut = 0;
-  const latestPeriod = data.property[0]?.period;
-  const latestRecords = data.property.filter(p => p.period === latestPeriod);
+
   latestRecords.forEach(p => {
     totalAsset += Number(p.value) || 0;
     totalDividend += Number(p.dividend) || 0;
     totalInOut += Number(p.in_out) || 0;
   });
 
-  const propertySummary = latestRecords.length > 0
-    ? `[${latestPeriod} 기준 자산 현황]
-총 자산: ${totalAsset.toLocaleString()}원
-총 배당금: ${totalDividend.toLocaleString()}원
-총 입출금: ${totalInOut >= 0 ? '+' : ''}${totalInOut.toLocaleString()}원
+  const stocks = latestRecords.slice(0, 20).map(p => ({
+    owner: p.owner,
+    division: p.division,
+    category: p.category,
+    stock: p.stock,
+    qty: p.qty,
+    value: `${Number(p.value || 0).toLocaleString()}원`,
+    dividend: `${Number(p.dividend || 0).toLocaleString()}원`,
+    inOut: `${Number(p.in_out || 0) >= 0 ? '+' : ''}${Number(p.in_out || 0).toLocaleString()}원`,
+    growthRate: p.growth_rate ? `${p.growth_rate}%` : null
+  }));
 
-[개별 자산 목록]
-${latestRecords.slice(0, 20).map(p => {
-  const parts = [];
-  if (p.owner) parts.push(`소유자: ${p.owner}`);
-  if (p.division) parts.push(`구분: ${p.division}`);
-  if (p.category) parts.push(`분류: ${p.category}`);
-  if (p.stock) parts.push(`종목: ${p.stock}`);
-  if (p.qty) parts.push(`수량: ${p.qty}`);
-  if (p.value) parts.push(`현재가치: ${Number(p.value).toLocaleString()}원`);
-  if (p.dividend) parts.push(`배당금: ${Number(p.dividend).toLocaleString()}원`);
-  if (p.in_out) parts.push(`입출금: ${Number(p.in_out) >= 0 ? '+' : ''}${Number(p.in_out).toLocaleString()}원`);
-  if (p.growth_rate) parts.push(`수익률: ${p.growth_rate}%`);
-  return `- ${parts.join(', ')}`;
-}).join('\n')}`
-    : '자산 기록이 없습니다.';
-
-  return `
-[사용자 데이터 요약]
-
-📅 일상 기록:
-${dailySummary}
-
-📝 최근 일기:
-${diarySummary}
-
-💰 가계부:
-${expenseSummary}
-
-🏦 자산 현황:
-${propertySummary}
-`.trim();
+  return {
+    period: latestPeriod,
+    filterStock: stockName || '전체',
+    filterOwner: owner || '전체',
+    totalAsset: `${totalAsset.toLocaleString()}원`,
+    totalDividend: `${totalDividend.toLocaleString()}원`,
+    totalInOut: `${totalInOut >= 0 ? '+' : ''}${totalInOut.toLocaleString()}원`,
+    stockCount: latestRecords.length,
+    stocks
+  };
 }
 
+// 전체 요약 조회
+async function getAllSummary() {
+  const [daily, diary, expense, property] = await Promise.all([
+    getDailyData(7),
+    getDiaryData(3),
+    getExpenseData(30),
+    getPropertyData()
+  ]);
+
+  return {
+    daily,
+    diary,
+    expense,
+    property
+  };
+}
+
+// 함수 실행기
+async function executeFunction(name: string, args: any): Promise<any> {
+  switch (name) {
+    case 'getDailyData':
+      return await getDailyData(args.days);
+    case 'getDiaryData':
+      return await getDiaryData(args.limit, args.keyword);
+    case 'getExpenseData':
+      return await getExpenseData(args.days, args.category);
+    case 'getPropertyData':
+      return await getPropertyData(args.stockName, args.owner);
+    case 'getAllSummary':
+      return await getAllSummary();
+    default:
+      return { error: '알 수 없는 함수입니다.' };
+  }
+}
+
+// ============================================
+// API 라우트
+// ============================================
 export async function POST(request: NextRequest) {
   try {
-    const { message, includeData = true } = await request.json();
+    const { message } = await request.json();
 
     if (!message) {
       return NextResponse.json({ error: '메시지가 필요합니다.' }, { status: 400 });
@@ -176,64 +367,96 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'API 키가 설정되지 않았습니다.' }, { status: 500 });
     }
 
-    // 사용자 데이터 수집
-    let dataContext = '';
-    let debugInfo = { daily: 0, diary: 0, expense: 0, property: 0 };
-    if (includeData) {
-      const userData = await collectUserData();
-      debugInfo = {
-        daily: userData.daily.length,
-        diary: userData.diary.length,
-        expense: userData.expense.length,
-        property: userData.property.length,
-      };
-      dataContext = summarizeData(userData);
-    }
-
     const systemPrompt = `# 역할
 너는 "Little Life" 앱의 AI 비서야. 사용자의 일상, 일기, 가계부, 자산 데이터를 분석해서 맞춤형 조언을 제공해.
 
 # 핵심 규칙
-1. 반드시 제공된 데이터만 참고해서 답변해
-2. 데이터에 없는 내용은 절대 추측하거나 지어내지 마
-3. 모르거나 데이터가 부족하면 솔직하게 "데이터가 부족합니다"라고 말해
-4. 구체적인 숫자를 인용해서 근거 있는 답변을 해
-5. 한국어로 답변해
+1. 질문에 필요한 데이터만 함수를 호출해서 조회해
+2. 반드시 조회한 데이터만 참고해서 답변해
+3. 데이터에 없는 내용은 절대 추측하거나 지어내지 마
+4. 모르거나 데이터가 부족하면 솔직하게 "데이터가 부족해"라고 말해
+5. 구체적인 숫자를 인용해서 근거 있는 답변을 해
+6. 한국어로 답변하고, 반말로 친근하게 해
+
+# 함수 사용 가이드
+- 체중, 운동, 수면, 건강 → getDailyData
+- 일기, 메모, 기록 → getDiaryData  
+- 지출, 수입, 돈, 가계부 → getExpenseData
+- 자산, 주식, 투자, 배당 → getPropertyData
+- 전체 현황, 종합 분석 → getAllSummary
 
 # 답변 형식
-- 200자 이내로 간결하게 답변
-- 핵심만 전달하고 불필요한 말 생략
-- 친근하지만 정확한 톤 유지
+- 200자 이내로 간결하게
+- 핵심만 전달
+- 친근한 반말 톤`;
 
-# 금지 사항
-- 거짓 정보나 추측 금지
-- 데이터에 없는 내용 생성 금지
-- 장황하거나 반복적인 답변 금지
-- 확실하지 않은 조언 금지`;
-
-    // OpenAI API 호출
-    const completion = await openai.chat.completions.create({
+    // 1차 호출: AI가 필요한 함수 결정
+    const firstCompletion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: includeData 
-            ? `${dataContext}\n\n---\n\n[사용자 질문]\n${message}`
-            : message
-        },
+        { role: 'user', content: message }
       ],
+      tools: tools,
+      tool_choice: 'auto',
       max_tokens: 1000,
       temperature: 0.3,
     });
 
-    const response = completion.choices[0]?.message?.content || '';
+    const firstMessage = firstCompletion.choices[0].message;
+    let functionsUsed: string[] = [];
+
+    // 함수 호출이 필요한 경우
+    if (firstMessage.tool_calls && firstMessage.tool_calls.length > 0) {
+      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message },
+        firstMessage as OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam
+      ];
+
+      // 각 함수 호출 실행
+      for (const toolCall of firstMessage.tool_calls) {
+        const functionName = toolCall.function.name;
+        const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+        
+        console.log(`🔧 Function called: ${functionName}`, functionArgs);
+        functionsUsed.push(functionName);
+
+        const functionResult = await executeFunction(functionName, functionArgs);
+
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(functionResult, null, 2)
+        });
+      }
+
+      // 2차 호출: 함수 결과를 바탕으로 응답 생성
+      const secondCompletion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: messages,
+        max_tokens: 1000,
+        temperature: 0.3,
+      });
+
+      const response = secondCompletion.choices[0]?.message?.content || '';
+
+      return NextResponse.json({ 
+        success: true, 
+        response,
+        functionsUsed,
+        debug: { mode: 'function_calling', functions: functionsUsed }
+      });
+    }
+
+    // 함수 호출 없이 바로 응답하는 경우
+    const response = firstMessage.content || '';
 
     return NextResponse.json({ 
       success: true, 
       response,
-      hasData: includeData && dataContext.length > 100,
-      debug: debugInfo,  // 디버깅용: 가져온 데이터 개수
+      functionsUsed: [],
+      debug: { mode: 'direct_response' }
     });
 
   } catch (error: any) {
