@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, ChangeEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, ChangeEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
@@ -44,7 +44,7 @@ const formatDate = (dateStr?: string): string => {
   return `${year}. ${month}. ${day}.`;
 };
 
-export default function MemoPage() {
+function MemoPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = getSupabase();
@@ -774,5 +774,23 @@ export default function MemoPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function MemoPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+        <GlobalNav />
+        <div className="max-w-[480px] mx-auto px-4 py-8">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-gray-400">로딩 중...</div>
+          </div>
+        </div>
+        <FooterNav />
+      </div>
+    }>
+      <MemoPageContent />
+    </Suspense>
   );
 }
