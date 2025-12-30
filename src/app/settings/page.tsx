@@ -65,7 +65,7 @@ function CircularProgressChart({
       </svg>
       {/* 달성률 텍스트 (중앙) */}
       <div 
-        className="absolute inset-0 flex items-center justify-center text-sm font-medium pointer-events-none"
+        className="absolute inset-0 flex items-center justify-center text-xs sm:text-sm font-medium pointer-events-none"
         style={{ color }}
       >
         {Math.round(progress)}%
@@ -95,27 +95,27 @@ function RoutineItemWithChart({
   canMoveDown: boolean;
 }) {
   return (
-    <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600">
-      <div className="flex items-center gap-3 flex-wrap">
+    <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-2 sm:p-3 border border-gray-200 dark:border-gray-600">
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* 원형 그래프 */}
         <div className="flex-shrink-0">
           <CircularProgressChart 
             progress={progress} 
-            size={60}
+            size={48}
           />
         </div>
         <input
           type="text"
           value={template.label}
           onChange={(e) => onUpdate(index, 'label', e.target.value)}
-          className="flex-1 min-w-[120px] px-3 py-1 bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[44px] whitespace-nowrap overflow-hidden text-ellipsis"
+          className="flex-1 min-w-0 px-2 sm:px-3 py-1 text-sm sm:text-base bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[40px] sm:min-h-[44px]"
           placeholder="루틴 이름"
         />
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <button
             onClick={() => onMove(index, 'up')}
             disabled={!canMoveUp}
-            className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
+            className="p-1 sm:px-1.5 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[36px] sm:min-h-[40px] min-w-[28px] sm:min-w-[32px]"
             title="위로"
           >
             ↑
@@ -123,14 +123,14 @@ function RoutineItemWithChart({
           <button
             onClick={() => onMove(index, 'down')}
             disabled={!canMoveDown}
-            className="px-1 py-1 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[44px] min-w-[15px] whitespace-nowrap"
+            className="p-1 sm:px-1.5 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[36px] sm:min-h-[40px] min-w-[28px] sm:min-w-[32px]"
             title="아래로"
           >
             ↓
           </button>
           <button
             onClick={() => onDelete(index)}
-            className="px-3 py-1 text-sm bg-red-500 hover:bg-red-600 text-white rounded min-h-[44px] whitespace-nowrap"
+            className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-red-500 hover:bg-red-600 text-white rounded min-h-[36px] sm:min-h-[40px] whitespace-nowrap"
             title="삭제"
           >
             삭제
@@ -398,17 +398,17 @@ export default function SettingsPage() {
       <GlobalNav />
       
       <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">⚙️ 설정</h2>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-5">
+          <div className="flex items-center justify-between mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">⚙️ 설정</h2>
           </div>
 
           {/* 테마 설정 */}
-          <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 whitespace-nowrap">테마</h3>
-            <div className="space-y-3">
+          <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4 whitespace-nowrap">테마</h3>
+            <div className="space-y-2 sm:space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-gray-700 dark:text-gray-300 whitespace-nowrap">화이트 모드</span>
+                <span className="text-sm sm:text-base text-gray-700 dark:text-gray-300 whitespace-nowrap">화이트 모드</span>
                 <button
                   onClick={() => setTheme('light')}
                   className={`w-10 h-10 rounded-lg flex items-center justify-center min-h-[44px] transition-colors ${
@@ -422,7 +422,7 @@ export default function SettingsPage() {
                 </button>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-gray-700 dark:text-gray-300 whitespace-nowrap">다크 모드</span>
+                <span className="text-sm sm:text-base text-gray-700 dark:text-gray-300 whitespace-nowrap">다크 모드</span>
                 <button
                   onClick={() => setTheme('dark')}
                   className={`w-10 h-10 rounded-lg flex items-center justify-center min-h-[44px] transition-colors ${
@@ -439,18 +439,18 @@ export default function SettingsPage() {
           </div>
 
           {/* 루틴 설정 */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">루틴 설정</h3>
+          <div className="mb-4 sm:mb-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">루틴 설정</h3>
               <button
                 onClick={handleAdd}
-                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[44px] whitespace-nowrap flex-shrink-0"
+                className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[36px] sm:min-h-[44px] whitespace-nowrap flex-shrink-0"
               >
                 + 추가
               </button>
             </div>
 
-            <div className="space-y-3 mb-4">
+            <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
               {routineTemplates.map((template, index) => {
                 const progress = routineProgress[template.id] || 0;
                 return (
@@ -470,7 +470,7 @@ export default function SettingsPage() {
             </div>
 
             {routineTemplates.length === 0 && (
-              <div className="text-center text-gray-400 dark:text-gray-500 py-8">
+              <div className="text-center text-sm sm:text-base text-gray-400 dark:text-gray-500 py-6 sm:py-8">
                 루틴이 없습니다. 추가 버튼을 눌러 루틴을 추가하세요.
               </div>
             )}
@@ -478,13 +478,13 @@ export default function SettingsPage() {
             <button
               onClick={handleSave}
               disabled={isLoading}
-              className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="w-full px-4 py-2.5 sm:py-3 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
               {isLoading ? '저장 중...' : '저장'}
             </button>
 
             {message && (
-              <div className={`mt-3 text-sm text-center ${message.includes('✅') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              <div className={`mt-2 sm:mt-3 text-xs sm:text-sm text-center ${message.includes('✅') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {message}
               </div>
             )}

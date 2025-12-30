@@ -898,31 +898,31 @@ export default function AccountPage() {
                             </div>
                           )}
                         </div>
-                        <span className="text-base font-semibold text-gray-900 dark:text-white">총평가금액</span>
+                        <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">총평가금액</span>
                       </div>
-                      <div className="flex items-baseline gap-2 flex-wrap mb-4">
-                        <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {currentPeriod.totalValue.toLocaleString()}원
+                      <div className="flex items-baseline gap-1 sm:gap-2 flex-wrap mb-4">
+                        <span className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                          {formatNumber(currentPeriod.totalValue)}
                         </span>
                         {prevPeriod && (
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            ({isPositive ? '+' : ''}{valueDiff.toLocaleString()}원, {isPositive ? '+' : ''}{valueChangePercent.toFixed(1)}%)
+                          <span className="text-[10px] sm:text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                            ({isPositive ? '+' : ''}{formatNumber(valueDiff)}, {isPositive ? '+' : ''}{valueChangePercent.toFixed(1)}%)
                           </span>
                         )}
                       </div>
                       
                       {/* 상세 정보 */}
-                      <div className="space-y-2.5 pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <div className="space-y-2 sm:space-y-2.5 pt-3 border-t border-gray-200 dark:border-gray-700">
                         {/* 선택된 월 배당금 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">{currentMonth}월 배당금</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {currentPeriod.totalDividend.toLocaleString()}원
+                          <span className="text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">{currentMonth}월 배당금</span>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                              {formatNumber(currentPeriod.totalDividend)}
                             </span>
                             {prevPeriod && dividendDiff !== 0 && (
-                              <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
-                                ({isDividendPositive ? '+' : ''}{dividendDiff.toLocaleString()})
+                              <span className="text-[10px] sm:text-xs font-normal text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                ({isDividendPositive ? '+' : ''}{formatNumber(dividendDiff)})
                               </span>
                             )}
                           </div>
@@ -930,29 +930,29 @@ export default function AccountPage() {
                         
                         {/* 해당월까지 누적 배당금 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">2025년 {currentMonth}월 누적 배당금</span>
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {cumulativeDividend.toLocaleString()}원
+                          <span className="text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">25년 {currentMonth}월 누적 배당금</span>
+                          <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                            {formatNumber(cumulativeDividend)}
                           </span>
                         </div>
                         
                         {/* 해당월까지 누적 입출금 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">2025년 {currentMonth}월 누적 입출금</span>
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                            {cumulativeInOut.toLocaleString()}원
+                          <span className="text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">25년 {currentMonth}월 누적 입출금</span>
+                          <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                            {formatNumber(cumulativeInOut)}
                           </span>
                         </div>
                         
                         {/* 2025년 수익률 */}
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-gray-900 dark:text-white">2025년 수익률</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                          <span className="text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">25년 수익률</span>
+                          <div className="flex items-center gap-1 sm:gap-2">
+                            <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                               {isProfitPositive ? '+' : ''}{profitRate.toFixed(1)}%
                             </span>
-                            <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
-                              ({isProfitPositive ? '+' : ''}{profitLoss.toLocaleString()}원)
+                            <span className="text-[10px] sm:text-xs font-normal text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                              ({isProfitPositive ? '+' : ''}{formatNumber(profitLoss)})
                             </span>
                           </div>
                         </div>
@@ -960,13 +960,13 @@ export default function AccountPage() {
                         {/* 전월 대비 수익률 */}
                         {prevPeriod && profitRateDiff !== 0 && (
                           <div className="flex items-center justify-between">
-                            <span className="text-sm text-gray-900 dark:text-white">전월 대비</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                            <span className="text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">전월 대비</span>
+                            <div className="flex items-center gap-1 sm:gap-2">
+                              <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                                 {profitRateDiff >= 0 ? '+' : ''}{profitRateDiff.toFixed(1)}%
                               </span>
-                              <span className="text-xs font-normal text-gray-700 dark:text-gray-300">
-                                ({profitDiff >= 0 ? '+' : ''}{profitDiff.toLocaleString()}원)
+                              <span className="text-[10px] sm:text-xs font-normal text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                ({profitDiff >= 0 ? '+' : ''}{formatNumber(profitDiff)})
                               </span>
                             </div>
                           </div>
@@ -1160,14 +1160,14 @@ export default function AccountPage() {
                                 ({monthRecords.length}건)
                               </span>
                             </div>
-                            <div className="flex items-center gap-4 text-xs">
-                              <span className="text-gray-500 dark:text-gray-400">
-                                입출금 <span className={totalInOut >= 0 ? 'text-blue-600' : 'text-red-500'}>{totalInOut >= 0 ? '+' : ''}{totalInOut.toLocaleString()}원</span>
+                            <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
+                              <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                입출금 <span className={totalInOut >= 0 ? 'text-blue-600' : 'text-red-500'}>{totalInOut >= 0 ? '+' : ''}{formatNumber(totalInOut)}</span>
                               </span>
-                              <span className="text-gray-500 dark:text-gray-400">
+                              <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                 배당 <span className="text-green-600">{formatNumber(totalDividend)}</span>
                               </span>
-                              <span className="text-gray-500 dark:text-gray-400">
+                              <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
                                 평가 <span className="font-medium text-gray-900 dark:text-white">{formatNumber(totalValue)}</span>
                               </span>
                             </div>
@@ -1175,49 +1175,51 @@ export default function AccountPage() {
 
                           {/* 상세 내역 (펼침 시) */}
                           {isExpanded && (
-                            <div className="bg-gray-50 dark:bg-gray-900/50">
-                              {/* 테이블 헤더 */}
-                              <div className="grid grid-cols-7 gap-2 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                                <span>소유자</span>
-                                <span>구분</span>
-                                <span>카테고리</span>
-                                <span>종목명</span>
-                                <span className="text-right">입출금</span>
-                                <span className="text-right">배당금</span>
-                                <span className="text-right">현재금액</span>
-                              </div>
-                              {/* 데이터 행 */}
-                              <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                                {monthRecords.map((record, idx) => (
-                                  <div key={record.id || idx} className="grid grid-cols-7 gap-2 px-4 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-800/50">
-                                    <span className="text-gray-900 dark:text-white truncate">{record.owner}</span>
-                                    <span className="text-gray-600 dark:text-gray-400 truncate">{record.division}</span>
-                                    <span className="text-gray-600 dark:text-gray-400 truncate">{record.category}</span>
-                                    <span className="text-gray-900 dark:text-white truncate font-medium">{record.stock}</span>
-                                    <span className={`text-right ${record.in_out > 0 ? 'text-blue-600' : record.in_out < 0 ? 'text-red-500' : 'text-gray-400'}`}>
-                                      {record.in_out !== 0 ? (record.in_out > 0 ? '+' : '') + record.in_out.toLocaleString() : '-'}
-                                    </span>
-                                    <span className={`text-right ${record.dividend > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                                      {record.dividend > 0 ? record.dividend.toLocaleString() : '-'}
-                                    </span>
-                                    <span className="text-right font-medium text-gray-900 dark:text-white">
-                                      {record.value.toLocaleString()}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                              {/* 합계 행 */}
-                              <div className="grid grid-cols-7 gap-2 px-4 py-3 text-xs font-bold bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-600">
-                                <span className="text-gray-900 dark:text-white col-span-4">합계</span>
-                                <span className={`text-right ${totalInOut > 0 ? 'text-blue-600' : totalInOut < 0 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
-                                  {totalInOut !== 0 ? (totalInOut > 0 ? '+' : '') + totalInOut.toLocaleString() : '-'}
-                                </span>
-                                <span className="text-right text-green-600">
-                                  {totalDividend > 0 ? totalDividend.toLocaleString() : '-'}
-                                </span>
-                                <span className="text-right text-gray-900 dark:text-white">
-                                  {totalValue.toLocaleString()}
-                                </span>
+                            <div className="bg-gray-50 dark:bg-gray-900/50 overflow-x-auto">
+                              <div className="min-w-[500px]">
+                                {/* 테이블 헤더 */}
+                                <div className="grid grid-cols-7 gap-1 px-3 py-2 text-[10px] sm:text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                  <span>소유자</span>
+                                  <span>구분</span>
+                                  <span>카테고리</span>
+                                  <span>종목명</span>
+                                  <span className="text-right">입출금</span>
+                                  <span className="text-right">배당금</span>
+                                  <span className="text-right">현재금액</span>
+                                </div>
+                                {/* 데이터 행 */}
+                                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                                  {monthRecords.map((record, idx) => (
+                                    <div key={record.id || idx} className="grid grid-cols-7 gap-1 px-3 py-2 text-[10px] sm:text-xs hover:bg-gray-100 dark:hover:bg-gray-800/50">
+                                      <span className="text-gray-900 dark:text-white truncate">{record.owner}</span>
+                                      <span className="text-gray-600 dark:text-gray-400 truncate">{record.division}</span>
+                                      <span className="text-gray-600 dark:text-gray-400 truncate">{record.category}</span>
+                                      <span className="text-gray-900 dark:text-white truncate font-medium">{record.stock}</span>
+                                      <span className={`text-right whitespace-nowrap ${record.in_out > 0 ? 'text-blue-600' : record.in_out < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                        {record.in_out !== 0 ? (record.in_out > 0 ? '+' : '') + formatNumber(record.in_out) : '-'}
+                                      </span>
+                                      <span className={`text-right whitespace-nowrap ${record.dividend > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                        {record.dividend > 0 ? formatNumber(record.dividend) : '-'}
+                                      </span>
+                                      <span className="text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                                        {formatNumber(record.value)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                                {/* 합계 행 */}
+                                <div className="grid grid-cols-7 gap-1 px-3 py-2 text-[10px] sm:text-xs font-bold bg-gray-100 dark:bg-gray-800 border-t border-gray-300 dark:border-gray-600">
+                                  <span className="text-gray-900 dark:text-white col-span-4">합계</span>
+                                  <span className={`text-right whitespace-nowrap ${totalInOut > 0 ? 'text-blue-600' : totalInOut < 0 ? 'text-red-500' : 'text-gray-600 dark:text-gray-300'}`}>
+                                    {totalInOut !== 0 ? (totalInOut > 0 ? '+' : '') + formatNumber(totalInOut) : '-'}
+                                  </span>
+                                  <span className="text-right text-green-600 whitespace-nowrap">
+                                    {totalDividend > 0 ? formatNumber(totalDividend) : '-'}
+                                  </span>
+                                  <span className="text-right text-gray-900 dark:text-white whitespace-nowrap">
+                                    {formatNumber(totalValue)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1711,16 +1713,16 @@ export default function AccountPage() {
 
                   return tableData.length > 0 && recentPeriods.length > 0 ? (
                     <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                      <table className="w-full text-[11px] sm:text-sm">
                         <thead>
                           <tr className="border-b border-gray-200 dark:border-gray-600">
-                            <th className="text-left py-2 px-2 text-gray-600 dark:text-gray-400 font-medium">카테고리</th>
+                            <th className="text-left py-2 px-1 sm:px-2 text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">카테고리</th>
                             {recentPeriods.map((period) => (
-                              <th key={period} className="text-right py-2 px-2 text-gray-600 dark:text-gray-400 font-medium">
+                              <th key={period} className="text-right py-2 px-1 sm:px-2 text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
                                 {period.replace('2025. ', '')}월
                               </th>
                             ))}
-                            <th className="text-right py-2 px-2 text-gray-600 dark:text-gray-400 font-medium">변동</th>
+                            <th className="text-right py-2 px-1 sm:px-2 text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">변동</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1765,21 +1767,21 @@ export default function AccountPage() {
                                     setExpandedCategories(newSet);
                                   }}
                                 >
-                                  <td className="py-2 px-2">
-                                    <div className="flex items-center gap-2">
+                                  <td className="py-2 px-1 sm:px-2">
+                                    <div className="flex items-center gap-1 sm:gap-2">
                                       <div
-                                        className="w-2.5 h-2.5 rounded-full"
+                                        className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0"
                                         style={{ backgroundColor: row.color }}
                                       />
-                                      <span className="font-medium text-gray-900 dark:text-white">{row.category}</span>
+                                      <span className="font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.category}</span>
                                     </div>
                                   </td>
                                   {recentPeriods.map((period) => (
-                                    <td key={period} className="text-right py-2 px-2 text-gray-700 dark:text-gray-300">
+                                    <td key={period} className="text-right py-2 px-1 sm:px-2 text-gray-700 dark:text-gray-300 whitespace-nowrap">
                                       {row.periodValues[period] > 0 ? formatNumber(row.periodValues[period]) : '-'}
                                     </td>
                                   ))}
-                                  <td className="text-right py-2 px-2">
+                                  <td className="text-right py-2 px-1 sm:px-2 whitespace-nowrap">
                                     {change !== 0 ? (
                                       <span className={`font-medium ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                                         {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
