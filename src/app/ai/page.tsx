@@ -75,14 +75,24 @@ export default function AIPage() {
 
       const data = await response.json();
 
+      // 디버그: 데이터 개수 콘솔에 출력
+      if (data.debug) {
+        console.log('📊 AI 데이터 현황:', data.debug);
+      }
+
       if (data.error) {
         throw new Error(data.error);
       }
 
+      // 디버그 정보를 응답에 추가 (개발용)
+      const debugText = data.debug 
+        ? `\n\n---\n📊 [데이터 현황] Daily: ${data.debug.daily}개, Diary: ${data.debug.diary}개, Expense: ${data.debug.expense}개, Property: ${data.debug.property}개`
+        : '';
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response,
+        content: data.response + debugText,
         timestamp: new Date(),
       };
 

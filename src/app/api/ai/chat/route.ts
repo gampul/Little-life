@@ -178,8 +178,15 @@ export async function POST(request: NextRequest) {
 
     // 사용자 데이터 수집
     let dataContext = '';
+    let debugInfo = { daily: 0, diary: 0, expense: 0, property: 0 };
     if (includeData) {
       const userData = await collectUserData();
+      debugInfo = {
+        daily: userData.daily.length,
+        diary: userData.diary.length,
+        expense: userData.expense.length,
+        property: userData.property.length,
+      };
       dataContext = summarizeData(userData);
     }
 
@@ -226,6 +233,7 @@ export async function POST(request: NextRequest) {
       success: true, 
       response,
       hasData: includeData && dataContext.length > 100,
+      debug: debugInfo,  // 디버깅용: 가져온 데이터 개수
     });
 
   } catch (error: any) {
