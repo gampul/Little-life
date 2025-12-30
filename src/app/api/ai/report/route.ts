@@ -42,9 +42,9 @@ async function collectDetailedData() {
 
   // Property 자산 데이터 (최근 3개월)
   const { data: propertyData } = await supabase
-    .from('account_records')
+    .from('finance_records')
     .select('*')
-    .order('record_month', { ascending: false })
+    .order('period', { ascending: false })
     .limit(300);
 
   return {
@@ -115,27 +115,45 @@ function analyzeData(data: {
   };
 
   // Property 분석
-  const latestMonth = data.property[0]?.record_month;
-  const latestRecords = data.property.filter(p => p.record_month === latestMonth);
+  const latestPeriod = data.property[0]?.period;
+  const latestRecords = data.property.filter(p => p.period === latestPeriod);
   
   let totalAsset = 0;
   let totalDividend = 0;
+  let totalInOut = 0;
   const assetByCategory: { [key: string]: number } = {};
+  const assetByOwner: { [key: string]: number } = {};
   
   latestRecords.forEach(p => {
-    const value = Number(p.current_value) || 0;
+    const value = Number(p.value) || 0;
     totalAsset += value;
     totalDividend += Number(p.dividend) || 0;
+    totalInOut += Number(p.in_out) || 0;
     const category = p.category || '기타';
     assetByCategory[category] = (assetByCategory[category] || 0) + value;
+    const owner = p.owner || '미지정';
+    assetByOwner[owner] = (assetByOwner[owner] || 0) + value;
   });
 
   const propertyAnalysis = {
     totalAsset,
     totalDividend,
+    totalInOut,
     assetByCategory,
+    assetByOwner,
     accountCount: latestRecords.length,
-    latestMonth,
+    latestPeriod,
+    stocks: latestRecords.slice(0, 20).map(p => ({
+      owner: p.owner,
+      division: p.division,
+      category: p.category,
+      stock: p.stock,
+      qty: p.qty,
+      value: p.value,
+      dividend: p.dividend,
+      inOut: p.in_out,
+      growthRate: p.growth_rate,
+    })),
   };
 
   return {

@@ -41,11 +41,17 @@ async function collectUserData() {
     .order('date', { ascending: false });
 
   // Property 자산 데이터 (최신)
-  const { data: propertyData } = await supabase
-    .from('account_records')
+  const { data: propertyData, error: propertyError } = await supabase
+    .from('finance_records')
     .select('*')
-    .order('record_month', { ascending: false })
+    .order('period', { ascending: false })
     .limit(100);
+
+  // 디버깅: 에러 로그
+  if (propertyError) {
+    console.error('Property data fetch error:', propertyError);
+  }
+  console.log('Property data count:', propertyData?.length || 0);
 
   return {
     daily: dailyData || [],
@@ -111,16 +117,16 @@ function summarizeData(data: {
   let totalAsset = 0;
   let totalDividend = 0;
   let totalInOut = 0;
-  const latestMonth = data.property[0]?.record_month;
-  const latestRecords = data.property.filter(p => p.record_month === latestMonth);
+  const latestPeriod = data.property[0]?.period;
+  const latestRecords = data.property.filter(p => p.period === latestPeriod);
   latestRecords.forEach(p => {
-    totalAsset += Number(p.current_value) || 0;
+    totalAsset += Number(p.value) || 0;
     totalDividend += Number(p.dividend) || 0;
     totalInOut += Number(p.in_out) || 0;
   });
 
   const propertySummary = latestRecords.length > 0
-    ? `[${latestMonth} 기준 자산 현황]
+    ? `[${latestPeriod} 기준 자산 현황]
 총 자산: ${totalAsset.toLocaleString()}원
 총 배당금: ${totalDividend.toLocaleString()}원
 총 입출금: ${totalInOut >= 0 ? '+' : ''}${totalInOut.toLocaleString()}원
@@ -129,11 +135,14 @@ function summarizeData(data: {
 ${latestRecords.slice(0, 20).map(p => {
   const parts = [];
   if (p.owner) parts.push(`소유자: ${p.owner}`);
+  if (p.division) parts.push(`구분: ${p.division}`);
   if (p.category) parts.push(`분류: ${p.category}`);
   if (p.stock) parts.push(`종목: ${p.stock}`);
-  if (p.current_value) parts.push(`현재가치: ${Number(p.current_value).toLocaleString()}원`);
+  if (p.qty) parts.push(`수량: ${p.qty}`);
+  if (p.value) parts.push(`현재가치: ${Number(p.value).toLocaleString()}원`);
   if (p.dividend) parts.push(`배당금: ${Number(p.dividend).toLocaleString()}원`);
   if (p.in_out) parts.push(`입출금: ${Number(p.in_out) >= 0 ? '+' : ''}${Number(p.in_out).toLocaleString()}원`);
+  if (p.growth_rate) parts.push(`수익률: ${p.growth_rate}%`);
   return `- ${parts.join(', ')}`;
 }).join('\n')}`
     : '자산 기록이 없습니다.';
