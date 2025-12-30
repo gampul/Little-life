@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 
-// Gemini API 초기화
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// OpenAI 클라이언트
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || '',
+});
 
 // Supabase 클라이언트
 const supabase = createClient(
@@ -130,7 +132,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '메시지가 필요합니다.' }, { status: 400 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'API 키가 설정되지 않았습니다.' }, { status: 500 });
     }
 
@@ -141,11 +143,6 @@ export async function POST(request: NextRequest) {
       dataContext = summarizeData(userData);
     }
 
-    // Gemini 모델 설정
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-    });
-    
     const systemPrompt = `너는 사용자의 개인 라이프 코치이자 재정 어드바이저야.
 사용자의 일상(Daily), 일기(Diary), 가계부(Expense), 자산(Property) 데이터를 분석하여 
 친근하고 실용적인 조언을 해줘.
@@ -158,14 +155,23 @@ export async function POST(request: NextRequest) {
 5. 필요시 실천 가능한 구체적인 행동 제안을 해줘
 6. 답변은 간결하되 핵심을 담아줘 (200-400자 정도)`;
 
-    // 프롬프트 구성
-    const prompt = includeData 
-      ? `${systemPrompt}\n\n${dataContext}\n\n---\n\n[사용자 질문]\n${message}`
-      : `${systemPrompt}\n\n[사용자 질문]\n${message}`;
+    // OpenAI API 호출
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { 
+          role: 'user', 
+          content: includeData 
+            ? `${dataContext}\n\n---\n\n[사용자 질문]\n${message}`
+            : message
+        },
+      ],
+      max_tokens: 1000,
+      temperature: 0.7,
+    });
 
-    // AI 응답 생성
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    const response = completion.choices[0]?.message?.content || '';
 
     return NextResponse.json({ 
       success: true, 
@@ -180,4 +186,3 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 }
-

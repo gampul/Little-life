@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 
-// Gemini API 초기화
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+// OpenAI 클라이언트
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || '',
+});
 
 // Supabase 클라이언트
 const supabase = createClient(
@@ -148,7 +150,7 @@ export async function POST(request: NextRequest) {
   try {
     const { reportType = 'daily' } = await request.json();
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'API 키가 설정되지 않았습니다.' }, { status: 500 });
     }
 
@@ -164,11 +166,6 @@ export async function POST(request: NextRequest) {
       weekly: `주간 종합 리포트를 작성해줘. 이번 주의 하이라이트, 개선점, 다음 주 목표를 제안해줘.`,
     };
 
-    // Gemini 모델 설정
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
-    });
-    
     const systemPrompt = `너는 전문 라이프 코치이자 재정 어드바이저야.
 사용자 데이터를 분석하여 체계적이고 실용적인 리포트를 작성해.
 
@@ -186,7 +183,7 @@ export async function POST(request: NextRequest) {
 - 마크다운 형식 사용
 - 전체 500-800자`;
 
-    // 프롬프트 구성
+    // 데이터 컨텍스트
     const dataContext = `
 [사용자 데이터 분석 결과]
 
@@ -210,11 +207,21 @@ ${analysis.diary.map(d => `- ${d.title}: ${d.content.slice(0, 100)}...`).join('\
 - 카테고리별: ${Object.entries(analysis.property.assetByCategory).map(([k, v]) => `${k}: ${(v as number).toLocaleString()}원`).join(', ')}
 `;
 
-    const prompt = `${systemPrompt}\n\n${dataContext}\n\n---\n\n${reportPrompts[reportType] || reportPrompts.daily}`;
+    // OpenAI API 호출
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { 
+          role: 'user', 
+          content: `${dataContext}\n\n---\n\n${reportPrompts[reportType] || reportPrompts.daily}`
+        },
+      ],
+      max_tokens: 1500,
+      temperature: 0.7,
+    });
 
-    // AI 리포트 생성
-    const result = await model.generateContent(prompt);
-    const report = result.response.text();
+    const report = completion.choices[0]?.message?.content || '';
 
     return NextResponse.json({ 
       success: true, 
@@ -238,4 +245,3 @@ ${analysis.diary.map(d => `- ${d.title}: ${d.content.slice(0, 100)}...`).join('\
     }, { status: 500 });
   }
 }
-
