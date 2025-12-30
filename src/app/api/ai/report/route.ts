@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
 
     // Gemini 모델 설정
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-pro',
       systemInstruction: `너는 전문 라이프 코치이자 재정 어드바이저야.
 사용자 데이터를 분석하여 체계적이고 실용적인 리포트를 작성해.
 

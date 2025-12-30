@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     // Gemini 모델 설정
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-pro',
       systemInstruction: `너는 사용자의 개인 라이프 코치이자 재정 어드바이저야.
 사용자의 일상(Daily), 일기(Diary), 가계부(Expense), 자산(Property) 데이터를 분석하여 
 친근하고 실용적인 조언을 해줘.
