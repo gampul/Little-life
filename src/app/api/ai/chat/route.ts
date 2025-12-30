@@ -62,16 +62,28 @@ function summarizeData(data: {
   expense: any[];
   property: any[];
 }) {
-  // Daily 요약
+  // Daily 요약 (실제 데이터 포함)
   const dailySummary = data.daily.length > 0 
-    ? `최근 ${data.daily.length}일간의 일상 기록이 있습니다.`
+    ? data.daily.slice(0, 10).map(d => {
+        const parts = [];
+        if (d.date) parts.push(`날짜: ${d.date}`);
+        if (d.weight) parts.push(`체중: ${d.weight}kg`);
+        if (d.wake_time) parts.push(`기상: ${d.wake_time}`);
+        if (d.sleep_time) parts.push(`취침: ${d.sleep_time}`);
+        if (d.exercise) parts.push(`운동: ${d.exercise}`);
+        if (d.mood) parts.push(`기분: ${d.mood}`);
+        if (d.meals) parts.push(`식사: ${d.meals}`);
+        if (d.water) parts.push(`물: ${d.water}잔`);
+        if (d.memo) parts.push(`메모: ${d.memo}`);
+        return `- ${parts.join(', ')}`;
+      }).join('\n')
     : '일상 기록이 없습니다.';
 
-  // Diary 요약
+  // Diary 요약 (내용 확장)
   const diarySummary = data.diary.length > 0
     ? data.diary.map(d => {
         const text = d.content?.replace(/<[^>]*>/g, '') || '';
-        return `- ${d.title || '제목없음'}: ${text.slice(0, 100)}...`;
+        return `- [${d.created_at?.split('T')[0] || '날짜없음'}] ${d.title || '제목없음'}: ${text.slice(0, 500)}`;
       }).join('\n')
     : '일기 기록이 없습니다.';
 
