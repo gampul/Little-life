@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     // Gemini 모델 설정
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-1.5-flash',
     });
     
     const systemPrompt = `너는 사용자의 개인 라이프 코치이자 재정 어드바이저야.
