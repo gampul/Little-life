@@ -143,8 +143,10 @@ export async function POST(request: NextRequest) {
 
     // Gemini 모델 설정
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-pro',
-      systemInstruction: `너는 사용자의 개인 라이프 코치이자 재정 어드바이저야.
+      model: 'gemini-2.0-flash-exp',
+    });
+    
+    const systemPrompt = `너는 사용자의 개인 라이프 코치이자 재정 어드바이저야.
 사용자의 일상(Daily), 일기(Diary), 가계부(Expense), 자산(Property) 데이터를 분석하여 
 친근하고 실용적인 조언을 해줘.
 
@@ -154,13 +156,12 @@ export async function POST(request: NextRequest) {
 3. 구체적인 숫자나 데이터를 인용하면서 조언해
 4. 긍정적이고 격려하는 톤을 유지해
 5. 필요시 실천 가능한 구체적인 행동 제안을 해줘
-6. 답변은 간결하되 핵심을 담아줘 (200-400자 정도)`,
-    });
+6. 답변은 간결하되 핵심을 담아줘 (200-400자 정도)`;
 
     // 프롬프트 구성
     const prompt = includeData 
-      ? `${dataContext}\n\n---\n\n[사용자 질문]\n${message}`
-      : message;
+      ? `${systemPrompt}\n\n${dataContext}\n\n---\n\n[사용자 질문]\n${message}`
+      : `${systemPrompt}\n\n[사용자 질문]\n${message}`;
 
     // AI 응답 생성
     const result = await model.generateContent(prompt);

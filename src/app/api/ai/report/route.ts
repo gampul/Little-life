@@ -166,8 +166,10 @@ export async function POST(request: NextRequest) {
 
     // Gemini 모델 설정
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-pro',
-      systemInstruction: `너는 전문 라이프 코치이자 재정 어드바이저야.
+      model: 'gemini-2.0-flash-exp',
+    });
+    
+    const systemPrompt = `너는 전문 라이프 코치이자 재정 어드바이저야.
 사용자 데이터를 분석하여 체계적이고 실용적인 리포트를 작성해.
 
 리포트 형식:
@@ -182,8 +184,7 @@ export async function POST(request: NextRequest) {
 - 구체적인 숫자 인용
 - 긍정적이고 격려하는 톤
 - 마크다운 형식 사용
-- 전체 500-800자`,
-    });
+- 전체 500-800자`;
 
     // 프롬프트 구성
     const dataContext = `
@@ -209,7 +210,7 @@ ${analysis.diary.map(d => `- ${d.title}: ${d.content.slice(0, 100)}...`).join('\
 - 카테고리별: ${Object.entries(analysis.property.assetByCategory).map(([k, v]) => `${k}: ${(v as number).toLocaleString()}원`).join(', ')}
 `;
 
-    const prompt = `${dataContext}\n\n---\n\n${reportPrompts[reportType] || reportPrompts.daily}`;
+    const prompt = `${systemPrompt}\n\n${dataContext}\n\n---\n\n${reportPrompts[reportType] || reportPrompts.daily}`;
 
     // AI 리포트 생성
     const result = await model.generateContent(prompt);
