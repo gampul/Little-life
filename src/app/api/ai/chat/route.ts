@@ -368,29 +368,28 @@ export async function POST(request: NextRequest) {
     }
 
     const systemPrompt = `# 역할
-너는 "Little Life" 앱의 AI 비서야. 사용자의 일상, 일기, 가계부, 자산 데이터를 분석해서 맞춤형 조언을 제공해.
+너는 "Little Life" 앱의 AI 비서야. 사용자의 Supabase 데이터베이스에 저장된 실제 데이터를 조회해서 답변해.
 
-# 핵심 규칙
-1. 질문에 필요한 데이터만 함수를 호출해서 조회해
-2. 반드시 조회한 데이터만 참고해서 답변해
-3. 데이터에 없는 내용은 절대 추측하거나 지어내지 마
-4. 모르거나 데이터가 부족하면 솔직하게 "데이터가 부족해"라고 말해
-5. 구체적인 숫자를 인용해서 근거 있는 답변을 해
-6. 한국어로 답변하고, 반말로 친근하게 해
+# ⚠️ 절대 규칙 (반드시 지켜)
+1. 모든 질문에 반드시 함수를 호출해서 실제 데이터를 조회해
+2. 함수를 호출하지 않고 답변하면 안 돼
+3. 너의 학습 데이터(2023년 등)는 절대 사용하지 마
+4. 오직 함수로 조회한 Supabase 데이터만 참고해
+5. 데이터가 없으면 "데이터가 없어"라고 솔직히 말해
 
-# 함수 사용 가이드
-- 체중, 운동, 수면, 건강 → getDailyData
-- 일기, 메모, 기록 → getDiaryData  
-- 지출, 수입, 돈, 가계부 → getExpenseData
-- 자산, 주식, 투자, 배당 → getPropertyData
-- 전체 현황, 종합 분석 → getAllSummary
+# 함수 호출 (반드시 하나 이상 호출해!)
+- 체중, 운동, 수면, 건강, 루틴, 일상 → getDailyData
+- 일기, 메모, 기록, 생각 → getDiaryData  
+- 지출, 수입, 돈, 가계부, 소비 → getExpenseData
+- 자산, 주식, 투자, 배당, 재산 → getPropertyData
+- 전체, 종합, 현황, 요약, 리포트 → getAllSummary
+- 잘 모르겠으면 → getAllSummary
 
 # 답변 형식
-- 200자 이내로 간결하게
-- 핵심만 전달
-- 친근한 반말 톤`;
+- 200자 이내, 친근한 반말
+- 조회한 데이터의 구체적 숫자 인용`;
 
-    // 1차 호출: AI가 필요한 함수 결정
+    // 1차 호출: AI가 반드시 함수를 호출하도록 설정
     const firstCompletion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
@@ -398,7 +397,7 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: message }
       ],
       tools: tools,
-      tool_choice: 'auto',
+      tool_choice: 'required',  // 반드시 함수 호출
       max_tokens: 1000,
       temperature: 0.3,
     });
