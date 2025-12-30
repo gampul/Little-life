@@ -225,7 +225,7 @@ ${analysis.diary.map(d => `- ${d.title}: ${d.content.slice(0, 100)}...`).join('\
 - 일평균 지출: ${Math.round(analysis.expense.avgDailySpending).toLocaleString()}원
 - 카테고리별: ${analysis.expense.topCategories.map(([k, v]) => `${k}: ${v.toLocaleString()}원`).join(', ')}
 
-🏦 자산 현황 (${analysis.property.latestMonth || '데이터 없음'}):
+🏦 자산 현황 (${analysis.property.latestPeriod || '데이터 없음'}):
 - 총 자산: ${analysis.property.totalAsset.toLocaleString()}원
 - 배당금: ${analysis.property.totalDividend.toLocaleString()}원
 - 계좌 수: ${analysis.property.accountCount}개
