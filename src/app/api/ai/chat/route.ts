@@ -419,8 +419,11 @@ export async function POST(request: NextRequest) {
         // 타입 가드: function 타입인 경우만 처리
         if (toolCall.type !== 'function') continue;
         
-        const functionName = toolCall.function.name;
-        const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tc = toolCall as any;
+        const functionName = tc.function?.name || tc.name || '';
+        const functionArgsStr = tc.function?.arguments || tc.arguments || '{}';
+        const functionArgs = JSON.parse(functionArgsStr);
         
         console.log(`🔧 Function called: ${functionName}`, functionArgs);
         functionsUsed.push(functionName);
