@@ -73,6 +73,7 @@ export default function Home() {
   
   // 식사 기록 목록
   const [mealRecords, setMealRecords] = useState<DailyRecord[]>([]);
+  const [expandedMealMonth, setExpandedMealMonth] = useState<string | null>(null);
   
   // 그래프에서 선택된 날짜의 식사 메모
   const [selectedChartDate, setSelectedChartDate] = useState<string | null>(null);
@@ -1520,83 +1521,133 @@ export default function Home() {
                 )}
               </div>
               
-              {/* 날짜별 식사 기록 목록 */}
-              {mealRecords.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
-                    📅 최근 식사 기록
-                  </h4>
-                  <div className="space-y-3">
-                    {mealRecords.map((record) => {
-                      const recordDate = new Date(record.date);
-                      const formattedDate = `${recordDate.getFullYear()}년 ${recordDate.getMonth() + 1}월 ${recordDate.getDate()}일`;
-                      const meals = [];
-                      if (record.meal_breakfast) meals.push('아침');
-                      if (record.meal_lunch) meals.push('점심');
-                      if (record.meal_dinner) meals.push('저녁');
-                      
-                      return (
-                        <div
-                          key={record.id}
-                          className="bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
-                          onClick={async () => {
-                            console.log('📋 기록 클릭:', record.date);
-                            // 해당 날짜로 변경하고 데이터 로드
-                            await loadDailyRecord(record.date);
-                            await loadRoutineChecks(record.date);
-                            setSelectedDate(record.date);
-                            setIsEditMode(true);
-                            // 상단으로 스크롤
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                              {formattedDate}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              {meals.length > 0 && (
-                                <div className="flex gap-1.5">
-                                  {meals.map((meal, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
-                                    >
-                                      {meal}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              <span 
-                                className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                                onClick={async (e) => {
-                                  e.stopPropagation(); // 부모 div의 클릭 이벤트 방지
-                                  console.log('✏️ 수정 아이콘 클릭:', record.date);
-                                  // 해당 날짜로 변경하고 데이터 로드
-                                  await loadDailyRecord(record.date);
-                                  await loadRoutineChecks(record.date);
-                                  setSelectedDate(record.date);
-                                  setIsEditMode(true);
-                                  // 상단으로 스크롤
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                title="수정하기"
+              {/* 날짜별 식사 기록 목록 - 월별 아코디언 */}
+              {mealRecords.length > 0 && (() => {
+                // 월별로 그룹화
+                const recordsByMonth = mealRecords.reduce((acc, record) => {
+                  const recordDate = new Date(record.date);
+                  const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
+                  if (!acc[monthKey]) {
+                    acc[monthKey] = [];
+                  }
+                  acc[monthKey].push(record);
+                  return acc;
+                }, {} as Record<string, DailyRecord[]>);
+
+                // 월별 키를 최신순으로 정렬
+                const sortedMonths = Object.keys(recordsByMonth).sort((a, b) => b.localeCompare(a));
+
+                return (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+                      📅 식사 기록
+                    </h4>
+                    <div className="space-y-2">
+                      {sortedMonths.map((monthKey) => {
+                        const [year, month] = monthKey.split('-');
+                        const monthRecords = recordsByMonth[monthKey];
+                        const isExpanded = expandedMealMonth === monthKey;
+                        
+                        return (
+                          <div key={monthKey} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            {/* 월별 헤더 */}
+                            <button
+                              onClick={() => setExpandedMealMonth(isExpanded ? null : monthKey)}
+                              className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                  {year}년 {parseInt(month)}월
+                                </span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  ({monthRecords.length}개)
+                                </span>
+                              </div>
+                              <svg
+                                className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
                               >
-                                ✏️
-                              </span>
-                            </div>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+
+                            {/* 월별 기록 목록 */}
+                            {isExpanded && (
+                              <div className="p-3 space-y-2 bg-white dark:bg-gray-900">
+                                {monthRecords.map((record) => {
+                                  const recordDate = new Date(record.date);
+                                  const formattedDate = `${recordDate.getMonth() + 1}월 ${recordDate.getDate()}일`;
+                                  const meals = [];
+                                  if (record.meal_breakfast) meals.push('아침');
+                                  if (record.meal_lunch) meals.push('점심');
+                                  if (record.meal_dinner) meals.push('저녁');
+                                  
+                                  return (
+                                    <div
+                                      key={record.id}
+                                      className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
+                                      onClick={async () => {
+                                        console.log('📋 기록 클릭:', record.date);
+                                        await loadDailyRecord(record.date);
+                                        await loadRoutineChecks(record.date);
+                                        setSelectedDate(record.date);
+                                        setIsEditMode(true);
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                          {formattedDate}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          {meals.length > 0 && (
+                                            <div className="flex gap-1.5">
+                                              {meals.map((meal, idx) => (
+                                                <span
+                                                  key={idx}
+                                                  className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
+                                                >
+                                                  {meal}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
+                                          <span 
+                                            className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              console.log('✏️ 수정 아이콘 클릭:', record.date);
+                                              await loadDailyRecord(record.date);
+                                              await loadRoutineChecks(record.date);
+                                              setSelectedDate(record.date);
+                                              setIsEditMode(true);
+                                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                                            }}
+                                            title="수정하기"
+                                          >
+                                            ✏️
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {record.meal_memo && (
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">
+                                          {record.meal_memo}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          {record.meal_memo && (
-                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">
-                              {record.meal_memo}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
             </div>
           </div>
