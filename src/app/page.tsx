@@ -347,6 +347,7 @@ export default function Home() {
   const loadRoutineChecks = useCallback(async (date: string) => {
     if (!supabase) return;
     try {
+      console.log('📋 루틴 체크 로드 시작:', date);
       const { data, error } = await supabase
         .from('daily_routine_checks')
         .select('routine_id, checked')
@@ -355,6 +356,7 @@ export default function Home() {
       if (error) {
         // PGRST116은 "no rows returned" 에러로, 데이터가 없을 때 발생하는 정상적인 상황
         if (error.code === 'PGRST116') {
+          console.log('📋 루틴 체크 데이터 없음 (정상):', date);
           setRoutineChecks([]);
           return;
         }
@@ -368,6 +370,7 @@ export default function Home() {
         return;
       }
 
+      console.log('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
       setRoutineChecks(data || []);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
@@ -574,15 +577,19 @@ export default function Home() {
   // 루틴 체크박스 토글
   const handleRoutineCheckChange = (routineId: string) => {
     const isChecked = isRoutineChecked(routineId);
+    console.log('🔄 루틴 체크 변경:', routineId, '현재 상태:', isChecked, '→', !isChecked);
     setRoutineChecks(prev => {
       const existing = prev.find(c => c.routine_id === routineId);
+      let newChecks;
       if (existing) {
-        return prev.map(c => 
+        newChecks = prev.map(c => 
           c.routine_id === routineId ? { ...c, checked: !c.checked } : c
         );
       } else {
-        return [...prev, { routine_id: routineId, checked: true }];
+        newChecks = [...prev, { routine_id: routineId, checked: true }];
       }
+      console.log('✅ 업데이트된 routineChecks:', newChecks);
+      return newChecks;
     });
   };
 
@@ -657,6 +664,7 @@ export default function Home() {
       }
 
       // 2. 루틴 체크 저장 (formData.date 사용)
+      console.log('📋 루틴 체크 저장 시작:', formData.date, 'routineChecks:', routineChecks);
       const { error: deleteError } = await supabase
         .from('daily_routine_checks')
         .delete()
@@ -680,6 +688,8 @@ export default function Home() {
           checked: true,
         }));
 
+      console.log('📋 삽입할 루틴 체크:', checksToInsert);
+
       if (checksToInsert.length > 0) {
         const { error: checkError } = await supabase
           .from('daily_routine_checks')
@@ -694,6 +704,9 @@ export default function Home() {
           console.error('전체:', JSON.stringify(checkError, null, 2));
           throw checkError;
         }
+        console.log('✅ 루틴 체크 저장 완료:', checksToInsert.length, '개');
+      } else {
+        console.log('⚠️ 저장할 루틴 체크 없음 (모두 체크 해제됨)');
       }
 
       setMessage('✅ 저장되었습니다!');
@@ -920,7 +933,13 @@ export default function Home() {
                   <input
                     type="date"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                    onChange={async (e) => {
+                      const newDate = e.target.value;
+                      console.log('📅 상단 날짜 변경:', newDate);
+                      setSelectedDate(newDate);
+                      // formData.date도 함께 업데이트
+                      setFormData(prev => ({ ...prev, date: newDate }));
+                    }}
                     className="w-full px-4 py-3 text-base bg-transparent text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                     style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
