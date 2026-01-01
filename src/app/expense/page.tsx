@@ -143,10 +143,22 @@ export default function ExpensePage() {
         };
 
         // 날짜 파싱 (예: "2026. 01. 01 09:04:28" -> "2026-01-01")
-        const dateParts = values[0].split(' ')[0].split('.');
-        const dateStr = dateParts.length >= 3 
-          ? `${dateParts[0].trim()}-${dateParts[1].trim().padStart(2, '0')}-${dateParts[2].trim().padStart(2, '0')}`
-          : values[0];
+        let dateStr = values[0];
+        try {
+          // "2026. 01. 01 09:04:28" 형식 처리
+          const dateTimeParts = values[0].split(' ');
+          const datePart = dateTimeParts[0]; // "2026. 01. 01"
+          const dateParts = datePart.split('.').map(p => p.trim()).filter(p => p);
+          
+          if (dateParts.length >= 3) {
+            const year = dateParts[0];
+            const month = dateParts[1].padStart(2, '0');
+            const day = dateParts[2].padStart(2, '0');
+            dateStr = `${year}-${month}-${day}`;
+          }
+        } catch (e) {
+          console.warn('날짜 파싱 실패:', values[0], e);
+        }
 
         const record: ExpenseRecord = {
           date: dateStr,
@@ -170,6 +182,10 @@ export default function ExpensePage() {
         alert('파싱된 데이터가 없습니다.');
         return;
       }
+
+      console.log(`✅ 파싱 완료: ${records.length}개`);
+      console.log('첫 번째 레코드:', records[0]);
+      console.log('날짜 형식 확인:', records[0].date);
 
       // Supabase에 업로드
       try {
