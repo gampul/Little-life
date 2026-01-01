@@ -175,27 +175,67 @@ export default function ExpensePage() {
       try {
         setIsLoading(true);
         
+        console.log(`📊 업로드 시작: ${records.length}개의 레코드`);
+        console.log('샘플 데이터:', records[0]);
+        
         // 기존 데이터 삭제
+        console.log('🗑️ 기존 데이터 삭제 중...');
         const { error: deleteError } = await supabase
           .from('expense_records')
           .delete()
           .not('id', 'is', null);
 
-        if (deleteError) throw deleteError;
+        if (deleteError) {
+          console.error('삭제 오류:', deleteError);
+          throw deleteError;
+        }
+        console.log('✅ 기존 데이터 삭제 완료');
 
-        // 새 데이터 삽입
-        const { error: insertError } = await supabase
-          .from('expense_records')
-          .insert(records);
+        // 배치 단위로 삽입 (500개씩)
+        const batchSize = 500;
+        let insertedCount = 0;
+        
+        for (let i = 0; i < records.length; i += batchSize) {
+          const batch = records.slice(i, i + batchSize);
+          console.log(`📥 배치 ${Math.floor(i / batchSize) + 1} 삽입 중... (${batch.length}개)`);
+          
+          const { error: insertError } = await supabase
+            .from('expense_records')
+            .insert(batch);
 
-        if (insertError) throw insertError;
+          if (insertError) {
+            console.error('삽입 오류:', insertError);
+            console.error('오류 상세:', JSON.stringify(insertError, null, 2));
+            console.error('문제 데이터 샘플:', batch[0]);
+            throw insertError;
+          }
+          
+          insertedCount += batch.length;
+          console.log(`✅ 진행: ${insertedCount}/${records.length}`);
+        }
 
+        console.log(`✅ 업로드 완료: ${records.length}개`);
         alert(`✅ ${records.length}개의 레코드가 업로드되었습니다!`);
         setShowUploadModal(false);
         fetchMonthlyRecords();
-      } catch (error) {
-        console.error('Upload error:', error);
-        alert('❌ 업로드 중 오류가 발생했습니다.');
+      } catch (error: any) {
+        console.error('❌ Upload error:', error);
+        console.error('Error type:', typeof error);
+        console.error('Error keys:', Object.keys(error || {}));
+        console.error('Error message:', error?.message);
+        console.error('Error code:', error?.code);
+        console.error('Error details:', error?.details);
+        console.error('Error hint:', error?.hint);
+        
+        let errorMessage = '업로드 중 오류가 발생했습니다.';
+        if (error?.message) {
+          errorMessage += `\n${error.message}`;
+        }
+        if (error?.hint) {
+          errorMessage += `\n힌트: ${error.hint}`;
+        }
+        
+        alert(`❌ ${errorMessage}`);
       } finally {
         setIsLoading(false);
         if (fileInputRef.current) {

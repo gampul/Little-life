@@ -23,6 +23,12 @@ CREATE INDEX IF NOT EXISTS idx_expense_records_transaction_type ON expense_recor
 -- RLS (Row Level Security) 활성화
 ALTER TABLE expense_records ENABLE ROW LEVEL SECURITY;
 
+-- 기존 정책이 있다면 삭제
+DROP POLICY IF EXISTS "Enable read access for all users" ON expense_records;
+DROP POLICY IF EXISTS "Enable insert access for all users" ON expense_records;
+DROP POLICY IF EXISTS "Enable update access for all users" ON expense_records;
+DROP POLICY IF EXISTS "Enable delete access for all users" ON expense_records;
+
 -- 모든 사용자가 읽기/쓰기 가능하도록 정책 설정 (개발용)
 CREATE POLICY "Enable read access for all users" ON expense_records
   FOR SELECT USING (true);
