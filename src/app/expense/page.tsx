@@ -169,6 +169,17 @@ export default function ExpensePage() {
           console.warn('날짜 파싱 실패:', originalDate, e);
         }
 
+        // transaction_type 정규화
+        let transactionType = values[6]?.replace(/"/g, '').trim() || '';
+        
+        // 유효한 값인지 확인
+        const validTypes = ['입금', '출금', '이체입금', '이체출금'];
+        if (!validTypes.includes(transactionType)) {
+          // 기본값: amount가 양수면 입금, 음수면 출금
+          const amount = parseNumber(values[5] || '0');
+          transactionType = amount >= 0 ? '출금' : '입금';
+        }
+
         const record: ExpenseRecord = {
           date: dateStr,
           account: values[1]?.replace(/"/g, '').trim() || '',
@@ -176,7 +187,7 @@ export default function ExpensePage() {
           sub_category: values[3]?.replace(/"/g, '').trim() || '',
           description: values[4]?.replace(/"/g, '').trim() || '',
           amount: parseNumber(values[5] || '0'),
-          transaction_type: (values[6]?.replace(/"/g, '').trim() || '출금') as '입금' | '출금' | '이체입금' | '이체출금',
+          transaction_type: transactionType as '입금' | '출금' | '이체입금' | '이체출금',
           memo: values[7]?.replace(/"/g, '').trim() || '',
           balance: parseNumber(values[8] || '0'),
           currency: values[9]?.replace(/"/g, '').trim() || 'KRW',
