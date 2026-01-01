@@ -13,7 +13,7 @@ interface ExpenseRecord {
   sub_category: string;
   description: string;
   amount: number;
-  transaction_type: '입금' | '출금' | '이체입금' | '이체출금';
+  transaction_type: '수입' | '지출' | '이체지출';
   memo: string;
   balance: number;
   currency: string;
@@ -62,7 +62,7 @@ export default function ExpensePage() {
     sub_category: '',
     description: '',
     amount: 0,
-    transaction_type: '출금',
+    transaction_type: '지출',
     memo: '',
     balance: 0,
     currency: 'KRW',
@@ -169,15 +169,23 @@ export default function ExpensePage() {
           console.warn('날짜 파싱 실패:', originalDate, e);
         }
 
-        // transaction_type 정규화
+        // transaction_type 정규화 및 매핑
         let transactionType = values[6]?.replace(/"/g, '').trim() || '';
         
-        // 유효한 값인지 확인
-        const validTypes = ['입금', '출금', '이체입금', '이체출금'];
-        if (!validTypes.includes(transactionType)) {
-          // 기본값: amount가 양수면 입금, 음수면 출금
+        // 기존 값을 새로운 3가지 타입으로 매핑
+        const typeMapping: Record<string, '수입' | '지출' | '이체지출'> = {
+          '입금': '수입',
+          '이체입금': '수입',
+          '출금': '지출',
+          '이체출금': '이체지출',
+        };
+        
+        let mappedType = typeMapping[transactionType];
+        
+        // 매핑되지 않은 경우 기본값 설정
+        if (!mappedType) {
           const amount = parseNumber(values[5] || '0');
-          transactionType = amount >= 0 ? '출금' : '입금';
+          mappedType = amount >= 0 ? '지출' : '수입';
         }
 
         const record: ExpenseRecord = {
@@ -187,7 +195,7 @@ export default function ExpensePage() {
           sub_category: values[3]?.replace(/"/g, '').trim() || '',
           description: values[4]?.replace(/"/g, '').trim() || '',
           amount: parseNumber(values[5] || '0'),
-          transaction_type: transactionType as '입금' | '출금' | '이체입금' | '이체출금',
+          transaction_type: mappedType,
           memo: values[7]?.replace(/"/g, '').trim() || '',
           balance: parseNumber(values[8] || '0'),
           currency: values[9]?.replace(/"/g, '').trim() || 'KRW',
@@ -286,16 +294,16 @@ export default function ExpensePage() {
 
   // 수입/지출 합계 계산
   const totalIncome = records
-    .filter(r => r.transaction_type === '입금' || r.transaction_type === '이체입금')
+    .filter(r => r.transaction_type === '수입')
     .reduce((sum, r) => sum + r.amount, 0);
   const totalExpense = records
-    .filter(r => r.transaction_type === '출금' || r.transaction_type === '이체출금')
+    .filter(r => r.transaction_type === '지출' || r.transaction_type === '이체지출')
     .reduce((sum, r) => sum + r.amount, 0);
   const balance = totalIncome - totalExpense;
 
   // 카테고리별 합계
   const categoryTotals = records.reduce((acc, record) => {
-    if (record.transaction_type === '출금' || record.transaction_type === '이체출금') {
+    if (record.transaction_type === '지출' || record.transaction_type === '이체지출') {
       const key = record.category || '기타';
       acc[key] = (acc[key] || 0) + record.amount;
     }
@@ -327,7 +335,7 @@ export default function ExpensePage() {
         sub_category: '',
         description: '',
         amount: 0,
-        transaction_type: '출금',
+        transaction_type: '지출',
         memo: '',
         balance: 0,
         currency: 'KRW',
@@ -512,10 +520,10 @@ export default function ExpensePage() {
                   const isExpanded = expandedMonth === monthKey;
                   
                   const monthIncome = monthRecords
-                    .filter(r => r.transaction_type === '입금' || r.transaction_type === '이체입금')
+                    .filter(r => r.transaction_type === '수입')
                     .reduce((sum, r) => sum + r.amount, 0);
                   const monthExpense = monthRecords
-                    .filter(r => r.transaction_type === '출금' || r.transaction_type === '이체출금')
+                    .filter(r => r.transaction_type === '지출' || r.transaction_type === '이체지출')
                     .reduce((sum, r) => sum + r.amount, 0);
                   
                   return (
@@ -575,11 +583,11 @@ export default function ExpensePage() {
                               </div>
                               <div className="flex items-center gap-2 ml-3">
                                 <span className={`font-semibold text-sm whitespace-nowrap ${
-                                  record.transaction_type === '입금' || record.transaction_type === '이체입금'
+                                  record.transaction_type === '수입'
                                     ? 'text-blue-600 dark:text-blue-400'
                                     : 'text-red-500 dark:text-red-400'
                                 }`}>
-                                  {record.transaction_type === '입금' || record.transaction_type === '이체입금' ? '+' : '-'}
+                                  {record.transaction_type === '수입' ? '+' : '-'}
                                   {record.amount.toLocaleString()}
                                 </span>
                                 <button
@@ -651,7 +659,7 @@ export default function ExpensePage() {
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">거래 유형</label>
               <div className="grid grid-cols-4 gap-2">
-                {['출금', '입금', '이체출금', '이체입금'].map((type) => (
+                {['수입', '지출', '이체지출'].map((type) => (
                   <button
                     key={type}
                     onClick={() => setFormData(prev => ({ ...prev, transaction_type: type as any }))}
