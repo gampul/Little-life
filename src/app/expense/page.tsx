@@ -144,20 +144,29 @@ export default function ExpensePage() {
 
         // 날짜 파싱 (예: "2026. 01. 01 09:04:28" -> "2026-01-01")
         let dateStr = values[0];
+        const originalDate = values[0];
+        
         try {
           // "2026. 01. 01 09:04:28" 형식 처리
-          const dateTimeParts = values[0].split(' ');
-          const datePart = dateTimeParts[0]; // "2026. 01. 01"
-          const dateParts = datePart.split('.').map(p => p.trim()).filter(p => p);
-          
-          if (dateParts.length >= 3) {
-            const year = dateParts[0];
-            const month = dateParts[1].padStart(2, '0');
-            const day = dateParts[2].padStart(2, '0');
-            dateStr = `${year}-${month}-${day}`;
+          if (originalDate && originalDate.includes('.')) {
+            const dateTimeParts = originalDate.split(' ');
+            const datePart = dateTimeParts[0]; // "2026. 01. 01"
+            const dateParts = datePart.split('.').map(p => p.trim()).filter(p => p);
+            
+            if (dateParts.length >= 3) {
+              const year = dateParts[0];
+              const month = dateParts[1].padStart(2, '0');
+              const day = dateParts[2].padStart(2, '0');
+              dateStr = `${year}-${month}-${day}`;
+              
+              // 첫 번째 레코드만 로그
+              if (i === 1) {
+                console.log('🔍 날짜 변환:', originalDate, '→', dateStr);
+              }
+            }
           }
         } catch (e) {
-          console.warn('날짜 파싱 실패:', values[0], e);
+          console.warn('날짜 파싱 실패:', originalDate, e);
         }
 
         const record: ExpenseRecord = {
@@ -260,7 +269,8 @@ export default function ExpensePage() {
       }
     };
     
-    reader.readAsText(file, 'EUC-KR'); // 한글 인코딩 처리
+    // 먼저 UTF-8로 시도
+    reader.readAsText(file);
   };
 
   // 수입/지출 합계 계산
