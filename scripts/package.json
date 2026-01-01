@@ -1,4 +1,17 @@
 {
-  "type": "module"
+  "name": "scripts",
+  "version": "1.0.0",
+  "description": "Data management scripts",
+  "type": "module",
+  "scripts": {
+    "update-finance": "tsx update-finance-data.ts",
+    "check-finance": "tsx check-data.ts",
+    "upload-expense": "tsx upload-expense-data.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.4",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.21.0"
+  }
 }
 
