@@ -37,6 +37,7 @@ interface RoutineTemplate {
 interface RoutineCheck {
   routine_id: string;
   checked: boolean;
+  value?: number | null;
 }
 
 type PeriodFilter = '7days' | '1month' | '1year' | 'ytd' | 'all';
@@ -67,6 +68,7 @@ export default function Home() {
   // 루틴 관련 상태
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [routineChecks, setRoutineChecks] = useState<RoutineCheck[]>([]);
+  const [routineValues, setRoutineValues] = useState<Record<string, number | null>>({});
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
@@ -351,7 +353,7 @@ export default function Home() {
       console.log('📋 루틴 체크 로드 시작:', date);
       const { data, error } = await supabase
         .from('daily_routine_checks')
-        .select('routine_id, checked')
+        .select('routine_id, checked, value')
         .eq('date', date);
 
       if (error) {
@@ -359,6 +361,7 @@ export default function Home() {
         if (error.code === 'PGRST116') {
           console.log('📋 루틴 체크 데이터 없음 (정상):', date);
           setRoutineChecks([]);
+          setRoutineValues({});
           return;
         }
         
@@ -373,6 +376,15 @@ export default function Home() {
 
       console.log('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
       setRoutineChecks(data || []);
+      
+      // 루틴 값 추출하여 state에 저장
+      const values: Record<string, number | null> = {};
+      if (data) {
+        data.forEach((check: any) => {
+          values[check.routine_id] = check.value ?? null;
+        });
+      }
+      setRoutineValues(values);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -687,6 +699,7 @@ export default function Home() {
           date: formData.date,
           routine_id: check.routine_id,
           checked: true,
+          value: routineValues[check.routine_id] ?? null,
         }));
 
       console.log('📋 삽입할 루틴 체크:', checksToInsert);
@@ -1347,6 +1360,13 @@ export default function Home() {
                     routineTemplates={routineTemplates}
                     editModeRoutine={editModeRoutine}
                     setEditModeRoutine={setEditModeRoutine}
+                    value={routineValues[routine.id] ?? null}
+                    onValueChange={(value) => {
+                      setRoutineValues(prev => ({
+                        ...prev,
+                        [routine.id]: value
+                      }));
+                    }}
                   />
                   {/* 확장된 루틴의 캘린더 표시 */}
                   {expandedRoutineId === routine.id && (
@@ -1765,6 +1785,8 @@ function RoutineItem({
   routineTemplates,
   editModeRoutine,
   setEditModeRoutine,
+  value,
+  onValueChange,
 }: {
   emoji: string;
   label: string;
@@ -1778,6 +1800,8 @@ function RoutineItem({
   routineTemplates: RoutineTemplate[];
   editModeRoutine: string | null;
   setEditModeRoutine: (routineId: string | null) => void;
+  value: number | null;
+  onValueChange: (value: number | null) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const currentDate = new Date();
@@ -1803,7 +1827,7 @@ function RoutineItem({
 
         const { data: checks, error } = await supabase
           .from('daily_routine_checks')
-          .select('date, routine_id, checked')
+          .select('date, routine_id, checked, value')
           .in('date', allDates)
           .eq('routine_id', routineId)
           .eq('checked', true);
@@ -1845,9 +1869,11 @@ function RoutineItem({
   // 연속 체크한 날짜 수 계산
   const getConsecutiveDays = (routineId: string) => {
     const getKoreaDateString = (date: Date): string => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
+      // 한국 시간으로 변환 (UTC+9)
+      const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      const year = koreaTime.getUTCFullYear();
+      const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(koreaTime.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
     
@@ -1949,9 +1975,11 @@ function RoutineItem({
   
   // 오늘 날짜 확인 (한국 시간대 기준)
   const getKoreaDateString = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    // 한국 시간으로 변환 (UTC+9)
+    const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+    const year = koreaTime.getUTCFullYear();
+    const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(koreaTime.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
   
@@ -2101,6 +2129,25 @@ function RoutineItem({
                   e.preventDefault();
                 }
               }}
+            />
+          </div>
+          {/* 숫자 입력 필드 */}
+          <div 
+            className="flex items-center shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              type="number"
+              value={value ?? ''}
+              onChange={(e) => {
+                e.stopPropagation();
+                const newValue = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                onValueChange(newValue);
+              }}
+              disabled={disabled}
+              placeholder="0"
+              className="w-14 h-8 px-2 text-sm text-center bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
@@ -2343,10 +2390,15 @@ function RoutineCalendar({
   setEditModeRoutine: (routineId: string | null) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
+  const [dateValues, setDateValues] = useState<Record<string, number>>({});
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
+  
+  // 선택된 연도와 월 상태 관리
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(currentMonth);
 
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -2377,19 +2429,19 @@ function RoutineCalendar({
       if (!supabase) return;
       
       try {
-        // 현재 년도의 모든 날짜에 대한 체크 데이터 로드
+        // 선택된 년도의 모든 날짜에 대한 체크 데이터 로드
         const allDates: string[] = [];
         for (let month = 1; month <= 12; month++) {
-          const daysInMonth = new Date(currentYear, month, 0).getDate();
+          const daysInMonth = new Date(selectedYear, month, 0).getDate();
           for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = `${currentYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dateStr = `${selectedYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             allDates.push(dateStr);
           }
         }
 
         const { data: checks, error } = await supabase
           .from('daily_routine_checks')
-          .select('date, routine_id, checked')
+          .select('date, routine_id, checked, value')
           .in('date', allDates)
           .eq('routine_id', routineId)
           .eq('checked', true);
@@ -2401,16 +2453,23 @@ function RoutineCalendar({
 
         // 데이터를 Record<string, Set<string>> 형태로 변환
         const data: Record<string, Set<string>> = {};
+        const values: Record<string, number> = {};
         if (checks && checks.length > 0) {
           checks.forEach((check: any) => {
             if (!data[check.date]) {
               data[check.date] = new Set();
             }
             data[check.date].add(check.routine_id);
+            
+            // value가 있으면 저장
+            if (check.value != null) {
+              values[check.date] = check.value;
+            }
           });
         }
         
         setCheckedDates(data);
+        setDateValues(values);
       } catch (err) {
         console.error('데이터 로드 오류:', err);
       }
@@ -2421,18 +2480,18 @@ function RoutineCalendar({
     // 주기적으로 업데이트 (30초마다)
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [supabase, routineId, currentYear]);
+  }, [supabase, routineId, selectedYear]);
 
-  // 토글이 열릴 때 오늘 날짜가 보이도록 스크롤 위치 설정
+  // 토글이 열릴 때 또는 선택이 변경될 때 스크롤 위치 설정
   useEffect(() => {
     if (isExpanded && calendarScrollRef.current) {
       // 오늘 날짜를 기준으로 계산
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // 연간 캘린더: 현재 년도의 1월 1일부터 시작
-      const startYear = currentYear;
-      const startMonth = 1;
+      // 선택된 년도와 월에 따라 시작 위치 계산
+      const startYear = selectedYear;
+      const startMonth = selectedMonth === 'all' ? 1 : selectedMonth;
       
       const firstDayOfMonth = new Date(startYear, startMonth - 1, 1);
       const firstDayWeekday = firstDayOfMonth.getDay();
@@ -2453,10 +2512,10 @@ function RoutineCalendar({
           const container = calendarScrollRef.current;
           const containerWidth = container.clientWidth;
           
-          // 요일 헤더 너비: 40px
-          const headerWidth = 40;
-          // 주 너비: 37px (셀) + 4px (gap) = 41px
-          const weekWidth = 37 + 4;
+          // 요일 헤더 너비: 28px (2/3 크기)
+          const headerWidth = 28;
+          // 주 너비: 26px (셀) + 3px (gap) = 29px (2/3 크기)
+          const weekWidth = 26 + 3;
           
           // 오늘 날짜가 포함된 주 시작 위치 (요일 헤더 포함)
           const todayWeekStartPosition = headerWidth + (weekIndex * weekWidth);
@@ -2471,7 +2530,7 @@ function RoutineCalendar({
       
       return () => clearTimeout(timeoutId);
     }
-  }, [isExpanded, currentYear, currentMonth]);
+  }, [isExpanded, selectedYear, selectedMonth]);
 
 
   // 특정 월의 날짜 목록 생성
@@ -2650,9 +2709,11 @@ function RoutineCalendar({
   // 연속 체크한 날짜 수 계산 (현재 날짜 기준)
   const getConsecutiveDays = (routineId: string) => {
     const getKoreaDateString = (date: Date): string => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
+      // 한국 시간으로 변환 (UTC+9)
+      const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+      const year = koreaTime.getUTCFullYear();
+      const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(koreaTime.getUTCDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
     
@@ -2747,19 +2808,39 @@ function RoutineCalendar({
 
   return (
     <div className="bg-gray-50 dark:bg-gray-800 p-2 sm:p-3 w-full">
-      {/* 날짜 + 수정 버튼 일직선 */}
-      <div className="flex items-center justify-between mb-3">
-        {/* 왼쪽: 날짜 */}
-        <div className="flex items-center gap-2 shrink-0">
-          <h5 className="text-base font-medium text-gray-900 dark:text-white shrink-0">
-            {currentYear}년 {currentMonth}월
-          </h5>
+      {/* 날짜 선택 + 수정 버튼 */}
+      <div className="flex items-center justify-between mb-3 gap-2">
+        {/* 왼쪽: 연도/월 선택 드롭다운 */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* 연도 선택 */}
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="px-2 py-1 text-sm font-medium bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+          >
+            {Array.from({ length: 5 }, (_, i) => currentYear - 2 + i).map(year => (
+              <option key={year} value={year}>{year}년</option>
+            ))}
+          </select>
+          
+          {/* 월 선택 */}
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            className="px-2 py-1 text-sm font-medium bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
+          >
+            <option value="all">전체</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
+              <option key={month} value={month}>{month}월</option>
+            ))}
+          </select>
         </div>
+        
         {/* 오른쪽: 수정 버튼 */}
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
-            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors shrink-0"
+            className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
           >
             {editModeRoutine === routineId ? '저장' : '수정'}
           </button>
@@ -2778,12 +2859,29 @@ function RoutineCalendar({
       >
         <div style={{ minWidth: 'max-content' }}>
           {(() => {
-            // 연간 캘린더: 현재 년도의 1월 1일부터 시작
-            const startYear = currentYear;
-            const startMonth = 1;
+            // 선택된 연도와 월에 따라 캘린더 표시
+            const startYear = selectedYear;
+            const startMonth = selectedMonth === 'all' ? 1 : selectedMonth;
             
-            // 55주치 날짜 (약 385일 = 연간 + 여유) - 1월 1일부터 12월 31일까지 포함
-            const numWeeks = 55;
+            // 주 수 계산: 전체 연도면 365일 전체, 특정 월이면 해당 월의 주 수
+            let numWeeks: number;
+            if (selectedMonth === 'all') {
+              // 연간 전체: 1월 1일부터 12월 31일까지
+              const yearStart = new Date(selectedYear, 0, 1); // 1월 1일
+              const yearEnd = new Date(selectedYear, 11, 31); // 12월 31일
+              const yearStartWeekday = (yearStart.getDay() + 6) % 7; // 월요일 기준
+              const daysInYear = Math.ceil((yearEnd.getTime() - yearStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+              const totalDays = daysInYear + yearStartWeekday;
+              numWeeks = Math.ceil(totalDays / 7);
+            } else {
+              // 특정 월의 주 수 계산
+              const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
+              const lastDay = new Date(selectedYear, selectedMonth, 0);
+              const firstDayWeekday = (firstDay.getDay() + 6) % 7; // 월요일 기준
+              const totalDays = lastDay.getDate() + firstDayWeekday;
+              numWeeks = Math.ceil(totalDays / 7);
+            }
+            
             const weeks = getWeekBasedDateGrid(startYear, startMonth, numWeeks);
             
             // 각 주의 월 정보 계산 (월별 헤더 표시용)
@@ -2791,25 +2889,31 @@ function RoutineCalendar({
             weeks.forEach((week, weekIdx) => {
               // 각 주의 첫 번째 날짜(월요일)의 월을 사용
               const firstDay = week[0];
+              
+              // 월이 변경되는 시점에 헤더 추가
               if (weekIdx === 0 || weeks[weekIdx - 1][0].month !== firstDay.month || weeks[weekIdx - 1][0].year !== firstDay.year) {
-                monthHeaders.push({
-                  weekIndex: weekIdx,
-                  month: firstDay.month,
-                  year: firstDay.year
-                });
+                // 전체 연도 선택 시: 모든 월 표시
+                // 특정 월 선택 시: 해당 월만 표시
+                if (selectedMonth === 'all' || firstDay.month === selectedMonth) {
+                  monthHeaders.push({
+                    weekIndex: weekIdx,
+                    month: firstDay.month,
+                    year: firstDay.year
+                  });
+                }
               }
             });
             
             return (
               <div
-                className="bg-gray-800 dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700"
+                className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl border border-gray-300 dark:border-gray-700 shadow-sm"
                 style={{
-                  padding: '8px',
+                  padding: '6px',
                   display: 'grid',
-                  gridTemplateColumns: `40px repeat(${weeks.length}, 37px)`,
-                  gridTemplateRows: '24px repeat(7, 32px)',
-                  gap: '4px',
-                  minHeight: '250px',
+                  gridTemplateColumns: `28px repeat(${weeks.length}, 26px)`,
+                  gridTemplateRows: '18px repeat(7, 22px)',
+                  gap: '3px',
+                  minHeight: '170px',
                   width: 'max-content'
                 }}
               >
@@ -2818,8 +2922,8 @@ function RoutineCalendar({
                   style={{
                     gridRow: 1,
                     gridColumn: 1,
-                    backgroundColor: '#374151',
-                    borderRadius: '8px'
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderRadius: '6px'
                   }}
                 />
                 
@@ -2833,14 +2937,14 @@ function RoutineCalendar({
                   return (
                     <div
                       key={`month-${header.weekIndex}`}
-                      className="flex items-center justify-center text-white font-semibold"
+                      className="flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold"
                       style={{
                         gridRow: 1,
                         gridColumn: header.weekIndex + 2,
                         gridColumnEnd: `span ${colSpan}`,
-                        fontSize: '11px',
-                        backgroundColor: '#374151',
-                        borderRadius: '8px'
+                        fontSize: '9px',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderRadius: '6px'
                       }}
                     >
                       {header.year !== currentYear ? `${header.year}년 ` : ''}{header.month}월
@@ -2849,35 +2953,58 @@ function RoutineCalendar({
                 })}
                 
                 {/* 요일 헤더 (왼쪽 열) */}
-                {['월', '화', '수', '목', '금', '토', '일'].map((weekdayName, weekdayIdx) => (
-                  <div
-                    key={`header-${weekdayIdx}`}
-                    className="flex items-center justify-center text-gray-100 dark:text-gray-100 font-semibold"
-                    style={{
-                      gridRow: weekdayIdx + 2,
-                      gridColumn: 1,
-                      fontSize: '12px',
-                      backgroundColor: '#374151',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    {weekdayName}
-                  </div>
-                ))}
+                {['월', '화', '수', '목', '금', '토', '일'].map((weekdayName, weekdayIdx) => {
+                  const isSaturday = weekdayIdx === 5;
+                  const isSunday = weekdayIdx === 6;
+                  return (
+                    <div
+                      key={`header-${weekdayIdx}`}
+                      className="flex items-center justify-center font-bold"
+                      style={{
+                        gridRow: weekdayIdx + 2,
+                        gridColumn: 1,
+                        fontSize: '10px',
+                        backgroundColor: isSaturday 
+                          ? 'rgba(59, 130, 246, 0.15)' 
+                          : isSunday 
+                          ? 'rgba(239, 68, 68, 0.15)' 
+                          : 'rgba(75, 85, 99, 0.1)',
+                        color: isSaturday 
+                          ? '#3B82F6' 
+                          : isSunday 
+                          ? '#EF4444' 
+                          : '#6B7280',
+                        borderRadius: '6px'
+                      }}
+                    >
+                      {weekdayName}
+                    </div>
+                  );
+                })}
                 
                 {/* 주별 날짜 열들 */}
                 {weeks.map((week, weekIdx) => {
                   return week.map((cell, weekdayIdx) => {
                     const { day, date, month, year } = cell;
+                    
+                    // 전체 연도 선택 시: 선택된 연도의 모든 날짜 표시
+                    // 특정 월 선택 시: 해당 월만 표시, 다른 월은 흐리게
+                    const isCurrentMonth = selectedMonth === 'all' 
+                      ? year === selectedYear 
+                      : (month === selectedMonth && year === selectedYear);
+                    
                     const isChecked = isDateChecked(date, routineId);
-                    // 한국 시간대 기준 오늘 날짜 확인
-                    const getKoreaDateString = (date: Date): string => {
-                      const year = date.getFullYear();
-                      const month = String(date.getMonth() + 1).padStart(2, '0');
-                      const day = String(date.getDate()).padStart(2, '0');
+                    // 한국 시간대 기준 오늘 날짜 확인 (UTC+9)
+                    const getKoreaDateString = (): string => {
+                      const now = new Date();
+                      // 한국 시간으로 변환 (UTC+9)
+                      const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+                      const year = koreaTime.getUTCFullYear();
+                      const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
+                      const day = String(koreaTime.getUTCDate()).padStart(2, '0');
                       return `${year}-${month}-${day}`;
                     };
-                    const isToday = date === getKoreaDateString(new Date());
+                    const isToday = date === getKoreaDateString();
                     const isSaturday = weekdayIdx === 5; // 토요일
                     const isSunday = weekdayIdx === 6; // 일요일
                     
@@ -2914,38 +3041,45 @@ function RoutineCalendar({
                         {/* 날짜 셀 */}
                         <div
                           className={`
-                            flex items-center justify-center relative shrink-0
-                            cursor-pointer
+                            flex flex-col items-center justify-center relative shrink-0
+                            ${editModeRoutine === routineId && isCurrentMonth ? 'cursor-pointer' : 'cursor-default'}
                             transition-all duration-200 ease-in-out
-                            hover:scale-110 hover:brightness-150 hover:z-10 hover:ring-2 hover:ring-blue-400
+                            ${editModeRoutine === routineId && isCurrentMonth ? 'hover:scale-110 hover:brightness-125 hover:z-10 hover:ring-1 hover:ring-blue-400' : ''}
                           `}
                           style={{
-                            width: '37px',
-                            height: '32px',
+                            width: '26px',
+                            height: '22px',
                             backgroundColor: backgroundColor,
-                            borderRadius: '8px',
-                            color: isChecked ? '#FFFFFF' : '#E5E7EB',
-                            fontSize: '14px',
+                            borderRadius: '6px',
+                            color: isChecked ? '#FFFFFF' : (isSaturday ? '#3B82F6' : isSunday ? '#EF4444' : '#9CA3AF'),
+                            fontSize: '10px',
                             fontWeight: isChecked ? '700' : '500',
                             border: isToday 
                               ? '2px solid #60A5FA'
                               : 'none',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                            boxShadow: isChecked ? '0 2px 4px rgba(0,0,0,0.15)' : '0 1px 2px rgba(0,0,0,0.05)',
                             userSelect: 'none',
                             position: 'relative',
-                            zIndex: 2
+                            zIndex: isToday ? 3 : 2,
+                            opacity: isCurrentMonth ? 1 : 0.3
                           }}
                           onClick={() => {
-                            if (editModeRoutine === routineId) {
+                            if (editModeRoutine === routineId && isCurrentMonth) {
                               handleDateToggle(date, routineId);
                             }
                           }}
                           title={
-                            `${year}년 ${month}월 ${day}일${isChecked ? ' (체크됨)' : ''}${editModeRoutine === routineId ? ' - 클릭하여 체크/언체크' : ' - 수정 버튼을 눌러 편집'}`
+                            `${year}년 ${month}월 ${day}일${isToday ? ' (오늘)' : ''}${isChecked ? ' (체크됨)' : ''}${editModeRoutine === routineId ? ' - 클릭하여 체크/언체크' : ''}`
                           }
                         >
                           {/* 날짜 숫자 */}
-                          <span>{day}</span>
+                          <span style={{ fontSize: dateValues[date] ? '8px' : '10px' }}>{day}</span>
+                          {/* 값 표시 (있는 경우) */}
+                          {dateValues[date] != null && (
+                            <span style={{ fontSize: '7px', fontWeight: 'bold', marginTop: '-1px' }}>
+                              {dateValues[date]}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

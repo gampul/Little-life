@@ -355,6 +355,12 @@ export default function SettingsPage() {
   };
 
   const handleAdd = () => {
+    if (routineTemplates.length >= 12) {
+      setMessage('⚠️ 루틴은 최대 12개까지만 추가할 수 있습니다.');
+      setTimeout(() => setMessage(''), 3000);
+      return;
+    }
+    
     const newFieldKey = `routine_${Date.now()}`;
     setRoutineTemplates([
       ...routineTemplates,
@@ -441,10 +447,17 @@ export default function SettingsPage() {
           {/* 루틴 설정 */}
           <div className="mb-4 sm:mb-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">루틴 설정</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                루틴 설정 ({routineTemplates.length}/12)
+              </h3>
               <button
                 onClick={handleAdd}
-                className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors min-h-[36px] sm:min-h-[44px] whitespace-nowrap flex-shrink-0"
+                disabled={routineTemplates.length >= 12}
+                className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-lg transition-colors min-h-[36px] sm:min-h-[44px] whitespace-nowrap flex-shrink-0 ${
+                  routineTemplates.length >= 12
+                    ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 dark:text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
               >
                 + 추가
               </button>
