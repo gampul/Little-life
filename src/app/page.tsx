@@ -61,6 +61,7 @@ export default function Home() {
   const [isEditMode, setIsEditMode] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [isMealSectionExpanded, setIsMealSectionExpanded] = useState(false);
   const [hasData, setHasData] = useState(false);
   const [allRecords, setAllRecords] = useState<DailyRecord[]>([]);
   const [weightPeriod, setWeightPeriod] = useState<PeriodFilter>('1month');
@@ -1375,10 +1376,25 @@ export default function Home() {
             {/* 식사 기록 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="flex items-center gap-3 mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white shrink-0">
+                <h3 
+                  className="text-lg font-semibold text-gray-900 dark:text-white shrink-0 flex items-center gap-2 cursor-pointer"
+                  onClick={() => setIsMealSectionExpanded(!isMealSectionExpanded)}
+                >
                   🍽️ 식사 기록
+                  <svg 
+                    className={`w-5 h-5 transition-transform duration-200 ${isMealSectionExpanded ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </h3>
+              </div>
                 
+              {isMealSectionExpanded && (
+              <>
+              <div className="flex items-center gap-3 mb-4">
                 {/* 작은 날짜 선택 필드 */}
                 {isEditMode ? (
                   <div 
@@ -1674,6 +1690,8 @@ export default function Home() {
                   </div>
                 );
               })()}
+              </>
+              )}
             </div>
             </div>
           </div>
