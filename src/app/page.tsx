@@ -1378,7 +1378,13 @@ export default function Home() {
               <div className="flex items-center gap-3 mb-4">
                 <h3 
                   className="text-lg font-semibold text-gray-900 dark:text-white shrink-0 flex items-center gap-2 cursor-pointer"
-                  onClick={() => setIsMealSectionExpanded(!isMealSectionExpanded)}
+                  onClick={() => {
+                    const newExpanded = !isMealSectionExpanded;
+                    setIsMealSectionExpanded(newExpanded);
+                    if (newExpanded && !isEditMode) {
+                      handleEdit();
+                    }
+                  }}
                 >
                   🍽️ 식사 기록
                   <svg 
@@ -1390,103 +1396,30 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </h3>
+                
+                {isMealSectionExpanded && (
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="ml-auto text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label={isSaving ? '저장 중' : '저장'}
+                  >
+                    {isSaving ? (
+                      <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                    )}
+                  </button>
+                )}
               </div>
                 
               {isMealSectionExpanded && (
               <>
-              <div className="flex items-center gap-3 mb-4">
-                {/* 작은 날짜 선택 필드 */}
-                {isEditMode ? (
-                  <div 
-                    className="relative cursor-pointer overflow-hidden flex-1 min-w-[180px] max-w-[250px]"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
-                      if (input) {
-                        input.focus();
-                        if (input.showPicker) {
-                          try {
-                            input.showPicker();
-                          } catch (err) {
-                            input.click();
-                          }
-                        } else {
-                          input.click();
-                        }
-                      }
-                    }}
-                  >
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={async (e) => {
-                        const newDate = e.target.value;
-                        console.log('📅 식사 날짜 변경:', newDate);
-                        await loadDailyRecord(newDate);
-                        await loadRoutineChecks(newDate);
-                        setSelectedDate(newDate);
-                      }}
-                      className="w-full px-3 py-2 text-sm bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border border-blue-400 dark:border-blue-500 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
-                      style={{ color: 'transparent', WebkitAppearance: 'none' }}
-                    />
-                    {/* 날짜 포맷 표시 (오버레이) */}
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-1.5rem)]">
-                      📅 {(() => {
-                        const date = new Date(formData.date);
-                        const month = date.getMonth() + 1;
-                        const day = date.getDate();
-                        return `${month}/${day}`;
-                      })()}
-                    </div>
-                  </div>
-                ) : (
-                  <div 
-                    className="flex-1 min-w-[180px] max-w-[250px] px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg font-medium flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
-                    onClick={handleEdit}
-                  >
-                    📅 {(() => {
-                      const date = new Date(formData.date);
-                      const month = date.getMonth() + 1;
-                      const day = date.getDate();
-                      return `${month}/${day}`;
-                    })()}
-                  </div>
-                )}
-
-                {/* 수정/저장 버튼 */}
-                <div className="ml-auto shrink-0 flex items-center gap-2">
-                  {!isEditMode ? (
-                    <button
-                      onClick={handleEdit}
-                      className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-                      aria-label="수정하기"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      aria-label={isSaving ? '저장 중' : '저장'}
-                    >
-                      {isSaving ? (
-                        <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                        </svg>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-              
               <div className="flex flex-wrap gap-4 mb-4">
                 <MealCheckbox
                   label="아침"
