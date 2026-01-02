@@ -2936,10 +2936,13 @@ function RoutineCalendar({
       
       {/* 캘린더 컨테이너 */}
       {selectedMonth === 'all' ? (
-        // 연간 뷰: 12개월을 3x4 그리드로 표시
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-          {Array.from({ length: 12 }, (_, monthIdx) => {
-            const month = monthIdx + 1;
+        // 연간 뷰: 쿼터별로 12개월 표시
+        <div className="space-y-2">
+          {/* Q1, Q2, Q3, Q4 */}
+          {[0, 1, 2, 3].map((quarterIdx) => (
+            <div key={quarterIdx} className="flex gap-0">
+              {Array.from({ length: 3 }, (_, monthInQuarter) => {
+                const month = quarterIdx * 3 + monthInQuarter + 1;
             
             // 해당 월의 주 수 계산
             const firstDay = new Date(selectedYear, month - 1, 1);
@@ -2989,17 +2992,9 @@ function RoutineCalendar({
                       // 배경색 결정
                       let backgroundColor = 'rgba(75, 85, 99, 0.15)';
                       if (isChecked) {
-                        if (isSaturday) {
-                          backgroundColor = '#3B82F6';
-                        } else if (isSunday) {
-                          backgroundColor = '#EF4444';
-                        } else {
-                          backgroundColor = '#9CA3AF';
-                        }
-                      } else if (isSaturday) {
-                        backgroundColor = 'rgba(59, 130, 246, 0.15)';
-                      } else if (isSunday) {
-                        backgroundColor = 'rgba(239, 68, 68, 0.15)';
+                        backgroundColor = '#9CA3AF'; // 체크된 날짜는 모두 회색
+                      } else if (isSaturday || isSunday) {
+                        backgroundColor = 'rgba(75, 85, 99, 0.15)'; // 토/일요일도 회색 배경
                       }
                       
                       return (
@@ -3038,8 +3033,10 @@ function RoutineCalendar({
                   })}
                 </div>
               </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          ))}
         </div>
       ) : (
         // 월별 뷰: 기존 가로 스크롤 캘린더
