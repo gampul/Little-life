@@ -72,6 +72,9 @@ export default function Home() {
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [routineChecks, setRoutineChecks] = useState<RoutineCheck[]>([]);
   const [routineValues, setRoutineValues] = useState<Record<string, number | null>>({});
+  // 루틴 숫자/체크 즉시 연동을 위한 동기화 트리거
+  const [routineSyncTick, setRoutineSyncTick] = useState(0);
+  const bumpRoutineSync = useCallback(() => setRoutineSyncTick(t => t + 1), []);
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
@@ -1424,6 +1427,8 @@ export default function Home() {
                       }));
                     }}
                     unit={routine.unit}
+                    syncTick={routineSyncTick}
+                    onSync={bumpRoutineSync}
                   />
                   {/* 확장된 루틴의 캘린더 표시 */}
                   {expandedRoutineId === routine.id && (
@@ -1436,6 +1441,8 @@ export default function Home() {
                         isExpanded={true}
                         editModeRoutine={editModeRoutine}
                         setEditModeRoutine={setEditModeRoutine}
+                        syncTick={routineSyncTick}
+                        onSync={bumpRoutineSync}
                       />
                     </div>
                   )}
@@ -1865,6 +1872,8 @@ function RoutineItem({
   value,
   onValueChange,
   unit,
+  syncTick,
+  onSync,
 }: {
   emoji: string;
   label: string;
@@ -1882,9 +1891,12 @@ function RoutineItem({
   value?: number | null;
   onValueChange?: (value: number | null) => void;
   unit?: string;
+  syncTick: number;
+  onSync: () => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
+  const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -1896,20 +1908,16 @@ function RoutineItem({
       if (!supabase) return;
       
       try {
-        // 현재 년도의 모든 날짜에 대한 체크 데이터 로드
-        const allDates: string[] = [];
-        for (let month = 1; month <= 12; month++) {
-          const daysInMonth = new Date(currentYear, month, 0).getDate();
-          for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = `${currentYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            allDates.push(dateStr);
-          }
-        }
+        // 연말/연초(예: 2025-12-31 → 2026-01-01) 연속 체크/최근 5일 표시까지 자연스럽게 하기 위해
+        // "올해 + 전년" 범위를 함께 로드
+        const rangeStart = `${currentYear - 1}-01-01`;
+        const rangeEnd = `${currentYear}-12-31`;
 
         const { data: checks, error } = await supabase
           .from('daily_routine_checks')
           .select('date, routine_id, checked, value')
-          .in('date', allDates)
+          .gte('date', rangeStart)
+          .lte('date', rangeEnd)
           .eq('routine_id', routineId)
           .eq('checked', true);
 
@@ -1921,6 +1929,7 @@ function RoutineItem({
         // 데이터를 Record<string, Set<string>> 형태로 변환
         const data: Record<string, Set<string>> = {};
         let totalValue = 0;
+        const valuesByDate: Record<string, number> = {};
         
         if (checks && checks.length > 0) {
           checks.forEach((check: any) => {
@@ -1929,15 +1938,19 @@ function RoutineItem({
             }
             data[check.date].add(check.routine_id);
             
-            // 숫자 타입인 경우 연간 누적 계산
+            // 숫자 타입인 경우: 날짜별 값 저장 + "올해" 누적만 합산
             if (routineType === 'number' && check.value != null) {
-              totalValue += check.value;
+              if (String(check.date).startsWith(`${currentYear}-`)) {
+                totalValue += check.value;
+              }
+              valuesByDate[check.date] = check.value;
             }
           });
         }
         
         setCheckedDates(data);
         setYearlyTotal(totalValue);
+        setNumberDateValues(valuesByDate);
       } catch (err) {
         console.error('데이터 로드 오류:', err);
       }
@@ -1948,7 +1961,7 @@ function RoutineItem({
     // 주기적으로 업데이트 (30초마다)
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [supabase, routineId, currentYear]);
+  }, [supabase, routineId, currentYear, routineType, syncTick]);
 
   // 날짜 체크 상태 확인
   const isDateChecked = (date: string, routineId: string) => {
@@ -2193,7 +2206,7 @@ function RoutineItem({
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
               } : {}}
             >
-              🔥 {consecutiveDays}일 연속
+              {consecutiveDays}일 연속
             </div>
           )}
           
@@ -2255,9 +2268,17 @@ function RoutineItem({
                           onConflict: 'date,routine_id'
                         });
                     }
-                    
-                    // 데이터 새로고침
-                    window.location.reload();
+                    // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
+                    setNumberDateValues(prev => {
+                      const next = { ...prev };
+                      if (numValue == null) {
+                        delete next[dateStr];
+                      } else {
+                        next[dateStr] = numValue;
+                      }
+                      return next;
+                    });
+                    onSync();
                   } catch (err) {
                     console.error('숫자 입력 오류:', err);
                   }
@@ -2272,8 +2293,8 @@ function RoutineItem({
                   const dateStr = `${koreaTime.getUTCFullYear()}-${String(koreaTime.getUTCMonth() + 1).padStart(2, '0')}-${String(koreaTime.getUTCDate()).padStart(2, '0')}`;
                   const isToday = i === 0;
                   
-                  // 해당 날짜의 값 가져오기 (실제로는 상태에서 가져와야 하지만 간단히 처리)
-                  const dayValue = isToday ? value : null;
+                  // 해당 날짜의 값 가져오기 (연간 값 맵에서)
+                  const dayValue = numberDateValues[dateStr] ?? null;
                   
                   buttons.push(
                     <button
@@ -2377,14 +2398,9 @@ function RoutineItem({
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                        }}
+                        readOnly
                         className="cursor-pointer shrink-0 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
                         style={{ width: '20px', height: '20px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
                       />
                     </div>
                   );
@@ -2646,6 +2662,8 @@ function RoutineCalendar({
   isExpanded = false,
   editModeRoutine,
   setEditModeRoutine,
+  syncTick,
+  onSync,
 }: {
   routineId: string;
   routineLabel: string;
@@ -2654,6 +2672,8 @@ function RoutineCalendar({
   isExpanded?: boolean;
   editModeRoutine: string | null;
   setEditModeRoutine: (routineId: string | null) => void;
+  syncTick: number;
+  onSync: () => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [dateValues, setDateValues] = useState<Record<string, number>>({});
@@ -2753,7 +2773,7 @@ function RoutineCalendar({
     // 주기적으로 업데이트 (30초마다)
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [supabase, routineId, selectedYear]);
+  }, [supabase, routineId, selectedYear, syncTick]);
 
   // 토글이 열릴 때 또는 선택이 변경될 때 스크롤 위치 설정
   useEffect(() => {
@@ -2943,6 +2963,7 @@ function RoutineCalendar({
             delete newValues[date];
             return newValues;
           });
+          onSync();
         } else {
           // 값 저장
           const { error } = await supabase
@@ -2975,6 +2996,7 @@ function RoutineCalendar({
             newDates[date].add(routineId);
             return newDates;
           });
+          onSync();
         }
       } catch (err) {
         console.error('데이터 저장 오류:', err);
@@ -3037,6 +3059,7 @@ function RoutineCalendar({
           
           return newData;
         });
+        onSync();
       } catch (err) {
         console.error('예상치 못한 오류:', err);
       }

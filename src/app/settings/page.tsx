@@ -370,77 +370,110 @@ export default function SettingsPage() {
     setMessage('');
 
     try {
-      // 기존 템플릿 삭제
-      const { error: deleteError } = await supabase
+      // IMPORTANT:
+      // 기존 구현은 routine_templates를 통째로 DELETE 후 INSERT 해서,
+      // (FK + ON DELETE CASCADE가 있으면) daily_routine_checks까지 같이 삭제될 수 있음.
+      // 그래서 "id 유지 + upsert"로 변경해 기존 기록을 보존한다.
+
+      // 1) 현재 DB에 저장된 템플릿 id 목록
+      const { data: existingTemplates, error: existingError } = await supabase
         .from('routine_templates')
-        .delete()
+        .select('id')
         .eq('user_id', userId);
 
-      if (deleteError) {
-        console.error('=== 삭제 에러 상세 ===');
-        console.error('메시지:', deleteError.message);
-        console.error('코드:', deleteError.code);
-        console.error('상세:', deleteError.details);
-        console.error('힌트:', deleteError.hint);
-        throw deleteError;
+      if (existingError && existingError.code !== 'PGRST116') {
+        console.error('루틴 템플릿 기존 목록 조회 오류:', existingError);
+        throw existingError;
       }
 
-      // 새 템플릿 삽입
-      if (routineTemplates.length > 0) {
-        // unit 컬럼 포함하여 삽입 시도
-        let templatesToInsert: any[] = routineTemplates.map((t, index) => ({
-          user_id: userId,
-          emoji: t.emoji,
-          label: t.label,
-          field_key: t.field_key,
-          sort_order: index,
-          type: t.type || 'checkbox',
-          unit: t.unit || null,
-        }));
+      const existingIds = new Set((existingTemplates || []).map((t: any) => t.id));
 
-        let { error: insertError } = await supabase
-          .from('routine_templates')
-          .insert(templatesToInsert);
+      // 2) 현재 화면 상태 기반 payload 생성 (sort_order 재계산)
+      const templatesPayload: any[] = routineTemplates.map((t, index) => ({
+        id: t.id, // id 유지가 핵심
+        user_id: userId,
+        emoji: t.emoji,
+        label: t.label,
+        field_key: t.field_key,
+        sort_order: index,
+        type: t.type || 'checkbox',
+        unit: t.unit || null,
+      }));
 
-        // unit 또는 type 컬럼이 없는 경우 재시도
-        if (insertError && (insertError.message.includes('column') || insertError.code === '42703')) {
-          console.warn('⚠️ unit 또는 type 컬럼이 없습니다. 기본 컬럼만으로 재시도합니다.');
-          
-          // unit만 없는 경우 type 포함하여 재시도
-          if (insertError.message.includes('unit')) {
-            templatesToInsert = routineTemplates.map((t, index) => ({
-              user_id: userId,
-              emoji: t.emoji,
-              label: t.label,
-              field_key: t.field_key,
-              sort_order: index,
-              type: t.type || 'checkbox',
-            }));
-          } else {
-            // type도 없는 경우 기본 컬럼만
-            templatesToInsert = routineTemplates.map((t, index) => ({
-              user_id: userId,
-              emoji: t.emoji,
-              label: t.label,
-              field_key: t.field_key,
-              sort_order: index,
-            }));
-          }
+      // 3) upsert (id 기준). 컬럼/제약이 없는 구버전 DB는 기존 fallback 로직으로 처리
+      let { error: upsertError } = await supabase
+        .from('routine_templates')
+        .upsert(templatesPayload, { onConflict: 'id' });
+
+      if (upsertError && (upsertError.message.includes('column') || upsertError.code === '42703')) {
+        console.warn('⚠️ type/unit 컬럼 또는 onConflict 제약이 없을 수 있어 fallback으로 재시도합니다.');
+
+        // unit이 없는 경우: unit 제거하고 upsert 재시도
+        if (upsertError.message.includes('unit')) {
+          const payloadNoUnit = routineTemplates.map((t, index) => ({
+            id: t.id,
+            user_id: userId,
+            emoji: t.emoji,
+            label: t.label,
+            field_key: t.field_key,
+            sort_order: index,
+            type: t.type || 'checkbox',
+          }));
 
           const result = await supabase
             .from('routine_templates')
-            .insert(templatesToInsert);
-          
-          insertError = result.error;
-        }
+            .upsert(payloadNoUnit, { onConflict: 'id' });
+          upsertError = result.error;
+        } else if (upsertError.message.includes('type')) {
+          // type이 없는 경우: type, unit 모두 제거하고 upsert 재시도
+          const payloadBasic = routineTemplates.map((t, index) => ({
+            id: t.id,
+            user_id: userId,
+            emoji: t.emoji,
+            label: t.label,
+            field_key: t.field_key,
+            sort_order: index,
+          }));
 
-        if (insertError) {
-          console.error('=== 삽입 에러 상세 ===');
-          console.error('메시지:', insertError.message);
-          console.error('코드:', insertError.code);
-          console.error('상세:', insertError.details);
-          console.error('힌트:', insertError.hint);
-          throw insertError;
+          const result = await supabase
+            .from('routine_templates')
+            .upsert(payloadBasic, { onConflict: 'id' });
+          upsertError = result.error;
+        }
+      }
+
+      // onConflict가 id로 안 잡히는 스키마(예: PK가 다른 경우) 대비: user_id + field_key로도 한 번 더 시도
+      if (upsertError && (upsertError.message.includes('duplicate key') || upsertError.message.includes('on conflict'))) {
+        console.warn('⚠️ id onConflict 실패. user_id,field_key로 재시도합니다.');
+        const result = await supabase
+          .from('routine_templates')
+          .upsert(templatesPayload, { onConflict: 'user_id,field_key' });
+        upsertError = result.error;
+      }
+
+      if (upsertError) {
+        console.error('=== upsert 에러 상세 ===');
+        console.error('메시지:', upsertError.message);
+        console.error('코드:', upsertError.code);
+        console.error('상세:', upsertError.details);
+        console.error('힌트:', upsertError.hint);
+        throw upsertError;
+      }
+
+      // 4) 화면에서 제거된 템플릿만 선택적으로 삭제 (이 경우에만 관련 체크 데이터 삭제가 발생할 수 있음)
+      const currentIds = new Set(routineTemplates.map(t => t.id));
+      const idsToDelete = [...existingIds].filter(id => !currentIds.has(id));
+
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('routine_templates')
+          .delete()
+          .eq('user_id', userId)
+          .in('id', idsToDelete);
+
+        if (deleteError) {
+          console.error('선택 삭제 오류:', deleteError);
+          throw deleteError;
         }
       }
 
@@ -461,7 +494,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdate = (index: number, field: 'label' | 'type', value: string) => {
+  const handleUpdate = (index: number, field: 'label' | 'type' | 'unit', value: string) => {
     const updated = [...routineTemplates];
     updated[index] = { ...updated[index], [field]: value };
     setRoutineTemplates(updated);
@@ -479,10 +512,13 @@ export default function SettingsPage() {
     }
     
     const newFieldKey = `routine_${Date.now()}`;
+    const newId = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `routine_${Date.now()}_${Math.random().toString(16).slice(2)}`;
     setRoutineTemplates([
       ...routineTemplates,
       {
-        id: newFieldKey,
+        id: newId,
         emoji: '✅',
         label: '새 루틴',
         field_key: newFieldKey,
