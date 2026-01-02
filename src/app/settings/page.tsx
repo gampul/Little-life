@@ -81,22 +81,28 @@ function RoutineItemWithChart({
   progress,
   onUpdate,
   onMove,
+  onSave,
   onDelete,
   canMoveUp,
   canMoveDown,
+  isDirty,
+  isSaving,
 }: {
   template: RoutineTemplate;
   index: number;
   progress: number;
   onUpdate: (index: number, field: 'label' | 'type' | 'unit', value: string) => void;
   onMove: (index: number, direction: 'up' | 'down') => void;
-  onDelete: (index: number) => void;
+  onSave: (templateId: string) => void;
+  onDelete: (templateId: string) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  isDirty: boolean;
+  isSaving: boolean;
 }) {
   return (
-    <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-2 sm:p-3 border border-gray-200 dark:border-gray-600">
-      <div className="flex items-center gap-2 sm:gap-3 mb-2">
+    <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-1 sm:p-1.5 border border-gray-200 dark:border-gray-600">
+      <div className="flex items-center gap-2 sm:gap-2 mb-1">
         {/* 원형 그래프 */}
         <div className="flex-shrink-0">
           <CircularProgressChart 
@@ -108,14 +114,26 @@ function RoutineItemWithChart({
           type="text"
           value={template.label}
           onChange={(e) => onUpdate(index, 'label', e.target.value)}
-          className="flex-1 min-w-0 px-2 sm:px-3 py-1 text-sm sm:text-base bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[40px] sm:min-h-[44px]"
+          className="flex-[1.5] min-w-0 px-2 sm:px-2.5 py-0 text-[11px] bg-gray-50 dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded min-h-[28px] sm:min-h-[30px]"
           placeholder="루틴 이름"
         />
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <button
+            onClick={() => onSave(template.id)}
+            disabled={!isDirty || isSaving}
+            className={`px-1.5 sm:px-2 py-0 text-[11px] rounded min-h-[26px] sm:min-h-[28px] whitespace-nowrap ${
+              !isDirty || isSaving
+                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+            title={isDirty ? '저장' : '변경 없음'}
+          >
+            {isSaving ? '저장중' : '저장'}
+          </button>
+          <button
             onClick={() => onMove(index, 'up')}
             disabled={!canMoveUp}
-            className="p-1 sm:px-1.5 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[36px] sm:min-h-[40px] min-w-[28px] sm:min-w-[32px]"
+            className="p-0 sm:px-0.5 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[22px] sm:min-h-[24px] min-w-[16px] sm:min-w-[18px]"
             title="위로"
           >
             ↑
@@ -123,14 +141,15 @@ function RoutineItemWithChart({
           <button
             onClick={() => onMove(index, 'down')}
             disabled={!canMoveDown}
-            className="p-1 sm:px-1.5 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[36px] sm:min-h-[40px] min-w-[28px] sm:min-w-[32px]"
+            className="p-0 sm:px-0.5 text-sm text-gray-700 dark:text-gray-300 rounded disabled:opacity-50 min-h-[22px] sm:min-h-[24px] min-w-[16px] sm:min-w-[18px]"
             title="아래로"
           >
             ↓
           </button>
           <button
-            onClick={() => onDelete(index)}
-            className="px-2 sm:px-3 py-1 text-xs sm:text-sm bg-red-500 hover:bg-red-600 text-white rounded min-h-[36px] sm:min-h-[40px] whitespace-nowrap"
+            onClick={() => onDelete(template.id)}
+            disabled={isSaving}
+            className="px-1.5 sm:px-2 py-0 text-[11px] bg-red-500 hover:bg-red-600 text-white rounded min-h-[26px] sm:min-h-[28px] whitespace-nowrap"
             title="삭제"
           >
             삭제
@@ -138,61 +157,68 @@ function RoutineItemWithChart({
         </div>
       </div>
       {/* 타입 선택 */}
-      <div className="flex flex-col gap-2 pl-14">
-        <div className="flex items-center gap-2">
-          <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">타입:</span>
-          <div className="flex gap-2">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name={`type-${template.id}`}
-                checked={template.type === 'checkbox'}
-                onChange={() => onUpdate(index, 'type', 'checkbox')}
-                className="w-4 h-4"
-              />
-              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">체크박스</span>
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name={`type-${template.id}`}
-                checked={template.type === 'number'}
-                onChange={() => onUpdate(index, 'type', 'number')}
-                className="w-4 h-4"
-              />
-              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">숫자</span>
-            </label>
+      <div className="pl-14">
+          <div className="flex items-center justify-between gap-2 flex-nowrap whitespace-nowrap">
+          <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
+            <span className="text-[11px] text-gray-600 dark:text-gray-400 shrink-0 whitespace-nowrap">타입:</span>
+            <div className="flex gap-2 whitespace-nowrap">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`type-${template.id}`}
+                  checked={template.type === 'checkbox'}
+                  onChange={() => onUpdate(index, 'type', 'checkbox')}
+                  className="w-4 h-4"
+                />
+                <span className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-nowrap">체크박스</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`type-${template.id}`}
+                  checked={template.type === 'number'}
+                  onChange={() => onUpdate(index, 'type', 'number')}
+                  className="w-4 h-4"
+                />
+                <span className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-nowrap">숫자</span>
+              </label>
+            </div>
           </div>
-        </div>
-        
-        {/* 숫자 타입일 때 단위 선택 */}
-        {template.type === 'number' && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">단위:</span>
-            <select
-              value={template.unit || ''}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === '__custom__') {
-                  const customUnit = prompt('새로운 단위를 입력하세요:');
-                  if (customUnit && customUnit.trim()) {
-                    onUpdate(index, 'unit', customUnit.trim());
+
+          {/* 숫자 타입일 때 단위 선택 (타입 오른쪽) */}
+          {template.type === 'number' && (
+            <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
+              <span className="text-[11px] text-gray-600 dark:text-gray-400">단위:</span>
+              <select
+                value={template.unit || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '__custom__') {
+                    const customUnit = prompt('새로운 단위를 입력하세요:');
+                    if (customUnit && customUnit.trim()) {
+                      onUpdate(index, 'unit', customUnit.trim());
+                    }
+                  } else {
+                    onUpdate(index, 'unit', value);
                   }
-                } else {
-                  onUpdate(index, 'unit', value);
-                }
-              }}
-              className="px-2 py-1 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">단위 없음</option>
-              <option value="분">분</option>
-              <option value="Km">Km</option>
-              <option value="원">원</option>
-              <option value="__custom__">+ 직접 입력</option>
-            </select>
-            {template.unit && !['분', 'Km', '원'].includes(template.unit) && (
-              <span className="text-xs text-gray-500 dark:text-gray-400">({template.unit})</span>
-            )}
+                }}
+                  className="w-[84px] sm:w-auto px-2 py-0 text-[11px] bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">단위 없음</option>
+                <option value="분">분</option>
+                <option value="Km">Km</option>
+                <option value="원">원</option>
+                <option value="__custom__">+ 직접 입력</option>
+              </select>
+              {template.unit && !['분', 'Km', '원'].includes(template.unit) && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">({template.unit})</span>
+              )}
+            </div>
+          )}
+        </div>
+        {isDirty && (
+          <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
+            변경됨 (저장 필요)
           </div>
         )}
       </div>
@@ -214,11 +240,13 @@ export default function SettingsPage() {
   const supabase = getSupabase();
   const userId = 'default_user';
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [routineProgress, setRoutineProgress] = useState<Record<string, number>>({});
+  const [dirtyById, setDirtyById] = useState<Record<string, boolean>>({});
+  const [savingById, setSavingById] = useState<Record<string, boolean>>({});
+  const [isRoutineSectionExpanded, setIsRoutineSectionExpanded] = useState(true);
 
   useEffect(() => {
     setMounted(true);
@@ -265,6 +293,7 @@ export default function SettingsPage() {
         unit: t.unit || undefined
       }));
       setRoutineTemplates(templatesWithType);
+      setDirtyById(Object.fromEntries((templatesWithType || []).map(t => [t.id, false])));
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -360,36 +389,13 @@ export default function SettingsPage() {
     }
   }, [loadRoutineProgress]);
 
-  const handleSave = async () => {
+  const upsertTemplates = async (templates: RoutineTemplate[]) => {
     if (!supabase) {
-      setMessage('❌ Supabase 연결이 설정되지 않았습니다.');
-      return;
+      throw new Error('Supabase 연결이 설정되지 않았습니다.');
     }
 
-    setIsLoading(true);
-    setMessage('');
-
     try {
-      // IMPORTANT:
-      // 기존 구현은 routine_templates를 통째로 DELETE 후 INSERT 해서,
-      // (FK + ON DELETE CASCADE가 있으면) daily_routine_checks까지 같이 삭제될 수 있음.
-      // 그래서 "id 유지 + upsert"로 변경해 기존 기록을 보존한다.
-
-      // 1) 현재 DB에 저장된 템플릿 id 목록
-      const { data: existingTemplates, error: existingError } = await supabase
-        .from('routine_templates')
-        .select('id')
-        .eq('user_id', userId);
-
-      if (existingError && existingError.code !== 'PGRST116') {
-        console.error('루틴 템플릿 기존 목록 조회 오류:', existingError);
-        throw existingError;
-      }
-
-      const existingIds = new Set((existingTemplates || []).map((t: any) => t.id));
-
-      // 2) 현재 화면 상태 기반 payload 생성 (sort_order 재계산)
-      const templatesPayload: any[] = routineTemplates.map((t, index) => ({
+      const templatesPayload: any[] = templates.map((t, index) => ({
         id: t.id, // id 유지가 핵심
         user_id: userId,
         emoji: t.emoji,
@@ -410,7 +416,7 @@ export default function SettingsPage() {
 
         // unit이 없는 경우: unit 제거하고 upsert 재시도
         if (upsertError.message.includes('unit')) {
-          const payloadNoUnit = routineTemplates.map((t, index) => ({
+          const payloadNoUnit = templates.map((t, index) => ({
             id: t.id,
             user_id: userId,
             emoji: t.emoji,
@@ -426,7 +432,7 @@ export default function SettingsPage() {
           upsertError = result.error;
         } else if (upsertError.message.includes('type')) {
           // type이 없는 경우: type, unit 모두 제거하고 upsert 재시도
-          const payloadBasic = routineTemplates.map((t, index) => ({
+          const payloadBasic = templates.map((t, index) => ({
             id: t.id,
             user_id: userId,
             emoji: t.emoji,
@@ -459,38 +465,8 @@ export default function SettingsPage() {
         console.error('힌트:', upsertError.hint);
         throw upsertError;
       }
-
-      // 4) 화면에서 제거된 템플릿만 선택적으로 삭제 (이 경우에만 관련 체크 데이터 삭제가 발생할 수 있음)
-      const currentIds = new Set(routineTemplates.map(t => t.id));
-      const idsToDelete = [...existingIds].filter(id => !currentIds.has(id));
-
-      if (idsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('routine_templates')
-          .delete()
-          .eq('user_id', userId)
-          .in('id', idsToDelete);
-
-        if (deleteError) {
-          console.error('선택 삭제 오류:', deleteError);
-          throw deleteError;
-        }
-      }
-
-      setMessage('✅ 저장되었습니다!');
-      setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
-      console.error('=== 최종 에러 캐치 ===');
-      let errorMessage = '알 수 없는 오류가 발생했습니다.';
-      
-      if (err?.message) {
-        errorMessage = err.message;
-      }
-      
-      setMessage(`❌ 저장 실패: ${errorMessage}`);
-      setTimeout(() => setMessage(''), 5000);
-    } finally {
-      setIsLoading(false);
+      throw err;
     }
   };
 
@@ -498,10 +474,74 @@ export default function SettingsPage() {
     const updated = [...routineTemplates];
     updated[index] = { ...updated[index], [field]: value };
     setRoutineTemplates(updated);
+    setDirtyById(prev => ({ ...prev, [updated[index].id]: true }));
   };
 
-  const handleDelete = (index: number) => {
-    setRoutineTemplates(routineTemplates.filter((_, i) => i !== index));
+  const persistSortOrder = async (templates: RoutineTemplate[]) => {
+    await upsertTemplates(
+      templates.map((t, idx) => ({ ...t, sort_order: idx }))
+    );
+  };
+
+  const handleSaveOne = async (templateId: string) => {
+    const idx = routineTemplates.findIndex(t => t.id === templateId);
+    if (idx < 0) return;
+    const template = routineTemplates[idx];
+
+    setSavingById(prev => ({ ...prev, [templateId]: true }));
+    setMessage('');
+    try {
+      // 항목 1개만 저장하되, sort_order는 현재 index 기준으로 저장
+      await upsertTemplates([{ ...template, sort_order: idx }]);
+      setDirtyById(prev => ({ ...prev, [templateId]: false }));
+      setMessage('✅ 저장되었습니다!');
+      setTimeout(() => setMessage(''), 2000);
+      // 저장 후 DB 기준으로 재로딩(서버 default/trigger 등 반영)
+      await loadRoutineTemplates();
+    } catch (err: any) {
+      const msg = err?.message || '저장 실패';
+      setMessage(`❌ 저장 실패: ${msg}`);
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setSavingById(prev => ({ ...prev, [templateId]: false }));
+    }
+  };
+
+  const handleDeleteOne = async (templateId: string) => {
+    if (!supabase) return;
+    setSavingById(prev => ({ ...prev, [templateId]: true }));
+    setMessage('');
+    try {
+      const { error } = await supabase
+        .from('routine_templates')
+        .delete()
+        .eq('user_id', userId)
+        .eq('id', templateId);
+      if (error) throw error;
+
+      const next = routineTemplates.filter(t => t.id !== templateId);
+      setRoutineTemplates(next);
+      setDirtyById(prev => {
+        const n = { ...prev };
+        delete n[templateId];
+        return n;
+      });
+
+      // 삭제 후 남은 항목들의 sort_order 정리 (즉시 반영)
+      if (next.length > 0) {
+        await persistSortOrder(next);
+      }
+
+      setMessage('✅ 삭제되었습니다!');
+      setTimeout(() => setMessage(''), 2000);
+      await loadRoutineTemplates();
+    } catch (err: any) {
+      const msg = err?.message || '삭제 실패';
+      setMessage(`❌ 삭제 실패: ${msg}`);
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setSavingById(prev => ({ ...prev, [templateId]: false }));
+    }
   };
 
   const handleAdd = () => {
@@ -526,9 +566,10 @@ export default function SettingsPage() {
         type: 'checkbox',
       },
     ]);
+    setDirtyById(prev => ({ ...prev, [newId]: true }));
   };
 
-  const handleMove = (index: number, direction: 'up' | 'down') => {
+  const handleMove = async (index: number, direction: 'up' | 'down') => {
     const newTemplates = [...routineTemplates];
     if (direction === 'up' && index > 0) {
       [newTemplates[index], newTemplates[index - 1]] = [newTemplates[index - 1], newTemplates[index]];
@@ -536,6 +577,13 @@ export default function SettingsPage() {
       [newTemplates[index], newTemplates[index + 1]] = [newTemplates[index + 1], newTemplates[index]];
     }
     setRoutineTemplates(newTemplates);
+    try {
+      await persistSortOrder(newTemplates);
+    } catch (err: any) {
+      const msg = err?.message || '순서 저장 실패';
+      setMessage(`❌ ${msg}`);
+      setTimeout(() => setMessage(''), 5000);
+    }
   };
 
   if (!supabase) {
@@ -570,7 +618,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
                 <button
                   onClick={() => setTheme('light')}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all min-h-[40px] ${
+                  className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-all min-h-[40px] min-w-[92px] ${
                     mounted && theme === 'light'
                       ? 'bg-white dark:bg-gray-600 shadow-sm'
                       : 'hover:bg-gray-300/50 dark:hover:bg-gray-600/50'
@@ -582,15 +630,15 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={() => setTheme('dark')}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all min-h-[40px] ${
+                  className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-all min-h-[40px] min-w-[92px] bg-black text-white hover:bg-black/90 ${
                     mounted && theme === 'dark'
-                      ? 'bg-white dark:bg-gray-600 shadow-sm'
-                      : 'hover:bg-gray-300/50 dark:hover:bg-gray-600/50'
+                      ? 'shadow-sm ring-1 ring-white/15'
+                      : ''
                   }`}
                   aria-label="다크 모드"
                 >
                   <span className="text-base">🌙</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">다크</span>
+                  <span className="text-sm font-medium text-white">다크</span>
                 </button>
               </div>
             </div>
@@ -598,14 +646,25 @@ export default function SettingsPage() {
 
           {/* 루틴 설정 */}
           <div className="mb-4 sm:mb-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+            <div className="flex items-center justify-between mb-2 sm:mb-2.5">
+              <h3
+                className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap cursor-pointer select-none flex items-center gap-2"
+                onClick={() => setIsRoutineSectionExpanded(v => !v)}
+                aria-label="루틴 설정 펼치기/접기"
+                title={isRoutineSectionExpanded ? '접기' : '펼치기'}
+              >
                 루틴 설정 ({routineTemplates.length}/12)
+                <span className="text-gray-500 dark:text-gray-400 text-sm">
+                  {isRoutineSectionExpanded ? '▴' : '▾'}
+                </span>
               </h3>
               <button
-                onClick={handleAdd}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAdd();
+                }}
                 disabled={routineTemplates.length >= 12}
-                className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-lg transition-colors min-h-[36px] sm:min-h-[44px] whitespace-nowrap flex-shrink-0 ${
+                className={`px-2 sm:px-2.5 py-0.5 sm:py-0.5 text-xs sm:text-sm rounded-lg transition-colors min-h-[28px] sm:min-h-[30px] whitespace-nowrap flex-shrink-0 ${
                   routineTemplates.length >= 12
                     ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 dark:text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 text-white'
@@ -615,38 +674,37 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4">
-              {routineTemplates.map((template, index) => {
-                const progress = routineProgress[template.id] || 0;
-                return (
-                  <RoutineItemWithChart
-                    key={template.id}
-                    template={template}
-                    index={index}
-                    progress={progress}
-                    onUpdate={handleUpdate}
-                    onMove={handleMove}
-                    onDelete={handleDelete}
-                    canMoveUp={index > 0}
-                    canMoveDown={index < routineTemplates.length - 1}
-                  />
-                );
-              })}
-            </div>
+            {isRoutineSectionExpanded && (
+              <>
+                <div className="space-y-1 sm:space-y-1.5 mb-2 sm:mb-2.5">
+                  {routineTemplates.map((template, index) => {
+                    const progress = routineProgress[template.id] || 0;
+                    return (
+                      <RoutineItemWithChart
+                        key={template.id}
+                        template={template}
+                        index={index}
+                        progress={progress}
+                        onUpdate={handleUpdate}
+                        onMove={handleMove}
+                        onSave={handleSaveOne}
+                        onDelete={handleDeleteOne}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < routineTemplates.length - 1}
+                        isDirty={!!dirtyById[template.id]}
+                        isSaving={!!savingById[template.id]}
+                      />
+                    );
+                  })}
+                </div>
 
-            {routineTemplates.length === 0 && (
-              <div className="text-center text-sm sm:text-base text-gray-400 dark:text-gray-500 py-6 sm:py-8">
-                루틴이 없습니다. 추가 버튼을 눌러 루틴을 추가하세요.
-              </div>
+                {routineTemplates.length === 0 && (
+                  <div className="text-center text-sm sm:text-base text-gray-400 dark:text-gray-500 py-6 sm:py-8">
+                    루틴이 없습니다. 추가 버튼을 눌러 루틴을 추가하세요.
+                  </div>
+                )}
+              </>
             )}
-
-            <button
-              onClick={handleSave}
-              disabled={isLoading}
-              className="w-full px-4 py-2.5 sm:py-3 text-sm sm:text-base bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {isLoading ? '저장 중...' : '저장'}
-            </button>
 
             {message && (
               <div className={`mt-2 sm:mt-3 text-xs sm:text-sm text-center ${message.includes('✅') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
