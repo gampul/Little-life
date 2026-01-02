@@ -2664,7 +2664,7 @@ function RoutineCalendar({
   
   // 선택된 연도와 월 상태 관리
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(currentMonth);
+  const [selectedMonth, setSelectedMonth] = useState<string>(String(currentMonth));
 
   // 아코디언이 펼쳐질 때 전체 뷰로 자동 전환
   useEffect(() => {
@@ -2764,7 +2764,7 @@ function RoutineCalendar({
       
       // 선택된 년도와 월에 따라 시작 위치 계산
       const startYear = selectedYear;
-      const startMonth = selectedMonth === 'all' ? 1 : selectedMonth;
+      const startMonth = selectedMonth === 'all' ? 1 : parseInt(selectedMonth);
       
       const firstDayOfMonth = new Date(startYear, startMonth - 1, 1);
       const firstDayWeekday = firstDayOfMonth.getDay();
@@ -2821,9 +2821,10 @@ function RoutineCalendar({
 
   // 주 단위로 날짜 배열 생성 (세로: 요일, 가로: 주)
   // 첫 번째 열에 1,2,3,4,5,6,7이 오도록 주 단위로 구성
-  const getWeekBasedDateGrid = (startYear: number, startMonth: number, numWeeks: number = 8) => {
+  const getWeekBasedDateGrid = (startYear: number, startMonth: number | string, numWeeks: number = 8) => {
     // 시작 날짜: 해당 월의 첫 날
-    const firstDayOfMonth = new Date(startYear, startMonth - 1, 1);
+    const monthNum = typeof startMonth === 'string' ? parseInt(startMonth) : startMonth;
+    const firstDayOfMonth = new Date(startYear, monthNum - 1, 1);
     
     // 첫 날의 요일 (0=일요일, 1=월요일, ..., 6=토요일)
     const firstDayWeekday = firstDayOfMonth.getDay();
@@ -3176,12 +3177,12 @@ function RoutineCalendar({
           {/* 월 선택 */}
           <select
             value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            onChange={(e) => setSelectedMonth(e.target.value)}
             className="px-2 py-1 text-sm font-medium bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
           >
             <option value="all">전체</option>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
-              <option key={month} value={month}>{month}월</option>
+              <option key={month} value={String(month)}>{month}월</option>
             ))}
           </select>
         </div>
@@ -3360,7 +3361,7 @@ function RoutineCalendar({
             {(() => {
               // 선택된 연도와 월에 따라 캘린더 표시
               const startYear = selectedYear;
-              const startMonth = selectedMonth === 'all' ? 1 : selectedMonth;
+              const startMonth = selectedMonth === 'all' ? '1' : selectedMonth;
             
             // 주 수 계산: 전체 연도면 365일 전체, 특정 월이면 해당 월의 주 수
             let numWeeks: number;
@@ -3374,8 +3375,9 @@ function RoutineCalendar({
               numWeeks = Math.ceil(totalDays / 7);
             } else {
               // 특정 월의 주 수 계산
-              const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
-              const lastDay = new Date(selectedYear, selectedMonth, 0);
+              const monthNum = parseInt(selectedMonth);
+              const firstDay = new Date(selectedYear, monthNum - 1, 1);
+              const lastDay = new Date(selectedYear, monthNum, 0);
               const firstDayWeekday = (firstDay.getDay() + 6) % 7; // 월요일 기준
               const totalDays = lastDay.getDate() + firstDayWeekday;
               numWeeks = Math.ceil(totalDays / 7);
@@ -3393,7 +3395,7 @@ function RoutineCalendar({
               if (weekIdx === 0 || weeks[weekIdx - 1][0].month !== firstDay.month || weeks[weekIdx - 1][0].year !== firstDay.year) {
                 // 전체 연도 선택 시: 모든 월 표시
                 // 특정 월 선택 시: 해당 월만 표시
-                if (selectedMonth === 'all' || firstDay.month === selectedMonth) {
+                if (selectedMonth === 'all' || firstDay.month === parseInt(selectedMonth)) {
                   monthHeaders.push({
                     weekIndex: weekIdx,
                     month: firstDay.month,
@@ -3490,7 +3492,7 @@ function RoutineCalendar({
                     // 특정 월 선택 시: 해당 월만 표시, 다른 월은 흐리게
                     const isCurrentMonth = selectedMonth === 'all' 
                       ? year === selectedYear 
-                      : (month === selectedMonth && year === selectedYear);
+                      : (month === parseInt(selectedMonth) && year === selectedYear);
                     
                     const isChecked = isDateChecked(date, routineId);
                     // 한국 시간대 기준 오늘 날짜 확인 (UTC+9)

@@ -88,7 +88,7 @@ function RoutineItemWithChart({
   template: RoutineTemplate;
   index: number;
   progress: number;
-  onUpdate: (index: number, field: 'label' | 'type', value: string) => void;
+  onUpdate: (index: number, field: 'label' | 'type' | 'unit', value: string) => void;
   onMove: (index: number, direction: 'up' | 'down') => void;
   onDelete: (index: number) => void;
   canMoveUp: boolean;
@@ -388,7 +388,7 @@ export default function SettingsPage() {
       // 새 템플릿 삽입
       if (routineTemplates.length > 0) {
         // unit 컬럼 포함하여 삽입 시도
-        let templatesToInsert = routineTemplates.map((t, index) => ({
+        let templatesToInsert: any[] = routineTemplates.map((t, index) => ({
           user_id: userId,
           emoji: t.emoji,
           label: t.label,
