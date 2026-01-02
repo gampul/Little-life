@@ -2163,9 +2163,9 @@ function RoutineItem({
                 onValueChange?.(newValue);
               }}
               onClick={(e) => e.stopPropagation()}
-              disabled={disabled}
+              disabled={false}
               placeholder="0.0"
-              className="w-16 h-8 px-2 text-sm text-center bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-16 h-8 px-2 text-sm text-center bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           )}
           
