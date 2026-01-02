@@ -110,6 +110,7 @@ export default function Home() {
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [dailyRecordsError, setDailyRecordsError] = useState<string | null>(null);
 
   // 날씨 API 호출 함수
   const fetchWeather = useCallback(async () => {
@@ -411,6 +412,7 @@ export default function Home() {
   const loadDailyRecord = useCallback(async (date: string) => {
     if (!supabase || !userId) return;
     try {
+      setDailyRecordsError(null);
       // meal_images 포함하여 조회 시도
       let { data, error } = await supabase
         .from('daily_records')
@@ -435,6 +437,7 @@ export default function Home() {
 
       if (error && error.code !== 'PGRST116') {
         console.error('데이터 조회 오류');
+        setDailyRecordsError(error.message || 'daily_records 조회 오류');
         if (error?.message) console.error('- 메시지:', error.message);
         if (error?.code) console.error('- 코드:', error.code);
         if (error?.details) console.error('- 상세:', error.details);
@@ -465,6 +468,7 @@ export default function Home() {
       }
     } catch (err) {
       console.error('예상치 못한 오류:', err);
+      setDailyRecordsError((err as any)?.message || 'daily_records 로드 중 오류');
     }
   }, [supabase, userId]);
 
@@ -472,6 +476,7 @@ export default function Home() {
   const loadMealRecords = useCallback(async () => {
     if (!supabase || !userId) return;
     try {
+      setDailyRecordsError(null);
       // meal_images 포함하여 조회 시도
       let { data, error } = await supabase
         .from('daily_records')
@@ -496,6 +501,7 @@ export default function Home() {
 
       if (error) {
         console.error('식사 기록 조회 오류:', error);
+        setDailyRecordsError(error.message || 'daily_records(식사 기록) 조회 오류');
         return;
       }
 
@@ -513,6 +519,7 @@ export default function Home() {
       setMealRecords(filteredRecords);
     } catch (err) {
       console.error('식사 기록 로드 오류:', err);
+      setDailyRecordsError((err as any)?.message || 'daily_records(식사 기록) 로드 중 오류');
     }
   }, [supabase, userId]);
 
@@ -522,6 +529,7 @@ export default function Home() {
       return;
     }
     try {
+      setDailyRecordsError(null);
       // meal_images 포함하여 조회 시도
       let { data, error } = await supabase
         .from('daily_records')
@@ -544,6 +552,7 @@ export default function Home() {
 
       if (error) {
         console.error('전체 데이터 조회 오류');
+        setDailyRecordsError(error.message || 'daily_records 전체 조회 오류');
         if (error?.message) console.error('- 메시지:', error.message);
         if (error?.code) console.error('- 코드:', error.code);
         if (error?.details) console.error('- 상세:', error.details);
@@ -563,6 +572,7 @@ export default function Home() {
       setAllRecords(normalizedData);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
+      setDailyRecordsError((err as any)?.message || 'daily_records 전체 로드 중 오류');
     }
   }, [supabase, userId]);
 
@@ -589,22 +599,20 @@ export default function Home() {
     };
   }, [loadRoutineTemplates]);
 
-  // 초기 데이터 로드 (마운트 시 한 번만)
+  // userId가 준비된 이후에만 데이터 로드 (로그인 전환 후 "데이터 없음" 방지)
   useEffect(() => {
-    loadDailyRecord(selectedDate);
-    loadRoutineChecks(selectedDate);
+    if (!userId) return;
     loadAllRecords();
     loadMealRecords();
-    fetchWeather().catch(() => {}); // 날씨 데이터 가져오기(실패해도 앱 진행)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 빈 배열로 초기 마운트 시에만 실행
+    fetchWeather().catch(() => {});
+  }, [userId, loadAllRecords, loadMealRecords, fetchWeather]);
 
   // 날짜 변경 시 데이터 로드
   useEffect(() => {
+    if (!userId) return;
     loadDailyRecord(selectedDate);
     loadRoutineChecks(selectedDate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
+  }, [userId, selectedDate, loadDailyRecord, loadRoutineChecks]);
 
   // 루틴 체크박스 상태 확인
   const isRoutineChecked = (routineId: string): boolean => {
@@ -1305,6 +1313,13 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+
+              {dailyRecordsError && (
+                <div className="mb-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                  daily_records 조회 오류: {dailyRecordsError}
+                </div>
+              )}
+
               <div className="h-64">
                 {getWeightChartData().length > 0 ? (() => {
                   const rawData = getWeightChartData();
@@ -1343,6 +1358,37 @@ export default function Home() {
                       <div className="text-4xl mb-2">📊</div>
                       <p className="text-gray-400 dark:text-gray-500 text-sm">체중 데이터가 없습니다</p>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 날짜별 체중 리스트 (차트 아래) */}
+              <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">📅 체중 기록</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {allRecords.filter(r => r.weight != null).length}개
+                  </div>
+                </div>
+                {allRecords.filter(r => r.weight != null).length === 0 ? (
+                  <div className="text-xs text-gray-500 dark:text-gray-400">표시할 체중 기록이 없습니다.</div>
+                ) : (
+                  <div className="max-h-40 overflow-auto space-y-1">
+                    {[...allRecords]
+                      .filter(r => r.weight != null)
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .slice(0, 30)
+                      .map((r) => (
+                        <button
+                          key={r.date}
+                          onClick={() => setSelectedDate(r.date)}
+                          className="w-full flex items-center justify-between text-left rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700/40"
+                          title={`${r.date}로 이동`}
+                        >
+                          <span className="text-xs text-gray-700 dark:text-gray-200">{r.date}</span>
+                          <span className="text-xs font-bold text-gray-900 dark:text-white">{r.weight}kg</span>
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>
