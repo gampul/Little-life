@@ -2934,21 +2934,129 @@ function RoutineCalendar({
         </div>
       </div>
       
-      {/* 가로 스크롤 가능한 캘린더 컨테이너 (요일별 세로 배치) */}
-      <div 
-        ref={calendarScrollRef}
-        className="overflow-x-auto overflow-y-hidden"
-        style={{
-          width: '100%',
-          scrollbarWidth: 'thin',
-          scrollbarColor: '#6B7280 #374151'
-        }}
-      >
-        <div style={{ minWidth: 'max-content' }}>
-          {(() => {
-            // 선택된 연도와 월에 따라 캘린더 표시
-            const startYear = selectedYear;
-            const startMonth = selectedMonth === 'all' ? 1 : selectedMonth;
+      {/* 캘린더 컨테이너 */}
+      {selectedMonth === 'all' ? (
+        // 연간 뷰: 12개월을 3x4 그리드로 표시
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 12 }, (_, monthIdx) => {
+            const month = monthIdx + 1;
+            
+            // 해당 월의 주 수 계산
+            const firstDay = new Date(selectedYear, month - 1, 1);
+            const lastDay = new Date(selectedYear, month, 0);
+            const firstDayWeekday = (firstDay.getDay() + 6) % 7; // 월요일 기준
+            const totalDays = lastDay.getDate() + firstDayWeekday;
+            const numWeeks = Math.ceil(totalDays / 7);
+            
+            const weeks = getWeekBasedDateGrid(selectedYear, month, numWeeks);
+            
+            return (
+              <div key={month} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm p-2">
+                {/* 월 헤더 */}
+                <div className="text-center text-blue-600 dark:text-blue-400 font-bold text-xs mb-2">
+                  {month}월
+                </div>
+                
+                {/* 캘린더 그리드 */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${weeks.length}, 18px)`,
+                    gridTemplateRows: 'repeat(7, 18px)',
+                    gap: '2px'
+                  }}
+                >
+                  {/* 주별 날짜 열들 */}
+                  {weeks.map((week, weekIdx) => {
+                    return week.map((cell, weekdayIdx) => {
+                      const { day, date, month: cellMonth, year } = cell;
+                      const isCurrentMonth = cellMonth === month && year === selectedYear;
+                      const isChecked = isDateChecked(date, routineId);
+                      
+                      // 한국 시간대 기준 오늘 날짜 확인
+                      const getKoreaDateString = (): string => {
+                        const now = new Date();
+                        const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+                        const year = koreaTime.getUTCFullYear();
+                        const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
+                        const day = String(koreaTime.getUTCDate()).padStart(2, '0');
+                        return `${year}-${month}-${day}`;
+                      };
+                      const isToday = date === getKoreaDateString();
+                      const isSaturday = weekdayIdx === 5;
+                      const isSunday = weekdayIdx === 6;
+                      
+                      // 배경색 결정
+                      let backgroundColor = 'rgba(75, 85, 99, 0.15)';
+                      if (isChecked) {
+                        if (isSaturday) {
+                          backgroundColor = '#3B82F6';
+                        } else if (isSunday) {
+                          backgroundColor = '#EF4444';
+                        } else {
+                          backgroundColor = '#9CA3AF';
+                        }
+                      } else if (isSaturday) {
+                        backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                      } else if (isSunday) {
+                        backgroundColor = 'rgba(239, 68, 68, 0.15)';
+                      }
+                      
+                      return (
+                        <div
+                          key={`${weekIdx}-${weekdayIdx}`}
+                          className={`
+                            flex items-center justify-center relative
+                            ${editModeRoutine === routineId && isCurrentMonth ? 'cursor-pointer' : 'cursor-default'}
+                            transition-all duration-200
+                            ${editModeRoutine === routineId && isCurrentMonth ? 'hover:scale-110 hover:brightness-125' : ''}
+                          `}
+                          style={{
+                            gridRow: weekdayIdx + 1,
+                            gridColumn: weekIdx + 1,
+                            width: '18px',
+                            height: '18px',
+                            backgroundColor: backgroundColor,
+                            borderRadius: '3px',
+                            color: isChecked ? '#FFFFFF' : (isSaturday ? '#3B82F6' : isSunday ? '#EF4444' : '#9CA3AF'),
+                            fontSize: '7px',
+                            fontWeight: isChecked ? '700' : '500',
+                            border: isToday ? '1px solid #60A5FA' : 'none',
+                            opacity: isCurrentMonth ? 1 : 0.2
+                          }}
+                          onClick={() => {
+                            if (editModeRoutine === routineId && isCurrentMonth) {
+                              handleDateToggle(date, routineId);
+                            }
+                          }}
+                          title={`${year}년 ${cellMonth}월 ${day}일${isToday ? ' (오늘)' : ''}`}
+                        >
+                          <span style={{ fontSize: dateValues[date] ? '6px' : '7px' }}>{day}</span>
+                        </div>
+                      );
+                    });
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        // 월별 뷰: 기존 가로 스크롤 캘린더
+        <div 
+          ref={calendarScrollRef}
+          className="overflow-x-auto overflow-y-hidden"
+          style={{
+            width: '100%',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#6B7280 #374151'
+          }}
+        >
+          <div style={{ minWidth: 'max-content' }}>
+            {(() => {
+              // 선택된 연도와 월에 따라 캘린더 표시
+              const startYear = selectedYear;
+              const startMonth = selectedMonth === 'all' ? 1 : selectedMonth;
             
             // 주 수 계산: 전체 연도면 365일 전체, 특정 월이면 해당 월의 주 수
             let numWeeks: number;
@@ -3175,8 +3283,9 @@ function RoutineCalendar({
               </div>
             );
           })()}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
