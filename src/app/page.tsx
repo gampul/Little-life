@@ -1659,6 +1659,27 @@ export default function Home() {
                                           {record.meal_memo}
                                         </p>
                                       )}
+                                      {/* 이미지 미리보기 (최대 3개) */}
+                                      {record.meal_images && record.meal_images.length > 0 && (
+                                        <div className="flex gap-2 mt-2">
+                                          {record.meal_images.slice(0, 3).map((imageUrl, idx) => (
+                                            <div key={idx} className="relative w-16 h-16 flex-shrink-0">
+                                              <img
+                                                src={imageUrl}
+                                                alt={`식사 사진 ${idx + 1}`}
+                                                className="w-full h-full object-cover rounded border border-gray-300 dark:border-gray-600"
+                                              />
+                                              {idx === 2 && record.meal_images.length > 3 && (
+                                                <div className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center">
+                                                  <span className="text-white text-xs font-medium">
+                                                    +{record.meal_images.length - 3}
+                                                  </span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })}
