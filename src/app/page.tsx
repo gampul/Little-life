@@ -177,23 +177,7 @@ export default function Home() {
 
     try {
       // Storage bucket 존재 확인
-      console.log('🔍 Storage bucket 확인 중...');
-      const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-      
-      if (bucketError) {
-        console.error('❌ Bucket 목록 조회 실패:', bucketError);
-        throw new Error(`Storage 접근 오류: ${bucketError.message}`);
-      }
-      
-      const mealImagesBucket = buckets?.find(b => b.id === 'meal-images');
-      if (!mealImagesBucket) {
-        console.error('❌ meal-images bucket이 없습니다');
-        console.log('📋 사용 가능한 buckets:', buckets?.map(b => b.id));
-        alert('❌ Storage bucket이 생성되지 않았습니다.\n\nDATABASE_SETUP.md 파일을 참고하여 다음을 실행하세요:\n1. Supabase SQL Editor에서 마이그레이션 실행\n2. Storage에서 meal-images bucket 생성');
-        return;
-      }
-      
-      console.log('✅ meal-images bucket 확인됨');
+      console.log('📤 이미지 업로드 시작...');
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
