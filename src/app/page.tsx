@@ -1440,7 +1440,10 @@ export default function Home() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex-1 min-w-[180px] max-w-[250px] px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg font-medium flex items-center">
+                  <div 
+                    className="flex-1 min-w-[180px] max-w-[250px] px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg font-medium flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                    onClick={handleEdit}
+                  >
                     📅 {(() => {
                       const date = new Date(formData.date);
                       const month = date.getMonth() + 1;
