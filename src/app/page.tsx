@@ -32,6 +32,7 @@ interface RoutineTemplate {
   label: string;
   field_key: string;
   sort_order: number;
+  type: 'checkbox' | 'number';
 }
 
 interface RoutineCheck {
@@ -69,6 +70,7 @@ export default function Home() {
   // 루틴 관련 상태
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [routineChecks, setRoutineChecks] = useState<RoutineCheck[]>([]);
+  const [routineValues, setRoutineValues] = useState<Record<string, number | null>>({});
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
@@ -311,7 +313,7 @@ export default function Home() {
     try {
       const { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id')
+        .select('id, emoji, label, field_key, sort_order, user_id, type')
         .eq('user_id', userId)
         .order('sort_order', { ascending: true });
 
@@ -324,7 +326,12 @@ export default function Home() {
         return;
       }
 
-      setRoutineTemplates(data || []);
+      // type 필드가 없는 경우 기본값 설정
+      const templatesWithType = (data || []).map(t => ({
+        ...t,
+        type: t.type || 'checkbox' as 'checkbox' | 'number'
+      }));
+      setRoutineTemplates(templatesWithType);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -359,6 +366,15 @@ export default function Home() {
 
       console.log('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
       setRoutineChecks(data || []);
+      
+      // 루틴 값 추출하여 state에 저장
+      const values: Record<string, number | null> = {};
+      if (data) {
+        data.forEach((check: any) => {
+          values[check.routine_id] = check.value ?? null;
+        });
+      }
+      setRoutineValues(values);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -673,6 +689,7 @@ export default function Home() {
           date: formData.date,
           routine_id: check.routine_id,
           checked: true,
+          value: routineValues[check.routine_id] ?? null,
         }));
 
       console.log('📋 삽입할 루틴 체크:', checksToInsert);
@@ -1333,6 +1350,14 @@ export default function Home() {
                     routineTemplates={routineTemplates}
                     editModeRoutine={editModeRoutine}
                     setEditModeRoutine={setEditModeRoutine}
+                    routineType={routine.type || 'checkbox'}
+                    value={routineValues[routine.id] ?? null}
+                    onValueChange={(value) => {
+                      setRoutineValues(prev => ({
+                        ...prev,
+                        [routine.id]: value
+                      }));
+                    }}
                   />
                   {/* 확장된 루틴의 캘린더 표시 */}
                   {expandedRoutineId === routine.id && (
@@ -1770,6 +1795,9 @@ function RoutineItem({
   routineTemplates,
   editModeRoutine,
   setEditModeRoutine,
+  routineType,
+  value,
+  onValueChange,
 }: {
   emoji: string;
   label: string;
@@ -1783,6 +1811,9 @@ function RoutineItem({
   routineTemplates: RoutineTemplate[];
   editModeRoutine: string | null;
   setEditModeRoutine: (routineId: string | null) => void;
+  routineType: 'checkbox' | 'number';
+  value?: number | null;
+  onValueChange?: (value: number | null) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const currentDate = new Date();
@@ -2077,7 +2108,26 @@ function RoutineItem({
               {consecutiveDays}일 연속
             </div>
           )}
-          {/* 오늘 날짜 체크박스 */}
+          {/* 숫자 입력 필드 (숫자 타입일 때) */}
+          {routineType === 'number' && (
+            <input
+              type="number"
+              step="0.1"
+              value={value ?? ''}
+              onChange={(e) => {
+                e.stopPropagation();
+                const newValue = e.target.value === '' ? null : parseFloat(e.target.value);
+                onValueChange?.(newValue);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              disabled={disabled}
+              placeholder="0.0"
+              className="w-16 h-8 px-2 text-sm text-center bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          )}
+          
+          {/* 오늘 날짜 체크박스 (체크박스 타입일 때) */}
+          {routineType === 'checkbox' && (
           <div 
             className="flex items-center shrink-0"
             onClick={disabled ? undefined : handleTodayToggle}
@@ -2101,6 +2151,7 @@ function RoutineItem({
               }}
             />
           </div>
+          )}
         </div>
       </div>
       {!isLast && <div style={{ height: '0.5px' }} className="bg-gray-200 dark:bg-gray-600"></div>}
@@ -2159,6 +2210,7 @@ function RoutineSettingModal({
       label: '새로운 루틴',
       field_key: `custom_${Date.now()}`,
       sort_order: templates.length + 1,
+      type: 'checkbox',
     };
     setTemplates([...templates, newTemplate]);
   };
