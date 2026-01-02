@@ -406,7 +406,7 @@ export default function Home() {
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  }, [supabase]);
+  }, [supabase, userId]);
 
   const loadDailyRecord = useCallback(async (date: string) => {
     if (!supabase) return;
@@ -699,7 +699,9 @@ export default function Home() {
       const { error: deleteError } = await supabase
         .from('daily_routine_checks')
         .delete()
-        .eq('date', formData.date);
+        .eq('date', formData.date)
+        // ✅ 로그인 도입 이후: 다른 사용자 데이터까지 삭제되지 않도록 user_id로 스코프 제한
+        .eq('user_id', userId);
 
       if (deleteError) {
         console.error('=== 루틴 체크 삭제 에러 상세 ===');
@@ -711,9 +713,11 @@ export default function Home() {
         throw deleteError;
       }
 
-        const checksToInsert = routineChecks
+      const checksToInsert = routineChecks
         .filter(check => check.checked)
         .map(check => ({
+          // ✅ RLS/멀티유저 대응: 반드시 user_id 포함
+          user_id: userId,
           date: formData.date,
           routine_id: check.routine_id,
           checked: true,
@@ -1433,6 +1437,7 @@ export default function Home() {
                         setEditModeRoutine(newExpandedId);
                       }
                     }}
+                    userId={userId}
                     routineId={routine.id}
                     routineTemplates={routineTemplates}
                     editModeRoutine={editModeRoutine}
@@ -1453,6 +1458,7 @@ export default function Home() {
                   {expandedRoutineId === routine.id && (
                     <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
                       <RoutineCalendar
+                        userId={userId}
                         routineId={routine.id}
                         routineLabel={routine.label}
                         routineEmoji={routine.emoji}
@@ -1883,6 +1889,7 @@ function RoutineItem({
   isLast = false,
   isExpanded = false,
   onExpandToggle,
+  userId,
   routineId,
   routineTemplates,
   editModeRoutine,
@@ -1902,6 +1909,7 @@ function RoutineItem({
   isLast?: boolean;
   isExpanded?: boolean;
   onExpandToggle?: () => void;
+  userId: string;
   routineId: string;
   routineTemplates: RoutineTemplate[];
   editModeRoutine: string | null;
@@ -1937,6 +1945,7 @@ function RoutineItem({
           .select('date, routine_id, checked, value')
           .gte('date', rangeStart)
           .lte('date', rangeEnd)
+          .eq('user_id', userId)
           .eq('routine_id', routineId)
           .eq('checked', true);
 
@@ -2134,11 +2143,12 @@ function RoutineItem({
           const { error } = await supabase
             .from('daily_routine_checks')
             .upsert({
+              user_id: userId,
               date: todayDateStr,
               routine_id: routineId,
               checked: true
             }, {
-              onConflict: 'date,routine_id'
+              onConflict: 'user_id,date,routine_id'
             });
           
           if (error) {
@@ -2151,7 +2161,8 @@ function RoutineItem({
             .from('daily_routine_checks')
             .delete()
             .eq('date', todayDateStr)
-            .eq('routine_id', routineId);
+            .eq('routine_id', routineId)
+            .eq('user_id', userId);
           
           if (error) {
             console.error('Supabase 삭제 오류:', error);
@@ -2274,17 +2285,19 @@ function RoutineItem({
                         .from('daily_routine_checks')
                         .delete()
                         .eq('date', dateStr)
-                        .eq('routine_id', routineId);
+                        .eq('routine_id', routineId)
+                        .eq('user_id', userId);
                     } else {
                       await supabase
                         .from('daily_routine_checks')
                         .upsert({
+                          user_id: userId,
                           date: dateStr,
                           routine_id: routineId,
                           checked: true,
                           value: numValue
                         }, {
-                          onConflict: 'date,routine_id'
+                          onConflict: 'user_id,date,routine_id'
                         });
                     }
                     // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
@@ -2355,18 +2368,20 @@ function RoutineItem({
                       await supabase
                         .from('daily_routine_checks')
                         .upsert({
+                          user_id: userId,
                           date: dateStr,
                           routine_id: routineId,
                           checked: true
                         }, {
-                          onConflict: 'date,routine_id'
+                          onConflict: 'user_id,date,routine_id'
                         });
                     } else {
                       await supabase
                         .from('daily_routine_checks')
                         .delete()
                         .eq('date', dateStr)
-                        .eq('routine_id', routineId);
+                        .eq('routine_id', routineId)
+                        .eq('user_id', userId);
                     }
                     
                     // 상태 업데이트
@@ -2674,6 +2689,7 @@ function RoutineSettingModal({
 
 // 루틴별 캘린더 컴포넌트
 function RoutineCalendar({
+  userId,
   routineId,
   routineLabel,
   routineEmoji,
@@ -2684,6 +2700,7 @@ function RoutineCalendar({
   syncTick,
   onSync,
 }: {
+  userId: string;
   routineId: string;
   routineLabel: string;
   routineEmoji: string;
@@ -2755,6 +2772,7 @@ function RoutineCalendar({
           .from('daily_routine_checks')
           .select('date, routine_id, checked, value')
           .in('date', allDates)
+          .eq('user_id', userId)
           .eq('routine_id', routineId)
           .eq('checked', true);
 
@@ -2969,7 +2987,8 @@ function RoutineCalendar({
             .from('daily_routine_checks')
             .delete()
             .eq('date', date)
-            .eq('routine_id', routineId);
+            .eq('routine_id', routineId)
+            .eq('user_id', userId);
           
           if (error) {
             console.error('Supabase 삭제 오류:', error);
@@ -2988,12 +3007,13 @@ function RoutineCalendar({
           const { error } = await supabase
             .from('daily_routine_checks')
             .upsert({
+              user_id: userId,
               date: date,
               routine_id: routineId,
               checked: true,
               value: numValue
             }, {
-              onConflict: 'date,routine_id'
+              onConflict: 'user_id,date,routine_id'
             });
           
           if (error) {
@@ -3031,11 +3051,12 @@ function RoutineCalendar({
           const { error } = await supabase
             .from('daily_routine_checks')
             .upsert({
+              user_id: userId,
               date: date,
               routine_id: routineId,
               checked: true
             }, {
-              onConflict: 'date,routine_id'
+              onConflict: 'user_id,date,routine_id'
             });
           
           if (error) {
@@ -3048,7 +3069,8 @@ function RoutineCalendar({
             .from('daily_routine_checks')
             .delete()
             .eq('date', date)
-            .eq('routine_id', routineId);
+            .eq('routine_id', routineId)
+            .eq('user_id', userId);
         
           if (error) {
             console.error('Supabase 삭제 오류:', error);
