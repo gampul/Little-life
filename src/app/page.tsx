@@ -2939,36 +2939,42 @@ function RoutineCalendar({
         // 연간 뷰: 쿼터별로 12개월 표시
         <div className="space-y-2">
           {/* Q1, Q2, Q3, Q4 */}
-          {[0, 1, 2, 3].map((quarterIdx) => (
-            <div key={quarterIdx} className="flex gap-0">
-              {Array.from({ length: 3 }, (_, monthInQuarter) => {
-                const month = quarterIdx * 3 + monthInQuarter + 1;
-            
-            // 해당 월의 주 수 계산
-            const firstDay = new Date(selectedYear, month - 1, 1);
-            const lastDay = new Date(selectedYear, month, 0);
-            const firstDayWeekday = (firstDay.getDay() + 6) % 7; // 월요일 기준
-            const totalDays = lastDay.getDate() + firstDayWeekday;
-            const numWeeks = Math.ceil(totalDays / 7);
-            
-            const weeks = getWeekBasedDateGrid(selectedYear, month, numWeeks);
+          {[0, 1, 2, 3].map((quarterIdx) => {
+            // 쿼터의 3개월 데이터를 모두 수집
+            const quarterMonths = Array.from({ length: 3 }, (_, monthInQuarter) => {
+              const month = quarterIdx * 3 + monthInQuarter + 1;
+              const firstDay = new Date(selectedYear, month - 1, 1);
+              const lastDay = new Date(selectedYear, month, 0);
+              const firstDayWeekday = (firstDay.getDay() + 6) % 7;
+              const totalDays = lastDay.getDate() + firstDayWeekday;
+              const numWeeks = Math.ceil(totalDays / 7);
+              const weeks = getWeekBasedDateGrid(selectedYear, month, numWeeks);
+              return { month, weeks };
+            });
             
             return (
-              <div key={month} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm p-1">
-                {/* 월 헤더 */}
-                <div className="text-center text-blue-600 dark:text-blue-400 font-bold text-xs mb-1">
-                  {month}월
+              <div key={quarterIdx} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm p-2">
+                {/* 쿼터 헤더 */}
+                <div className="flex justify-around mb-1">
+                  {quarterMonths.map(({ month }) => (
+                    <div key={month} className="text-center text-blue-600 dark:text-blue-400 font-bold text-xs flex-1">
+                      {month}월
+                    </div>
+                  ))}
                 </div>
                 
-                {/* 캘린더 그리드 */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(${weeks.length}, 18px)`,
-                    gridTemplateRows: 'repeat(7, 18px)',
-                    gap: '1px'
-                  }}
-                >
+                {/* 쿼터 전체 캘린더 그리드 */}
+                <div className="flex gap-1">
+                  {quarterMonths.map(({ month, weeks }) => (
+                    <div
+                      key={month}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${weeks.length}, 18px)`,
+                        gridTemplateRows: 'repeat(7, 18px)',
+                        gap: '1px'
+                      }}
+                    >
                   {/* 주별 날짜 열들 */}
                   {weeks.map((week, weekIdx) => {
                     return week.map((cell, weekdayIdx) => {
@@ -3031,12 +3037,12 @@ function RoutineCalendar({
                       );
                     });
                   })}
+                    </div>
+                  ))}
                 </div>
               </div>
-                );
-              })}
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         // 월별 뷰: 기존 가로 스크롤 캘린더
