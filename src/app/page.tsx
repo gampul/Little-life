@@ -1420,10 +1420,10 @@ export default function Home() {
                 
               {isMealSectionExpanded && (
               <>
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
                 {/* 작은 날짜 선택 필드 */}
                 <div 
-                  className="relative cursor-pointer overflow-hidden flex-1 min-w-[180px] max-w-[250px]"
+                  className="relative cursor-pointer overflow-hidden w-[120px]"
                   onClick={(e) => {
                     e.preventDefault();
                     const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
@@ -1464,9 +1464,8 @@ export default function Home() {
                     })()}
                   </div>
                 </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-4 mb-4">
+                
+                {/* 식사 체크박스 */}
                 <MealCheckbox
                   label="아침"
                   checked={formData.meal_breakfast}
