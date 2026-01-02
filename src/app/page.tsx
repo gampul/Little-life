@@ -1816,6 +1816,7 @@ function RoutineItem({
   onValueChange?: (value: number | null) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
+  const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -1851,16 +1852,24 @@ function RoutineItem({
 
         // 데이터를 Record<string, Set<string>> 형태로 변환
         const data: Record<string, Set<string>> = {};
+        let totalValue = 0;
+        
         if (checks && checks.length > 0) {
           checks.forEach((check: any) => {
             if (!data[check.date]) {
               data[check.date] = new Set();
             }
             data[check.date].add(check.routine_id);
+            
+            // 숫자 타입인 경우 연간 누적 계산
+            if (routineType === 'number' && check.value != null) {
+              totalValue += check.value;
+            }
           });
         }
         
         setCheckedDates(data);
+        setYearlyTotal(totalValue);
       } catch (err) {
         console.error('데이터 로드 오류:', err);
       }
@@ -2108,6 +2117,25 @@ function RoutineItem({
               {consecutiveDays}일 연속
             </div>
           )}
+          
+          {/* 연간 누적 (숫자 타입일 때) */}
+          {routineType === 'number' && yearlyTotal > 0 && (
+            <div
+              className={`px-2 py-1 text-xs font-medium rounded-full ${
+                isHexColor 
+                  ? '' 
+                  : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
+              }`}
+              style={isHexColor ? {
+                backgroundColor: colorClasses.bgLight,
+                color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
+              } : {}}
+              title="연간 누적"
+            >
+              📊 {yearlyTotal.toFixed(1)}
+            </div>
+          )}
+          
           {/* 숫자 입력 필드 (숫자 타입일 때) */}
           {routineType === 'number' && (
             <input
