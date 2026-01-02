@@ -92,6 +92,57 @@ function MemoPageContent() {
     handleEditorInput();
   };
 
+  // 마크다운 삽입 핸들러
+  const insertMarkdown = (type: string) => {
+    if (!editorRef.current) return;
+    
+    const selection = window.getSelection();
+    const selectedText = selection?.toString() || '';
+    
+    let markdownText = '';
+    
+    switch (type) {
+      case 'heading1':
+        markdownText = `<h1 style="font-size: 2em; font-weight: bold; margin: 0.67em 0;">${selectedText || '제목 1'}</h1>`;
+        break;
+      case 'heading2':
+        markdownText = `<h2 style="font-size: 1.5em; font-weight: bold; margin: 0.75em 0;">${selectedText || '제목 2'}</h2>`;
+        break;
+      case 'heading3':
+        markdownText = `<h3 style="font-size: 1.17em; font-weight: bold; margin: 0.83em 0;">${selectedText || '제목 3'}</h3>`;
+        break;
+      case 'quote':
+        markdownText = `<blockquote style="border-left: 4px solid #3B82F6; padding-left: 1em; margin: 1em 0; color: #6B7280;">${selectedText || '인용구'}</blockquote>`;
+        break;
+      case 'code':
+        if (selectedText.includes('\n')) {
+          // 여러 줄 코드 블록
+          markdownText = `<pre style="background-color: #1F2937; color: #E5E7EB; padding: 1em; border-radius: 0.5em; overflow-x: auto; margin: 1em 0;"><code>${selectedText || '코드 블록'}</code></pre>`;
+        } else {
+          // 인라인 코드
+          markdownText = `<code style="background-color: #E5E7EB; color: #1F2937; padding: 0.2em 0.4em; border-radius: 0.25em; font-family: monospace;">${selectedText || '코드'}</code>`;
+        }
+        break;
+      case 'link':
+        const url = prompt('링크 URL을 입력하세요:', 'https://');
+        if (url) {
+          markdownText = `<a href="${url}" style="color: #3B82F6; text-decoration: underline;" target="_blank" rel="noopener noreferrer">${selectedText || '링크'}</a>`;
+        }
+        break;
+      case 'checkbox':
+        markdownText = `<div style="margin: 0.5em 0;"><input type="checkbox" style="margin-right: 0.5em;"><span>${selectedText || '할 일'}</span></div>`;
+        break;
+      default:
+        return;
+    }
+    
+    if (markdownText) {
+      document.execCommand('insertHTML', false, markdownText);
+      editorRef.current.focus();
+      handleEditorInput();
+    }
+  };
+
   // 이미지 업로드 핸들러
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -641,11 +692,39 @@ function MemoPageContent() {
                 <u>U</u>
               </button>
               <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
+              
+              {/* 마크다운 헤딩 */}
+              <button type="button" onClick={() => insertMarkdown('heading1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                H1
+              </button>
+              <button type="button" onClick={() => insertMarkdown('heading2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                H2
+              </button>
+              <button type="button" onClick={() => insertMarkdown('heading3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                H3
+              </button>
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
+              
               <button type="button" onClick={() => formatText('insertUnorderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="글머리">
                 • 목록
               </button>
               <button type="button" onClick={() => formatText('insertOrderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="번호">
                 1. 목록
+              </button>
+              <button type="button" onClick={() => insertMarkdown('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="체크박스">
+                ☑ 할일
+              </button>
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
+              
+              {/* 마크다운 추가 기능 */}
+              <button type="button" onClick={() => insertMarkdown('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                " 인용
+              </button>
+              <button type="button" onClick={() => insertMarkdown('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                {'<>'} 코드
+              </button>
+              <button type="button" onClick={() => insertMarkdown('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                🔗 링크
               </button>
               <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
               {/* 이미지 업로드 버튼 */}

@@ -968,7 +968,7 @@ export default function Home() {
                     }}
                   />
                   {/* 날짜 포맷 표시 (오버레이) - 한 줄로 정렬, 전체 텍스트 표시 */}
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-base text-gray-900 dark:text-white font-medium whitespace-nowrap">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-900 dark:text-white font-medium whitespace-nowrap" style={{ lineHeight: '22px' }}>
                     {(() => {
                       const date = new Date(selectedDate);
                       const year = date.getFullYear();
@@ -1325,7 +1325,7 @@ export default function Home() {
                   {selectedDateMealMemo ? (
                     <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-blue-300 dark:border-blue-700">
                       <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">🍽️ 식사 메모</p>
-                      <p className="text-base text-gray-900 dark:text-white font-medium leading-relaxed">
+                      <p className="text-sm text-gray-900 dark:text-white font-medium" style={{ lineHeight: '22px' }}>
                         {selectedDateMealMemo}
                       </p>
                     </div>
@@ -2074,7 +2074,7 @@ function RoutineItem({
               size={36}
             />
           </div>
-          <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
+          <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
             {label}
           </span>
         </div>
@@ -2178,7 +2178,7 @@ function MealCheckbox({
         disabled={disabled}
         className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
       />
-      <span className={`text-base ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`}>
+      <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
         {label}
       </span>
     </label>
@@ -2229,42 +2229,63 @@ function RoutineSettingModal({
     }
     setIsSaving(true);
     try {
-      // 기존 템플릿 삭제
-      const { error: deleteError } = await supabase
+      // 기존 템플릿 ID 조회
+      const { data: existingTemplates } = await supabase
         .from('routine_templates')
-        .delete()
+        .select('id, field_key')
         .eq('user_id', userId);
 
-      if (deleteError) {
-        console.error('템플릿 삭제 오류');
-        if (deleteError?.message) console.error('- 메시지:', deleteError.message);
-        if (deleteError?.code) console.error('- 코드:', deleteError.code);
-        if (deleteError?.details) console.error('- 상세:', deleteError.details);
-        throw deleteError;
+      const existingMap = new Map(
+        (existingTemplates || []).map(t => [t.field_key, t.id])
+      );
+
+      // 템플릿 데이터 준비 (기존 ID 유지)
+      const templatesToUpsert = templates.map((t, index) => {
+        const existingId = existingMap.get(t.field_key);
+        return {
+          ...(existingId && !t.id.startsWith('temp_') ? { id: existingId } : {}),
+          user_id: userId,
+          emoji: t.emoji,
+          label: t.label,
+          field_key: t.field_key,
+          sort_order: index + 1,
+        };
+      });
+
+      // UPSERT로 저장 (기존 데이터 보존)
+      const { error: upsertError } = await supabase
+        .from('routine_templates')
+        .upsert(templatesToUpsert, {
+          onConflict: 'id',
+          ignoreDuplicates: false
+        });
+
+      if (upsertError) {
+        console.error('=== 템플릿 저장 에러 상세 ===');
+        console.error('메시지:', upsertError.message);
+        console.error('코드:', upsertError.code);
+        console.error('상세:', upsertError.details);
+        console.error('힌트:', upsertError.hint);
+        console.error('전체:', JSON.stringify(upsertError, null, 2));
+        throw upsertError;
       }
 
-      // 새로운 템플릿 삽입
-      const templatesToInsert = templates.map((t, index) => ({
-        user_id: userId,
-        emoji: t.emoji,
-        label: t.label,
-        field_key: t.field_key,
-        sort_order: index + 1,
-      }));
+      // 삭제된 템플릿 처리 (현재 templates에 없는 것들)
+      const currentFieldKeys = new Set(templates.map(t => t.field_key));
+      const deletedTemplates = (existingTemplates || []).filter(
+        t => !currentFieldKeys.has(t.field_key)
+      );
 
-      // insert 시도
-      const { error: insertError } = await supabase
-        .from('routine_templates')
-        .insert(templatesToInsert);
+      if (deletedTemplates.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('routine_templates')
+          .delete()
+          .in('id', deletedTemplates.map(t => t.id));
 
-      if (insertError) {
-        console.error('=== 템플릿 삽입 에러 상세 ===');
-        console.error('메시지:', insertError.message);
-        console.error('코드:', insertError.code);
-        console.error('상세:', insertError.details);
-        console.error('힌트:', insertError.hint);
-        console.error('전체:', JSON.stringify(insertError, null, 2));
-        throw insertError;
+        if (deleteError) {
+          console.error('삭제된 템플릿 제거 오류:', deleteError);
+          // 삭제 실패는 치명적이지 않으므로 계속 진행
+        }
       }
 
       alert('✅ 저장되었습니다!');
