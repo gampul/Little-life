@@ -1347,7 +1347,27 @@ export default function Home() {
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">📋 데일리 루틴</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📋 데일리 루틴</h3>
+                {/* 수정/저장 버튼 */}
+                {!isEditMode ? (
+                  <button
+                    onClick={handleEdit}
+                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
+                    aria-label="수정하기"
+                  >
+                    수정
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSave}
+                    className="px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors shrink-0"
+                    aria-label="저장하기"
+                  >
+                    저장하기
+                  </button>
+                )}
+              </div>
               {routineTemplates.map((routine, index) => (
                 <div key={routine.id}>
                   <RoutineItem
