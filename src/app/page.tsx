@@ -1420,6 +1420,52 @@ export default function Home() {
                 
               {isMealSectionExpanded && (
               <>
+              <div className="flex items-center gap-3 mb-4">
+                {/* 작은 날짜 선택 필드 */}
+                <div 
+                  className="relative cursor-pointer overflow-hidden flex-1 min-w-[180px] max-w-[250px]"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
+                    if (input) {
+                      input.focus();
+                      if (input.showPicker) {
+                        try {
+                          input.showPicker();
+                        } catch (err) {
+                          input.click();
+                        }
+                      } else {
+                        input.click();
+                      }
+                    }
+                  }}
+                >
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={async (e) => {
+                      const newDate = e.target.value;
+                      console.log('📅 식사 날짜 변경:', newDate);
+                      await loadDailyRecord(newDate);
+                      await loadRoutineChecks(newDate);
+                      setSelectedDate(newDate);
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-[rgb(254,252,247)] dark:bg-gray-700 text-transparent border border-blue-400 dark:border-blue-500 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    style={{ color: 'transparent', WebkitAppearance: 'none' }}
+                  />
+                  {/* 날짜 포맷 표시 (오버레이) */}
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-1.5rem)]">
+                    📅 {(() => {
+                      const date = new Date(formData.date);
+                      const month = date.getMonth() + 1;
+                      const day = date.getDate();
+                      return `${month}/${day}`;
+                    })()}
+                  </div>
+                </div>
+              </div>
+              
               <div className="flex flex-wrap gap-4 mb-4">
                 <MealCheckbox
                   label="아침"
