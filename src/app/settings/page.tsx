@@ -88,7 +88,7 @@ function RoutineItemWithChart({
   template: RoutineTemplate;
   index: number;
   progress: number;
-  onUpdate: (index: number, field: 'label', value: string) => void;
+  onUpdate: (index: number, field: 'label' | 'type', value: string) => void;
   onMove: (index: number, direction: 'up' | 'down') => void;
   onDelete: (index: number) => void;
   canMoveUp: boolean;
@@ -96,7 +96,7 @@ function RoutineItemWithChart({
 }) {
   return (
     <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-2 sm:p-3 border border-gray-200 dark:border-gray-600">
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 mb-2">
         {/* 원형 그래프 */}
         <div className="flex-shrink-0">
           <CircularProgressChart 
@@ -137,6 +137,32 @@ function RoutineItemWithChart({
           </button>
         </div>
       </div>
+      {/* 타입 선택 */}
+      <div className="flex items-center gap-2 pl-14">
+        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">타입:</span>
+        <div className="flex gap-2">
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name={`type-${template.id}`}
+              checked={template.type === 'checkbox'}
+              onChange={() => onUpdate(index, 'type', 'checkbox')}
+              className="w-4 h-4"
+            />
+            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">체크박스</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name={`type-${template.id}`}
+              checked={template.type === 'number'}
+              onChange={() => onUpdate(index, 'type', 'number')}
+              className="w-4 h-4"
+            />
+            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">숫자</span>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }
@@ -147,6 +173,7 @@ interface RoutineTemplate {
   label: string;
   field_key: string;
   sort_order: number;
+  type: 'checkbox' | 'number';
 }
 
 export default function SettingsPage() {
@@ -169,7 +196,7 @@ export default function SettingsPage() {
     try {
       const { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id')
+        .select('id, emoji, label, field_key, sort_order, user_id, type')
         .eq('user_id', userId)
         .order('sort_order', { ascending: true });
 
@@ -182,7 +209,12 @@ export default function SettingsPage() {
         return;
       }
 
-      setRoutineTemplates(data || []);
+      // type 필드가 없는 경우 기본값 설정
+      const templatesWithType = (data || []).map(t => ({
+        ...t,
+        type: t.type || 'checkbox' as 'checkbox' | 'number'
+      }));
+      setRoutineTemplates(templatesWithType);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -311,6 +343,7 @@ export default function SettingsPage() {
           label: t.label,
           field_key: t.field_key,
           sort_order: index,
+          type: t.type || 'checkbox',
         }));
 
         const { error: insertError } = await supabase
@@ -344,7 +377,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdate = (index: number, field: 'label', value: string) => {
+  const handleUpdate = (index: number, field: 'label' | 'type', value: string) => {
     const updated = [...routineTemplates];
     updated[index] = { ...updated[index], [field]: value };
     setRoutineTemplates(updated);
@@ -370,6 +403,7 @@ export default function SettingsPage() {
         label: '새 루틴',
         field_key: newFieldKey,
         sort_order: routineTemplates.length,
+        type: 'checkbox',
       },
     ]);
   };
