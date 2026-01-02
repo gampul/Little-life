@@ -68,7 +68,6 @@ export default function Home() {
   // 루틴 관련 상태
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [routineChecks, setRoutineChecks] = useState<RoutineCheck[]>([]);
-  const [routineValues, setRoutineValues] = useState<Record<string, number | null>>({});
   const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
@@ -361,7 +360,6 @@ export default function Home() {
         if (error.code === 'PGRST116') {
           console.log('📋 루틴 체크 데이터 없음 (정상):', date);
           setRoutineChecks([]);
-          setRoutineValues({});
           return;
         }
         
@@ -376,15 +374,6 @@ export default function Home() {
 
       console.log('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
       setRoutineChecks(data || []);
-      
-      // 루틴 값 추출하여 state에 저장
-      const values: Record<string, number | null> = {};
-      if (data) {
-        data.forEach((check: any) => {
-          values[check.routine_id] = check.value ?? null;
-        });
-      }
-      setRoutineValues(values);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -693,13 +682,12 @@ export default function Home() {
         throw deleteError;
       }
 
-      const checksToInsert = routineChecks
+        const checksToInsert = routineChecks
         .filter(check => check.checked)
         .map(check => ({
           date: formData.date,
           routine_id: check.routine_id,
           checked: true,
-          value: routineValues[check.routine_id] ?? null,
         }));
 
       console.log('📋 삽입할 루틴 체크:', checksToInsert);
@@ -1360,13 +1348,6 @@ export default function Home() {
                     routineTemplates={routineTemplates}
                     editModeRoutine={editModeRoutine}
                     setEditModeRoutine={setEditModeRoutine}
-                    value={routineValues[routine.id] ?? null}
-                    onValueChange={(value) => {
-                      setRoutineValues(prev => ({
-                        ...prev,
-                        [routine.id]: value
-                      }));
-                    }}
                   />
                   {/* 확장된 루틴의 캘린더 표시 */}
                   {expandedRoutineId === routine.id && (
@@ -1785,8 +1766,6 @@ function RoutineItem({
   routineTemplates,
   editModeRoutine,
   setEditModeRoutine,
-  value,
-  onValueChange,
 }: {
   emoji: string;
   label: string;
@@ -1800,8 +1779,6 @@ function RoutineItem({
   routineTemplates: RoutineTemplate[];
   editModeRoutine: string | null;
   setEditModeRoutine: (routineId: string | null) => void;
-  value: number | null;
-  onValueChange: (value: number | null) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const currentDate = new Date();
@@ -2096,17 +2073,6 @@ function RoutineItem({
               {consecutiveDays}일 연속
             </div>
           )}
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden w-12">
-              <div
-                className={isHexColor ? 'h-full transition-all duration-500 ease-out' : `h-full ${colorClasses.bg} transition-all duration-500 ease-out`}
-                style={{ 
-                  width: `${getMonthProgress(currentYear, currentMonth, routineId)}%`,
-                  backgroundColor: isHexColor ? routineColor : undefined,
-                }}
-              />
-            </div>
-          </div>
           {/* 오늘 날짜 체크박스 */}
           <div 
             className="flex items-center shrink-0"
@@ -2129,25 +2095,6 @@ function RoutineItem({
                   e.preventDefault();
                 }
               }}
-            />
-          </div>
-          {/* 숫자 입력 필드 */}
-          <div 
-            className="flex items-center shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              type="number"
-              value={value ?? ''}
-              onChange={(e) => {
-                e.stopPropagation();
-                const newValue = e.target.value === '' ? null : parseInt(e.target.value, 10);
-                onValueChange(newValue);
-              }}
-              disabled={disabled}
-              placeholder="0"
-              className="w-14 h-8 px-2 text-sm text-center bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
