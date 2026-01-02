@@ -1371,7 +1371,7 @@ export default function Home() {
                         <div 
                           key={i}
                           className="flex flex-col items-center"
-                          style={{ width: '23px' }}
+                          style={{ width: '20px' }}
                         >
                           <span 
                             className={`${isToday ? 'font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`} 
@@ -2183,7 +2183,7 @@ function RoutineItem({
           {/* 스트릭 (체크박스 타입일 때만) */}
           {routineType === 'checkbox' && consecutiveDays > 0 && (
             <div
-              className={`px-2 py-1 text-xs font-medium rounded-full ${
+              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
                 isHexColor 
                   ? '' 
                   : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
@@ -2200,7 +2200,7 @@ function RoutineItem({
           {/* 연간 누적 (숫자 타입일 때) */}
           {routineType === 'number' && yearlyTotal > 0 && (
             <div
-              className={`px-2 py-1 text-xs font-medium rounded-full ${
+              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
                 isHexColor 
                   ? '' 
                   : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
@@ -2211,7 +2211,7 @@ function RoutineItem({
               } : {}}
               title="연간 누적"
             >
-              누적 {Object.keys(checkedDates).filter(date => checkedDates[date]?.has(routineId)).length}일, {yearlyTotal.toFixed(1)}{unit || ''}
+              누적 {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}{unit || ''}
             </div>
           )}
           
@@ -2284,7 +2284,7 @@ function RoutineItem({
                       }}
                       className="flex flex-col items-center justify-center font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
-                      style={{ width: '23px', height: '23px', minWidth: '23px', maxWidth: '23px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
+                      style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
                       <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '12px' }}>{dayValue ?? 0}</span>
                       <span style={{ fontSize: '7px' }}>{unit}</span>
@@ -2381,7 +2381,7 @@ function RoutineItem({
                           e.stopPropagation();
                         }}
                         className="cursor-pointer shrink-0 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                        style={{ width: '23px', height: '23px' }}
+                        style={{ width: '20px', height: '20px' }}
                         onClick={(e) => {
                           e.stopPropagation();
                         }}
