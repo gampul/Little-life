@@ -323,11 +323,12 @@ export default function Home() {
   const loadRoutineTemplates = useCallback(async () => {
     if (!supabase || !userId) return;
     try {
-      // type, unit 컬럼 포함하여 조회 시도
+      // type, unit, deleted_at 컬럼 포함하여 조회 시도 (deleted_at은 soft delete 용)
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type, unit')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .order('sort_order', { ascending: true });
 
       // type 컬럼이 없는 경우 재시도
@@ -340,7 +341,7 @@ export default function Home() {
           .order('sort_order', { ascending: true });
         
         // type, unit 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined }));
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null }));
         error = result.error;
       }
 
@@ -354,7 +355,9 @@ export default function Home() {
       }
 
       // type, unit 필드가 없는 경우 기본값 설정
-      const templatesWithType = (data || []).map(t => ({
+      const templatesWithType = (data || [])
+        .filter((t: any) => !t.deleted_at) // 안전장치 (쿼리에서 걸렀지만 방어)
+        .map(t => ({
         ...t,
         type: t.type || 'checkbox' as 'checkbox' | 'number',
         unit: t.unit || undefined

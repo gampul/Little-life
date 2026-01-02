@@ -263,11 +263,12 @@ export default function SettingsPage() {
   const loadRoutineTemplates = useCallback(async () => {
     if (!supabase || !userId) return;
     try {
-      // type, unit 컬럼 포함하여 조회 시도
+      // type, unit, deleted_at 컬럼 포함하여 조회 시도 (deleted_at은 soft delete 용)
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type, unit')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at')
         .eq('user_id', userId)
+        .is('deleted_at', null)
         .order('sort_order', { ascending: true });
 
       // type 또는 unit 컬럼이 없는 경우 재시도
@@ -280,7 +281,7 @@ export default function SettingsPage() {
           .order('sort_order', { ascending: true });
         
         // type, unit 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined }));
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null }));
         error = result.error;
       }
 
@@ -294,7 +295,9 @@ export default function SettingsPage() {
       }
 
       // type, unit 필드가 없는 경우 기본값 설정
-      const templatesWithType = (data || []).map(t => ({
+      const templatesWithType = (data || [])
+        .filter((t: any) => !t.deleted_at)
+        .map(t => ({
         ...t,
         type: t.type || 'checkbox' as 'checkbox' | 'number',
         unit: t.unit || undefined
@@ -414,6 +417,7 @@ export default function SettingsPage() {
         sort_order: index,
         type: t.type || 'checkbox',
         unit: t.unit || null,
+        deleted_at: null,
       }));
 
       // 3) upsert (id 기준). 컬럼/제약이 없는 구버전 DB는 기존 fallback 로직으로 처리
@@ -522,11 +526,23 @@ export default function SettingsPage() {
     setSavingById(prev => ({ ...prev, [templateId]: true }));
     setMessage('');
     try {
-      const { error } = await supabase
+      // Prefer soft delete to preserve historical daily_routine_checks
+      let { error } = await supabase
         .from('routine_templates')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('user_id', userId)
         .eq('id', templateId);
+
+      // Fallback: if deleted_at column doesn't exist yet, hard delete as before
+      if (error && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('⚠️ deleted_at 컬럼이 없습니다. 임시로 hard delete로 처리합니다.');
+        const result = await supabase
+          .from('routine_templates')
+          .delete()
+          .eq('user_id', userId)
+          .eq('id', templateId);
+        error = result.error;
+      }
       if (error) throw error;
 
       const next = routineTemplates.filter(t => t.id !== templateId);
