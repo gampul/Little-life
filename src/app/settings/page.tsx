@@ -411,34 +411,32 @@ export default function SettingsPage() {
 
           {/* 테마 설정 */}
           <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-3 sm:mb-4 whitespace-nowrap">테마</h3>
-            <div className="space-y-2 sm:space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm sm:text-base text-gray-700 dark:text-gray-300 whitespace-nowrap">화이트 모드</span>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">테마</h3>
+              <div className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
                 <button
                   onClick={() => setTheme('light')}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center min-h-[44px] transition-colors ${
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all min-h-[40px] ${
                     mounted && theme === 'light'
-                      ? 'bg-gray-900 dark:bg-gray-700 text-white'
-                      : 'hover:bg-gray-500/20 dark:hover:bg-gray-400/20'
+                      ? 'bg-white dark:bg-gray-600 shadow-sm'
+                      : 'hover:bg-gray-300/50 dark:hover:bg-gray-600/50'
                   }`}
                   aria-label="화이트 모드"
                 >
                   <span className="text-base">☀️</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">라이트</span>
                 </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm sm:text-base text-gray-700 dark:text-gray-300 whitespace-nowrap">다크 모드</span>
                 <button
                   onClick={() => setTheme('dark')}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center min-h-[44px] transition-colors ${
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-all min-h-[40px] ${
                     mounted && theme === 'dark'
-                      ? 'bg-gray-900 dark:bg-gray-700 text-white'
-                      : 'hover:bg-gray-500/20 dark:hover:bg-gray-400/20'
+                      ? 'bg-white dark:bg-gray-600 shadow-sm'
+                      : 'hover:bg-gray-300/50 dark:hover:bg-gray-600/50'
                   }`}
                   aria-label="다크 모드"
                 >
                   <span className="text-base">🌙</span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">다크</span>
                 </button>
               </div>
             </div>
