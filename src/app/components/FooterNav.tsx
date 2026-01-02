@@ -9,9 +9,9 @@ export function FooterNav(props: FooterNavProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/', label: 'Daily', emoji: '📅' },
+    { href: '/daily', label: 'Daily', emoji: '📅' },
     { href: '/memo', label: 'Diary', emoji: '📝' },
-    { href: '/expense', label: 'Exp-trx', emoji: '💳' },
+    { href: '/ledger', label: 'Exp-trx', emoji: '💳' },
     { href: '/account', label: 'Property', emoji: '💰' },
     { href: '/ai', label: 'AI', emoji: '🤖' },
   ];
@@ -21,7 +21,10 @@ export function FooterNav(props: FooterNavProps) {
       <div className="max-w-[480px] mx-auto">
         <div className="flex items-center justify-around px-2 py-2">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              pathname === item.href ||
+              (item.href === '/daily' && pathname === '/') ||
+              (item.href === '/ledger' && (pathname.startsWith('/ledger') || pathname.startsWith('/transaction')));
             
             return (
               <Link

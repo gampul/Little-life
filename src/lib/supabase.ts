@@ -1,4 +1,5 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // 전역 변수로 싱글톤 인스턴스 관리 (브라우저 환경에서도 유지)
 let supabaseInstance: SupabaseClient | null = null;
@@ -37,19 +38,15 @@ export function getSupabase(): SupabaseClient | null {
   }
 
   // 단 한 번만 인스턴스 생성
-  supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
+  // NOTE: App Router + Server Actions에서 set된 쿠키 세션을 브라우저에서도 동일하게 사용하기 위해
+  // @supabase/ssr의 browser client를 사용합니다.
+  supabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
     global: {
-      // 전역 설정으로 중복 인스턴스 방지
       headers: {
         'x-client-info': 'little-life-app',
       },
     },
-  });
+  }) as unknown as SupabaseClient;
 
   // 브라우저 환경에서는 전역 객체에도 저장
   if (typeof window !== 'undefined') {

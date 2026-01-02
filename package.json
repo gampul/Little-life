@@ -15,6 +15,7 @@
     "@lexical/react": "^0.38.2",
     "@lexical/rich-text": "^0.38.2",
     "@lexical/utils": "^0.38.2",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.76.1",
     "dotenv": "^17.2.3",
     "lexical": "^0.38.2",

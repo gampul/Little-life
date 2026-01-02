@@ -16,7 +16,6 @@ export const metadata = {
   title: "Little Life - Economic Freedom",
   description: "경제적 자유를 위한 자산 관리 앱 - Happiness Unlocked",
   manifest: "/manifest.json",
-  themeColor: "#1E3A5F",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -26,6 +25,11 @@ export const metadata = {
     icon: "/little-life-logo.png",
     apple: "/little-life-logo.png",
   },
+};
+
+// Next.js 16+: themeColor should be defined in viewport, not metadata
+export const viewport = {
+  themeColor: "#1E3A5F",
 };
 
 export default function RootLayout({ children }) {

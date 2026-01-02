@@ -52,10 +52,16 @@ interface WeatherData {
 }
 
 export default function Home() {
-  const userId = 'default_user'; // 실제 앱에서는 로그인한 사용자 ID 사용
-
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, [supabase]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -143,8 +149,9 @@ export default function Home() {
       });
       setWeatherError(null);
     } catch (error: any) {
-      console.error('날씨 데이터 가져오기 실패:', error);
-      setWeatherError(error.message || '날씨 정보를 불러올 수 없습니다.');
+      // 네트워크/광고차단/회사망 등으로 fetch가 실패할 수 있음. (앱 기능과 무관하므로 조용히 실패 처리)
+      console.warn('날씨 데이터 가져오기 실패:', error?.message || error);
+      setWeatherError(error?.message || '날씨 정보를 불러올 수 없습니다.');
     } finally {
       setIsLoadingWeather(false);
     }
@@ -313,7 +320,7 @@ export default function Home() {
 
   // 루틴 템플릿 로드
   const loadRoutineTemplates = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase || !userId) return;
     try {
       // type, unit 컬럼 포함하여 조회 시도
       let { data, error } = await supabase
@@ -359,13 +366,14 @@ export default function Home() {
 
   // 특정 날짜의 루틴 체크 상태 로드
   const loadRoutineChecks = useCallback(async (date: string) => {
-    if (!supabase) return;
+    if (!supabase || !userId) return;
     try {
       console.log('📋 루틴 체크 로드 시작:', date);
       const { data, error } = await supabase
         .from('daily_routine_checks')
         .select('routine_id, checked, value')
-        .eq('date', date);
+        .eq('date', date)
+        .eq('user_id', userId);
 
       if (error) {
         // PGRST116은 "no rows returned" 에러로, 데이터가 없을 때 발생하는 정상적인 상황
@@ -581,7 +589,7 @@ export default function Home() {
     loadRoutineChecks(selectedDate);
     loadAllRecords();
     loadMealRecords();
-    fetchWeather(); // 날씨 데이터 가져오기
+    fetchWeather().catch(() => {}); // 날씨 데이터 가져오기(실패해도 앱 진행)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 빈 배열로 초기 마운트 시에만 실행
 
@@ -903,6 +911,17 @@ export default function Home() {
           <p className="text-sm text-red-600 dark:text-red-400">
             Vercel에 배포된 경우, 프로젝트 설정 → Environment Variables에서 확인하세요.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 전역 로그인 필수 전환: userId가 아직 로드되지 않았으면 잠시 대기
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-[480px] w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 sm:p-6 text-center">
+          <div className="text-sm text-gray-700 dark:text-gray-300">로그인 정보 확인 중...</div>
         </div>
       </div>
     );

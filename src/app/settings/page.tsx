@@ -238,7 +238,7 @@ interface RoutineTemplate {
 
 export default function SettingsPage() {
   const supabase = getSupabase();
-  const userId = 'default_user';
+  const [userId, setUserId] = useState<string | null>(null);
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [message, setMessage] = useState('');
   const { theme, setTheme } = useTheme();
@@ -246,15 +246,22 @@ export default function SettingsPage() {
   const [routineProgress, setRoutineProgress] = useState<Record<string, number>>({});
   const [dirtyById, setDirtyById] = useState<Record<string, boolean>>({});
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
-  const [isRoutineSectionExpanded, setIsRoutineSectionExpanded] = useState(true);
+  const [isRoutineSectionExpanded, setIsRoutineSectionExpanded] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, [supabase]);
+
   // 루틴 템플릿 로드
   const loadRoutineTemplates = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase || !userId) return;
     try {
       // type, unit 컬럼 포함하여 조회 시도
       let { data, error } = await supabase
@@ -393,6 +400,9 @@ export default function SettingsPage() {
     if (!supabase) {
       throw new Error('Supabase 연결이 설정되지 않았습니다.');
     }
+    if (!userId) {
+      throw new Error('로그인 정보가 없습니다.');
+    }
 
     try {
       const templatesPayload: any[] = templates.map((t, index) => ({
@@ -508,7 +518,7 @@ export default function SettingsPage() {
   };
 
   const handleDeleteOne = async (templateId: string) => {
-    if (!supabase) return;
+    if (!supabase || !userId) return;
     setSavingById(prev => ({ ...prev, [templateId]: true }));
     setMessage('');
     try {
@@ -615,30 +625,31 @@ export default function SettingsPage() {
           <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between">
               <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">테마</h3>
-              <div className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
+              {/* 테마 토글 (회색 배경 제거 + 1/2 사이즈 축소) */}
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => setTheme('light')}
-                  className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-all min-h-[40px] min-w-[92px] ${
+                  className={`px-1.5 py-0.5 rounded-md flex items-center justify-center gap-1 transition-all min-h-[20px] min-w-[46px] ${
                     mounted && theme === 'light'
                       ? 'bg-white dark:bg-gray-600 shadow-sm'
                       : 'hover:bg-gray-300/50 dark:hover:bg-gray-600/50'
                   }`}
                   aria-label="화이트 모드"
                 >
-                  <span className="text-base">☀️</span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">라이트</span>
+                  <span className="text-[10px]">☀️</span>
+                  <span className="text-[9px] font-medium text-gray-900 dark:text-white">라이트</span>
                 </button>
                 <button
                   onClick={() => setTheme('dark')}
-                  className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 transition-all min-h-[40px] min-w-[92px] bg-black text-white hover:bg-black/90 ${
+                  className={`px-1.5 py-0.5 rounded-md flex items-center justify-center gap-1 transition-all min-h-[20px] min-w-[46px] bg-black text-white hover:bg-black/90 ${
                     mounted && theme === 'dark'
                       ? 'shadow-sm ring-1 ring-white/15'
                       : ''
                   }`}
                   aria-label="다크 모드"
                 >
-                  <span className="text-base">🌙</span>
-                  <span className="text-sm font-medium text-white">다크</span>
+                  <span className="text-[10px]">🌙</span>
+                  <span className="text-[9px] font-medium text-white">다크</span>
                 </button>
               </div>
             </div>
@@ -654,24 +665,45 @@ export default function SettingsPage() {
                 title={isRoutineSectionExpanded ? '접기' : '펼치기'}
               >
                 루틴 설정 ({routineTemplates.length}/12)
-                <span className="text-gray-500 dark:text-gray-400 text-sm">
-                  {isRoutineSectionExpanded ? '▴' : '▾'}
-                </span>
               </h3>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAdd();
-                }}
-                disabled={routineTemplates.length >= 12}
-                className={`px-2 sm:px-2.5 py-0.5 sm:py-0.5 text-xs sm:text-sm rounded-lg transition-colors min-h-[28px] sm:min-h-[30px] whitespace-nowrap flex-shrink-0 ${
-                  routineTemplates.length >= 12
-                    ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 dark:text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}
-              >
-                + 추가
-              </button>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* 펼침/접힘 화살표 ( + 버튼 왼쪽 ) */}
+                <button
+                  type="button"
+                  onClick={() => setIsRoutineSectionExpanded(v => !v)}
+                  className="rounded-lg transition-colors min-h-[28px] sm:min-h-[30px] px-2 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  aria-label={isRoutineSectionExpanded ? '접기' : '펼치기'}
+                  title={isRoutineSectionExpanded ? '접기' : '펼치기'}
+                >
+                  <img
+                    src="/그림2.png"
+                    alt={isRoutineSectionExpanded ? '접기' : '펼치기'}
+                    className="h-[18px] w-auto object-contain select-none"
+                    draggable={false}
+                  />
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAdd();
+                  }}
+                  disabled={routineTemplates.length >= 12}
+                  className={`rounded-lg transition-colors min-h-[28px] sm:min-h-[30px] flex-shrink-0 px-2 py-0.5 ${
+                    routineTemplates.length >= 12
+                      ? 'opacity-40 cursor-not-allowed'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                  }`}
+                  aria-label="추가"
+                >
+                  <img
+                    src="/그림1.png"
+                    alt="추가"
+                    className="h-[18px] w-auto object-contain select-none"
+                    draggable={false}
+                  />
+                </button>
+              </div>
             </div>
 
             {isRoutineSectionExpanded && (
