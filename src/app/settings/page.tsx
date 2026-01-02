@@ -138,30 +138,63 @@ function RoutineItemWithChart({
         </div>
       </div>
       {/* 타입 선택 */}
-      <div className="flex items-center gap-2 pl-14">
-        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">타입:</span>
-        <div className="flex gap-2">
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name={`type-${template.id}`}
-              checked={template.type === 'checkbox'}
-              onChange={() => onUpdate(index, 'type', 'checkbox')}
-              className="w-4 h-4"
-            />
-            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">체크박스</span>
-          </label>
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input
-              type="radio"
-              name={`type-${template.id}`}
-              checked={template.type === 'number'}
-              onChange={() => onUpdate(index, 'type', 'number')}
-              className="w-4 h-4"
-            />
-            <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">숫자</span>
-          </label>
+      <div className="flex flex-col gap-2 pl-14">
+        <div className="flex items-center gap-2">
+          <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">타입:</span>
+          <div className="flex gap-2">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name={`type-${template.id}`}
+                checked={template.type === 'checkbox'}
+                onChange={() => onUpdate(index, 'type', 'checkbox')}
+                className="w-4 h-4"
+              />
+              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">체크박스</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name={`type-${template.id}`}
+                checked={template.type === 'number'}
+                onChange={() => onUpdate(index, 'type', 'number')}
+                className="w-4 h-4"
+              />
+              <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300">숫자</span>
+            </label>
+          </div>
         </div>
+        
+        {/* 숫자 타입일 때 단위 선택 */}
+        {template.type === 'number' && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">단위:</span>
+            <select
+              value={template.unit || ''}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '__custom__') {
+                  const customUnit = prompt('새로운 단위를 입력하세요:');
+                  if (customUnit && customUnit.trim()) {
+                    onUpdate(index, 'unit', customUnit.trim());
+                  }
+                } else {
+                  onUpdate(index, 'unit', value);
+                }
+              }}
+              className="px-2 py-1 text-xs sm:text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">단위 없음</option>
+              <option value="분">분</option>
+              <option value="Km">Km</option>
+              <option value="원">원</option>
+              <option value="__custom__">+ 직접 입력</option>
+            </select>
+            {template.unit && !['분', 'Km', '원'].includes(template.unit) && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">({template.unit})</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -174,6 +207,7 @@ interface RoutineTemplate {
   field_key: string;
   sort_order: number;
   type: 'checkbox' | 'number';
+  unit?: string;
 }
 
 export default function SettingsPage() {
@@ -194,11 +228,26 @@ export default function SettingsPage() {
   const loadRoutineTemplates = useCallback(async () => {
     if (!supabase) return;
     try {
-      const { data, error } = await supabase
+      // type, unit 컬럼 포함하여 조회 시도
+      let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit')
         .eq('user_id', userId)
         .order('sort_order', { ascending: true });
+
+      // type 또는 unit 컬럼이 없는 경우 재시도
+      if (error && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('⚠️ type 또는 unit 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+        const result = await supabase
+          .from('routine_templates')
+          .select('id, emoji, label, field_key, sort_order, user_id')
+          .eq('user_id', userId)
+          .order('sort_order', { ascending: true });
+        
+        // type, unit 필드 추가
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined }));
+        error = result.error;
+      }
 
       if (error) {
         console.error('루틴 템플릿 조회 오류');
@@ -209,10 +258,11 @@ export default function SettingsPage() {
         return;
       }
 
-      // type 필드가 없는 경우 기본값 설정
+      // type, unit 필드가 없는 경우 기본값 설정
       const templatesWithType = (data || []).map(t => ({
         ...t,
-        type: t.type || 'checkbox' as 'checkbox' | 'number'
+        type: t.type || 'checkbox' as 'checkbox' | 'number',
+        unit: t.unit || undefined
       }));
       setRoutineTemplates(templatesWithType);
     } catch (err) {
@@ -337,18 +387,52 @@ export default function SettingsPage() {
 
       // 새 템플릿 삽입
       if (routineTemplates.length > 0) {
-        const templatesToInsert = routineTemplates.map((t, index) => ({
+        // unit 컬럼 포함하여 삽입 시도
+        let templatesToInsert = routineTemplates.map((t, index) => ({
           user_id: userId,
           emoji: t.emoji,
           label: t.label,
           field_key: t.field_key,
           sort_order: index,
           type: t.type || 'checkbox',
+          unit: t.unit || null,
         }));
 
-        const { error: insertError } = await supabase
+        let { error: insertError } = await supabase
           .from('routine_templates')
           .insert(templatesToInsert);
+
+        // unit 또는 type 컬럼이 없는 경우 재시도
+        if (insertError && (insertError.message.includes('column') || insertError.code === '42703')) {
+          console.warn('⚠️ unit 또는 type 컬럼이 없습니다. 기본 컬럼만으로 재시도합니다.');
+          
+          // unit만 없는 경우 type 포함하여 재시도
+          if (insertError.message.includes('unit')) {
+            templatesToInsert = routineTemplates.map((t, index) => ({
+              user_id: userId,
+              emoji: t.emoji,
+              label: t.label,
+              field_key: t.field_key,
+              sort_order: index,
+              type: t.type || 'checkbox',
+            }));
+          } else {
+            // type도 없는 경우 기본 컬럼만
+            templatesToInsert = routineTemplates.map((t, index) => ({
+              user_id: userId,
+              emoji: t.emoji,
+              label: t.label,
+              field_key: t.field_key,
+              sort_order: index,
+            }));
+          }
+
+          const result = await supabase
+            .from('routine_templates')
+            .insert(templatesToInsert);
+          
+          insertError = result.error;
+        }
 
         if (insertError) {
           console.error('=== 삽입 에러 상세 ===');

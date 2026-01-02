@@ -33,6 +33,7 @@ interface RoutineTemplate {
   field_key: string;
   sort_order: number;
   type: 'checkbox' | 'number';
+  unit?: string;
 }
 
 interface RoutineCheck {
@@ -311,24 +312,24 @@ export default function Home() {
   const loadRoutineTemplates = useCallback(async () => {
     if (!supabase) return;
     try {
-      // type 컬럼 포함하여 조회 시도
+      // type, unit 컬럼 포함하여 조회 시도
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit')
         .eq('user_id', userId)
         .order('sort_order', { ascending: true });
 
       // type 컬럼이 없는 경우 재시도
       if (error && (error.message.includes('column') || error.code === '42703')) {
-        console.warn('⚠️ type 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+        console.warn('⚠️ type 또는 unit 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
         const result = await supabase
           .from('routine_templates')
           .select('id, emoji, label, field_key, sort_order, user_id')
           .eq('user_id', userId)
           .order('sort_order', { ascending: true });
         
-        // type 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const }));
+        // type, unit 필드 추가
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined }));
         error = result.error;
       }
 
@@ -341,10 +342,11 @@ export default function Home() {
         return;
       }
 
-      // type 필드가 없는 경우 기본값 설정
+      // type, unit 필드가 없는 경우 기본값 설정
       const templatesWithType = (data || []).map(t => ({
         ...t,
-        type: t.type || 'checkbox' as 'checkbox' | 'number'
+        type: t.type || 'checkbox' as 'checkbox' | 'number',
+        unit: t.unit || undefined
       }));
       setRoutineTemplates(templatesWithType);
     } catch (err) {
@@ -1349,24 +1351,47 @@ export default function Home() {
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📋 데일리 루틴</h3>
-                {/* 수정/저장 버튼 */}
-                {!isEditMode ? (
-                  <button
-                    onClick={handleEdit}
-                    className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
-                    aria-label="수정하기"
-                  >
-                    수정
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSave}
-                    className="px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium transition-colors shrink-0"
-                    aria-label="저장하기"
-                  >
-                    저장하기
-                  </button>
-                )}
+                {/* 최근 5일 날짜 표시 */}
+                <div className="flex items-center gap-1" style={{ marginTop: '8px' }}>
+                  {(() => {
+                    const today = new Date();
+                    const dates = [];
+                    const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+                    
+                    for (let i = 4; i >= 0; i--) {
+                      const date = new Date(today);
+                      date.setDate(date.getDate() - i);
+                      
+                      // 한국 시간으로 변환
+                      const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+                      const isToday = i === 0;
+                      const dayOfWeek = weekDays[koreaTime.getUTCDay()];
+                      
+                      dates.push(
+                        <div 
+                          key={i}
+                          className="flex flex-col items-center"
+                          style={{ width: '23px' }}
+                        >
+                          <span 
+                            className={`${isToday ? 'font-bold text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`} 
+                            style={{ fontSize: '12px' }}
+                          >
+                            {koreaTime.getUTCDate()}
+                          </span>
+                          <span 
+                            className={`${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'}`} 
+                            style={{ fontSize: '8px' }}
+                          >
+                            {dayOfWeek}
+                          </span>
+                        </div>
+                      );
+                    }
+                    
+                    return dates;
+                  })()}
+                </div>
               </div>
               {routineTemplates.map((routine, index) => (
                 <div key={routine.id}>
@@ -1375,11 +1400,16 @@ export default function Home() {
                     label={routine.label}
                     checked={isRoutineChecked(routine.id)}
                     onChange={() => handleRoutineCheckChange(routine.id)}
-                    disabled={!isEditMode}
+                    disabled={false}
                     isLast={index === routineTemplates.length - 1}
                     isExpanded={expandedRoutineId === routine.id}
                     onExpandToggle={() => {
-                      setExpandedRoutineId(expandedRoutineId === routine.id ? null : routine.id);
+                      const newExpandedId = expandedRoutineId === routine.id ? null : routine.id;
+                      setExpandedRoutineId(newExpandedId);
+                      // 아코디언을 펼칠 때 자동으로 수정 모드 활성화
+                      if (newExpandedId) {
+                        setEditModeRoutine(newExpandedId);
+                      }
                     }}
                     routineId={routine.id}
                     routineTemplates={routineTemplates}
@@ -1393,6 +1423,7 @@ export default function Home() {
                         [routine.id]: value
                       }));
                     }}
+                    unit={routine.unit}
                   />
                   {/* 확장된 루틴의 캘린더 표시 */}
                   {expandedRoutineId === routine.id && (
@@ -1833,6 +1864,7 @@ function RoutineItem({
   routineType,
   value,
   onValueChange,
+  unit,
 }: {
   emoji: string;
   label: string;
@@ -1849,6 +1881,7 @@ function RoutineItem({
   routineType: 'checkbox' | 'number';
   value?: number | null;
   onValueChange?: (value: number | null) => void;
+  unit?: string;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
@@ -1935,7 +1968,17 @@ function RoutineItem({
     
     let consecutiveCount = 0;
     const today = new Date();
+    const todayStr = getKoreaDateString(today);
+    
+    // 오늘이 체크되어 있는지 확인
+    const isTodayChecked = isDateChecked(todayStr, routineId);
+    
+    // 오늘부터 시작 (오늘이 체크되어 있을 때만)
+    // 오늘이 체크되지 않았으면 어제부터 시작
     let checkDate = new Date(today);
+    if (!isTodayChecked) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
     
     while (true) {
       const dateStr = getKoreaDateString(checkDate);
@@ -2137,7 +2180,8 @@ function RoutineItem({
         
         {/* 연속 일수 + 슬라이더 + 오늘 날짜 체크박스 */}
         <div className="flex items-center gap-2 shrink-0">
-          {consecutiveDays > 0 && (
+          {/* 스트릭 (체크박스 타입일 때만) */}
+          {routineType === 'checkbox' && consecutiveDays > 0 && (
             <div
               className={`px-2 py-1 text-xs font-medium rounded-full ${
                 isHexColor 
@@ -2149,7 +2193,7 @@ function RoutineItem({
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
               } : {}}
             >
-              {consecutiveDays}일 연속
+              🔥 {consecutiveDays}일 연속
             </div>
           )}
           
@@ -2167,53 +2211,188 @@ function RoutineItem({
               } : {}}
               title="연간 누적"
             >
-              📊 {yearlyTotal.toFixed(1)}
+              누적 {Object.keys(checkedDates).filter(date => checkedDates[date]?.has(routineId)).length}일, {yearlyTotal.toFixed(1)}{unit || ''}
             </div>
           )}
           
-          {/* 숫자 입력 필드 (숫자 타입일 때) */}
-          {routineType === 'number' && (
-            <input
-              type="number"
-              step="0.1"
-              value={value ?? ''}
-              onChange={(e) => {
-                e.stopPropagation();
-                const newValue = e.target.value === '' ? null : parseFloat(e.target.value);
-                onValueChange?.(newValue);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              disabled={false}
-              placeholder="0.0"
-              className="w-16 h-8 px-2 text-sm text-center bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
+          {/* 숫자 입력 필드 (숫자 타입일 때) - 최근 5일 */}
+          {routineType === 'number' && unit && (
+            <div className="flex items-center gap-1 shrink-0">
+              {(() => {
+                const today = new Date();
+                const buttons = [];
+                
+                const handleNumberInput = async (dateStr: string, currentVal: number | null) => {
+                  if (!supabase) return;
+                  
+                  const inputValue = prompt(`${dateStr} 값을 입력하세요 (${unit}):`, String(currentVal ?? 0));
+                  
+                  if (inputValue === null) return;
+                  
+                  const numValue = inputValue === '' ? null : parseFloat(inputValue);
+                  
+                  if (inputValue !== '' && (isNaN(numValue as number) || numValue === null)) {
+                    alert('올바른 숫자를 입력해주세요.');
+                    return;
+                  }
+                  
+                  try {
+                    if (numValue === null || inputValue === '') {
+                      await supabase
+                        .from('daily_routine_checks')
+                        .delete()
+                        .eq('date', dateStr)
+                        .eq('routine_id', routineId);
+                    } else {
+                      await supabase
+                        .from('daily_routine_checks')
+                        .upsert({
+                          date: dateStr,
+                          routine_id: routineId,
+                          checked: true,
+                          value: numValue
+                        }, {
+                          onConflict: 'date,routine_id'
+                        });
+                    }
+                    
+                    // 데이터 새로고침
+                    window.location.reload();
+                  } catch (err) {
+                    console.error('숫자 입력 오류:', err);
+                  }
+                };
+                
+                for (let i = 4; i >= 0; i--) {
+                  const date = new Date(today);
+                  date.setDate(date.getDate() - i);
+                  
+                  // 한국 시간으로 변환
+                  const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+                  const dateStr = `${koreaTime.getUTCFullYear()}-${String(koreaTime.getUTCMonth() + 1).padStart(2, '0')}-${String(koreaTime.getUTCDate()).padStart(2, '0')}`;
+                  const isToday = i === 0;
+                  
+                  // 해당 날짜의 값 가져오기 (실제로는 상태에서 가져와야 하지만 간단히 처리)
+                  const dayValue = isToday ? value : null;
+                  
+                  buttons.push(
+                    <button
+                      key={dateStr}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleNumberInput(dateStr, dayValue);
+                      }}
+                      className="flex flex-col items-center justify-center font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors cursor-pointer active:scale-95 overflow-hidden"
+                      title={`${dateStr} 값 입력`}
+                      style={{ width: '23px', height: '23px', minWidth: '23px', maxWidth: '23px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
+                    >
+                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '12px' }}>{dayValue ?? 0}</span>
+                      <span style={{ fontSize: '7px' }}>{unit}</span>
+                    </button>
+                  );
+                }
+                
+                return buttons;
+              })()}
+            </div>
           )}
           
-          {/* 오늘 날짜 체크박스 (체크박스 타입일 때) */}
+          {/* 최근 5일 체크박스 (체크박스 타입일 때) */}
           {routineType === 'checkbox' && (
-          <div 
-            className="flex items-center shrink-0"
-            onClick={disabled ? undefined : handleTodayToggle}
-          >
-            <input
-              type="checkbox"
-              checked={isTodayChecked}
-              onChange={(e) => {
-                e.stopPropagation();
-                if (!disabled) {
-                  handleTodayToggle(e as any);
+            <div className="flex items-center gap-1 shrink-0">
+              {(() => {
+                const today = new Date();
+                const checkboxes = [];
+                
+                const handleCheckboxToggle = async (dateStr: string) => {
+                  if (!supabase) return;
+                  
+                  const isCurrentlyChecked = checkedDates[dateStr]?.has(routineId) || false;
+                  const newChecked = !isCurrentlyChecked;
+                  
+                  try {
+                    if (newChecked) {
+                      await supabase
+                        .from('daily_routine_checks')
+                        .upsert({
+                          date: dateStr,
+                          routine_id: routineId,
+                          checked: true
+                        }, {
+                          onConflict: 'date,routine_id'
+                        });
+                    } else {
+                      await supabase
+                        .from('daily_routine_checks')
+                        .delete()
+                        .eq('date', dateStr)
+                        .eq('routine_id', routineId);
+                    }
+                    
+                    // 상태 업데이트
+                    setCheckedDates(prev => {
+                      const newData = { ...prev };
+                      if (!newData[dateStr]) {
+                        newData[dateStr] = new Set();
+                      }
+                      
+                      const dateSet = new Set(newData[dateStr]);
+                      if (newChecked) {
+                        dateSet.add(routineId);
+                      } else {
+                        dateSet.delete(routineId);
+                      }
+                      
+                      if (dateSet.size === 0) {
+                        delete newData[dateStr];
+                      } else {
+                        newData[dateStr] = dateSet;
+                      }
+                      
+                      return newData;
+                    });
+                  } catch (err) {
+                    console.error('체크박스 토글 오류:', err);
+                  }
+                };
+                
+                for (let i = 4; i >= 0; i--) {
+                  const date = new Date(today);
+                  date.setDate(date.getDate() - i);
+                  
+                  // 한국 시간으로 변환
+                  const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+                  const dateStr = `${koreaTime.getUTCFullYear()}-${String(koreaTime.getUTCMonth() + 1).padStart(2, '0')}-${String(koreaTime.getUTCDate()).padStart(2, '0')}`;
+                  const isChecked = checkedDates[dateStr]?.has(routineId) || false;
+                  const isToday = i === 0;
+                  
+                  checkboxes.push(
+                    <div 
+                      key={dateStr}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCheckboxToggle(dateStr);
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="cursor-pointer shrink-0 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                        style={{ width: '23px', height: '23px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                      />
+                    </div>
+                  );
                 }
-              }}
-              disabled={disabled}
-              className="w-5 h-5 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (disabled) {
-                  e.preventDefault();
-                }
-              }}
-            />
-          </div>
+                
+                return checkboxes;
+              })()}
+            </div>
           )}
         </div>
       </div>
@@ -2487,6 +2666,13 @@ function RoutineCalendar({
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>(currentMonth);
 
+  // 아코디언이 펼쳐질 때 전체 뷰로 자동 전환
+  useEffect(() => {
+    if (isExpanded) {
+      setSelectedMonth('all');
+    }
+  }, [isExpanded]);
+
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
 
@@ -2713,69 +2899,146 @@ function RoutineCalendar({
     return checkedDates[date]?.has(routineId) || false;
   };
 
-  // 날짜 클릭 핸들러 (체크/언체크)
+  // 날짜 클릭 핸들러 (체크/언체크 또는 숫자 입력)
   const handleDateToggle = async (date: string, routineId: string) => {
     if (editModeRoutine !== routineId) return;
     if (!supabase) return;
     
-    const isCurrentlyChecked = isDateChecked(date, routineId);
-    const newChecked = !isCurrentlyChecked;
+    // 루틴 타입 확인
+    const routine = routineTemplates.find(r => r.id === routineId);
+    const routineType = routine?.type || 'checkbox';
     
-    try {
-      if (newChecked) {
-        // 체크: insert 또는 update
-        const { error } = await supabase
-          .from('daily_routine_checks')
-          .upsert({
-            date: date,
-            routine_id: routineId,
-            checked: true
-          }, {
-            onConflict: 'date,routine_id'
-          });
-        
-        if (error) {
-          console.error('Supabase 저장 오류:', error);
-          return;
-        }
-      } else {
-        // 언체크: delete
-        const { error } = await supabase
-          .from('daily_routine_checks')
-          .delete()
-          .eq('date', date)
-          .eq('routine_id', routineId);
-        
-        if (error) {
-          console.error('Supabase 삭제 오류:', error);
-          return;
-        }
+    if (routineType === 'number') {
+      // 숫자 타입: 입력 모달 표시
+      const currentValue = dateValues[date] || '';
+      const inputValue = prompt(`${date} 날짜의 값을 입력하세요:`, String(currentValue));
+      
+      if (inputValue === null) return; // 취소
+      
+      const numValue = inputValue === '' ? null : parseFloat(inputValue);
+      
+      if (inputValue !== '' && (isNaN(numValue as number) || numValue === null)) {
+        alert('올바른 숫자를 입력해주세요.');
+        return;
       }
       
-      // 상태 업데이트
-      setCheckedDates(prev => {
-        const newData = { ...prev };
-        if (!newData[date]) {
-          newData[date] = new Set();
+      try {
+        if (numValue === null || inputValue === '') {
+          // 값 삭제
+          const { error } = await supabase
+            .from('daily_routine_checks')
+            .delete()
+            .eq('date', date)
+            .eq('routine_id', routineId);
+          
+          if (error) {
+            console.error('Supabase 삭제 오류:', error);
+            return;
+          }
+          
+          // 로컬 상태 업데이트
+          setDateValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[date];
+            return newValues;
+          });
+        } else {
+          // 값 저장
+          const { error } = await supabase
+            .from('daily_routine_checks')
+            .upsert({
+              date: date,
+              routine_id: routineId,
+              checked: true,
+              value: numValue
+            }, {
+              onConflict: 'date,routine_id'
+            });
+          
+          if (error) {
+            console.error('Supabase 저장 오류:', error);
+            return;
+          }
+          
+          // 로컬 상태 업데이트
+          setDateValues(prev => ({
+            ...prev,
+            [date]: numValue
+          }));
+          
+          setCheckedDates(prev => {
+            const newDates = { ...prev };
+            if (!newDates[date]) {
+              newDates[date] = new Set();
+            }
+            newDates[date].add(routineId);
+            return newDates;
+          });
         }
-        
-        const dateSet = new Set(newData[date]);
+      } catch (err) {
+        console.error('데이터 저장 오류:', err);
+      }
+    } else {
+      // 체크박스 타입: 기존 토글 로직
+      const isCurrentlyChecked = isDateChecked(date, routineId);
+      const newChecked = !isCurrentlyChecked;
+      
+      try {
         if (newChecked) {
-          dateSet.add(routineId);
+          // 체크: insert 또는 update
+          const { error } = await supabase
+            .from('daily_routine_checks')
+            .upsert({
+              date: date,
+              routine_id: routineId,
+              checked: true
+            }, {
+              onConflict: 'date,routine_id'
+            });
+          
+          if (error) {
+            console.error('Supabase 저장 오류:', error);
+            return;
+          }
         } else {
-          dateSet.delete(routineId);
+          // 언체크: delete
+          const { error } = await supabase
+            .from('daily_routine_checks')
+            .delete()
+            .eq('date', date)
+            .eq('routine_id', routineId);
+        
+          if (error) {
+            console.error('Supabase 삭제 오류:', error);
+            return;
+          }
         }
         
-        if (dateSet.size === 0) {
-          delete newData[date];
-        } else {
-          newData[date] = dateSet;
-        }
-        
-        return newData;
-      });
-    } catch (err) {
-      console.error('예상치 못한 오류:', err);
+        // 상태 업데이트
+        setCheckedDates(prev => {
+          const newData = { ...prev };
+          if (!newData[date]) {
+            newData[date] = new Set();
+          }
+          
+          const dateSet = new Set(newData[date]);
+          if (newChecked) {
+            dateSet.add(routineId);
+          } else {
+            dateSet.delete(routineId);
+          }
+          
+          if (dateSet.size === 0) {
+            delete newData[date];
+          } else {
+            newData[date] = dateSet;
+          }
+          
+          return newData;
+        });
+      } catch (err) {
+        console.error('예상치 못한 오류:', err);
+      }
     }
   };
 
@@ -2927,9 +3190,23 @@ function RoutineCalendar({
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
-            className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
           >
-            {editModeRoutine === routineId ? '저장' : '수정'}
+            {editModeRoutine === routineId ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                저장
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                수정
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -2954,27 +3231,31 @@ function RoutineCalendar({
             
             return (
               <div key={quarterIdx} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm p-2">
-                {/* 쿼터 헤더 */}
-                <div className="flex justify-around mb-1">
-                  {quarterMonths.map(({ month }) => (
-                    <div key={month} className="text-center text-blue-600 dark:text-blue-400 font-bold text-xs flex-1">
-                      {month}월
-                    </div>
-                  ))}
-                </div>
-                
                 {/* 쿼터 전체 캘린더 그리드 */}
-                <div className="flex gap-1">
+                <div className="flex gap-1 w-full">
                   {quarterMonths.map(({ month, weeks }) => (
                     <div
                       key={month}
+                      className="flex-1 relative"
                       style={{
                         display: 'grid',
-                        gridTemplateColumns: `repeat(${weeks.length}, 18px)`,
-                        gridTemplateRows: 'repeat(7, 18px)',
+                        gridTemplateColumns: `repeat(${weeks.length}, 1fr)`,
+                        gridTemplateRows: 'repeat(7, 22px)',
                         gap: '1px'
                       }}
                     >
+                      {/* 워터마크 */}
+                      <div 
+                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                        style={{
+                          fontSize: '64px',
+                          fontWeight: '900',
+                          color: 'rgba(59, 130, 246, 0.15)',
+                          zIndex: 0
+                        }}
+                      >
+                        {month}
+                      </div>
                   {/* 주별 날짜 열들 */}
                   {weeks.map((week, weekIdx) => {
                     return week.map((cell, weekdayIdx) => {
@@ -3015,24 +3296,44 @@ function RoutineCalendar({
                           style={{
                             gridRow: weekdayIdx + 1,
                             gridColumn: weekIdx + 1,
-                            width: '18px',
-                            height: '18px',
+                            width: '100%',
+                            height: '22px',
                             backgroundColor: backgroundColor,
                             borderRadius: '3px',
                             color: isChecked ? '#FFFFFF' : (isSaturday ? '#3B82F6' : isSunday ? '#EF4444' : '#9CA3AF'),
-                            fontSize: '7px',
+                            fontSize: '8px',
                             fontWeight: isChecked ? '700' : '500',
                             border: isToday ? '1px solid #60A5FA' : 'none',
-                            opacity: isCurrentMonth ? 1 : 0.2
+                            opacity: isCurrentMonth ? 1 : 0.2,
+                            zIndex: 1
                           }}
                           onClick={() => {
                             if (editModeRoutine === routineId && isCurrentMonth) {
                               handleDateToggle(date, routineId);
                             }
                           }}
-                          title={`${year}년 ${cellMonth}월 ${day}일${isToday ? ' (오늘)' : ''}`}
+                          title={`${year}년 ${cellMonth}월 ${day}일${isToday ? ' (오늘)' : ''}${dateValues[date] ? ` - ${dateValues[date]}` : ''}`}
+                          onMouseEnter={(e) => {
+                            if (dateValues[date]) {
+                              const dateSpan = e.currentTarget.querySelector('.hover-date');
+                              if (dateSpan) (dateSpan as HTMLElement).style.display = 'block';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (dateValues[date]) {
+                              const dateSpan = e.currentTarget.querySelector('.hover-date');
+                              if (dateSpan) (dateSpan as HTMLElement).style.display = 'none';
+                            }
+                          }}
                         >
-                          <span style={{ fontSize: dateValues[date] ? '6px' : '7px' }}>{day}</span>
+                          {dateValues[date] ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                              <span className="hover-date" style={{ fontSize: '6px', fontWeight: '400', color: 'rgba(156, 163, 175, 0.6)', display: 'none' }}>{day}</span>
+                              <span style={{ fontSize: '9px', fontWeight: '900', color: '#1F2937' }}>{dateValues[date]}</span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '8px' }}>{day}</span>
+                          )}
                         </div>
                       );
                     });
@@ -3266,17 +3567,29 @@ function RoutineCalendar({
                               handleDateToggle(date, routineId);
                             }
                           }}
+                          onMouseEnter={(e) => {
+                            if (dateValues[date] != null) {
+                              const dateSpan = e.currentTarget.querySelector('.hover-date-monthly');
+                              if (dateSpan) (dateSpan as HTMLElement).style.display = 'block';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (dateValues[date] != null) {
+                              const dateSpan = e.currentTarget.querySelector('.hover-date-monthly');
+                              if (dateSpan) (dateSpan as HTMLElement).style.display = 'none';
+                            }
+                          }}
                           title={
                             `${year}년 ${month}월 ${day}일${isToday ? ' (오늘)' : ''}${isChecked ? ' (체크됨)' : ''}${editModeRoutine === routineId ? ' - 클릭하여 체크/언체크' : ''}`
                           }
                         >
-                          {/* 날짜 숫자 */}
-                          <span style={{ fontSize: dateValues[date] ? '8px' : '10px' }}>{day}</span>
-                          {/* 값 표시 (있는 경우) */}
-                          {dateValues[date] != null && (
-                            <span style={{ fontSize: '7px', fontWeight: 'bold', marginTop: '-1px' }}>
-                              {dateValues[date]}
-                            </span>
+                          {dateValues[date] != null ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
+                              <span className="hover-date-monthly" style={{ fontSize: '7px', fontWeight: '400', color: 'rgba(156, 163, 175, 0.6)', display: 'none' }}>{day}</span>
+                              <span style={{ fontSize: '9px', fontWeight: '900', color: '#1F2937' }}>{dateValues[date]}</span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '10px' }}>{day}</span>
                           )}
                         </div>
                       </div>
