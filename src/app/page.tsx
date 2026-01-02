@@ -409,13 +409,14 @@ export default function Home() {
   }, [supabase, userId]);
 
   const loadDailyRecord = useCallback(async (date: string) => {
-    if (!supabase) return;
+    if (!supabase || !userId) return;
     try {
       // meal_images 포함하여 조회 시도
       let { data, error } = await supabase
         .from('daily_records')
         .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
         .eq('date', date)
+        .eq('user_id', userId)
         .maybeSingle();
 
       // meal_images 컬럼이 없는 경우 재시도
@@ -425,6 +426,7 @@ export default function Home() {
           .from('daily_records')
           .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
           .eq('date', date)
+          .eq('user_id', userId)
           .maybeSingle();
         
         data = result.data ? { ...result.data, meal_images: [] } : null;
@@ -464,16 +466,17 @@ export default function Home() {
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  }, [supabase]);
+  }, [supabase, userId]);
 
   // 식사 기록 로드
   const loadMealRecords = useCallback(async () => {
-    if (!supabase) return;
+    if (!supabase || !userId) return;
     try {
       // meal_images 포함하여 조회 시도
       let { data, error } = await supabase
         .from('daily_records')
         .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
+        .eq('user_id', userId)
         .order('date', { ascending: false })
         .limit(50);
 
@@ -483,6 +486,7 @@ export default function Home() {
         const result = await supabase
           .from('daily_records')
           .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .eq('user_id', userId)
           .order('date', { ascending: false })
           .limit(50);
         
@@ -510,10 +514,10 @@ export default function Home() {
     } catch (err) {
       console.error('식사 기록 로드 오류:', err);
     }
-  }, [supabase]);
+  }, [supabase, userId]);
 
   const loadAllRecords = useCallback(async () => {
-    if (!supabase) {
+    if (!supabase || !userId) {
       console.warn('Supabase 클라이언트가 없습니다.');
       return;
     }
@@ -522,6 +526,7 @@ export default function Home() {
       let { data, error } = await supabase
         .from('daily_records')
         .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
+        .eq('user_id', userId)
         .order('date', { ascending: true });
 
       // meal_images 컬럼이 없는 경우 (마이그레이션 전) 재시도
@@ -530,6 +535,7 @@ export default function Home() {
         const result = await supabase
           .from('daily_records')
           .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .eq('user_id', userId)
           .order('date', { ascending: true });
         
         data = result.data ? result.data.map(r => ({ ...r, meal_images: [] })) : null;
@@ -558,7 +564,7 @@ export default function Home() {
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
-  }, [supabase]);
+  }, [supabase, userId]);
 
   useEffect(() => {
     loadRoutineTemplates();
@@ -637,6 +643,10 @@ export default function Home() {
       setMessage('❌ Supabase 연결이 설정되지 않았습니다. 환경 변수를 확인해주세요.');
       return;
     }
+    if (!userId) {
+      setMessage('❌ 로그인 정보가 없습니다. 다시 로그인 후 시도해주세요.');
+      return;
+    }
     
     setIsSaving(true);
     setMessage('');
@@ -647,6 +657,7 @@ export default function Home() {
         .from('daily_records')
         .select('id')
         .eq('date', formData.date)
+        .eq('user_id', userId)
         .maybeSingle();
 
       // ✅ 에러 상세 로깅 추가
@@ -665,9 +676,11 @@ export default function Home() {
           .from('daily_records')
           .update({
             ...formData,
+            user_id: userId,
             updated_at: new Date().toISOString(),
           })
-          .eq('date', formData.date);
+          .eq('date', formData.date)
+          .eq('user_id', userId);
 
         if (error) {
           console.error('=== 업데이트 에러 상세 ===');
@@ -681,7 +694,7 @@ export default function Home() {
       } else {
         const { error } = await supabase
           .from('daily_records')
-          .insert([formData]);
+          .insert([{ ...formData, user_id: userId }]);
 
         if (error) {
           console.error('=== 삽입 에러 상세 ===');
