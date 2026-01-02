@@ -2937,7 +2937,7 @@ function RoutineCalendar({
       {/* 캘린더 컨테이너 */}
       {selectedMonth === 'all' ? (
         // 연간 뷰: 12개월을 3x4 그리드로 표시
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
           {Array.from({ length: 12 }, (_, monthIdx) => {
             const month = monthIdx + 1;
             
@@ -2951,9 +2951,9 @@ function RoutineCalendar({
             const weeks = getWeekBasedDateGrid(selectedYear, month, numWeeks);
             
             return (
-              <div key={month} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm p-2">
+              <div key={month} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-gray-300 dark:border-gray-700 shadow-sm p-1">
                 {/* 월 헤더 */}
-                <div className="text-center text-blue-600 dark:text-blue-400 font-bold text-xs mb-2">
+                <div className="text-center text-blue-600 dark:text-blue-400 font-bold text-xs mb-1">
                   {month}월
                 </div>
                 
@@ -2963,7 +2963,7 @@ function RoutineCalendar({
                     display: 'grid',
                     gridTemplateColumns: `repeat(${weeks.length}, 18px)`,
                     gridTemplateRows: 'repeat(7, 18px)',
-                    gap: '2px'
+                    gap: '1px'
                   }}
                 >
                   {/* 주별 날짜 열들 */}
