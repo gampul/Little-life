@@ -311,11 +311,26 @@ export default function Home() {
   const loadRoutineTemplates = useCallback(async () => {
     if (!supabase) return;
     try {
-      const { data, error } = await supabase
+      // type 컬럼 포함하여 조회 시도
+      let { data, error } = await supabase
         .from('routine_templates')
         .select('id, emoji, label, field_key, sort_order, user_id, type')
         .eq('user_id', userId)
         .order('sort_order', { ascending: true });
+
+      // type 컬럼이 없는 경우 재시도
+      if (error && (error.message.includes('column') || error.code === '42703')) {
+        console.warn('⚠️ type 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+        const result = await supabase
+          .from('routine_templates')
+          .select('id, emoji, label, field_key, sort_order, user_id')
+          .eq('user_id', userId)
+          .order('sort_order', { ascending: true });
+        
+        // type 필드 추가
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const }));
+        error = result.error;
+      }
 
       if (error) {
         console.error('루틴 템플릿 조회 오류');
