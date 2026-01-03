@@ -57,7 +57,7 @@ export function GlobalNav(props: GlobalNavProps) {
 
   return (
     <nav className="sticky top-0 z-50 bg-[rgb(254,252,247)]/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700">
-      <div className="max-w-[480px] mx-auto px-4 sm:px-6">
+      <div className="max-w-[412px] mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* 로고/타이틀 */}
           <Link href="/daily" className="flex items-center gap-2">

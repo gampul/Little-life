@@ -615,7 +615,7 @@ export default function SettingsPage() {
   if (!supabase) {
     return (
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
-        <div className="max-w-[480px] w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 sm:p-6">
+        <div className="max-w-[412px] w-full bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 sm:p-6">
           <h2 className="text-xl font-bold text-red-800 dark:text-red-400 mb-4">
             ⚠️ 환경 변수 오류
           </h2>
@@ -631,7 +631,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
-      <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-5">
           <div className="flex items-center justify-between mb-4 sm:mb-6">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">⚙️ 설정</h2>

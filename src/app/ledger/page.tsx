@@ -131,7 +131,7 @@ export default async function LedgerPage({
   return (
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-24">
       <GlobalNav />
-      <div className="max-w-[480px] mx-auto px-4 py-6">
+      <div className="max-w-[412px] mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">Ledger</h1>
         </div>

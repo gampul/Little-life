@@ -715,7 +715,7 @@ export default function AccountPage() {
   void getCategorySummary;
 
   if (isLoading) {
-    return (
+  return (
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20 flex items-center justify-center">
         <div className="text-gray-500 dark:text-gray-400">로딩 중...</div>
       </div>
@@ -724,10 +724,10 @@ export default function AccountPage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-        <GlobalNav />
-
-        <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+    <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+      <GlobalNav />
+      
+        <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         <div className="space-y-2">
           {/* 제목 */}
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
@@ -761,8 +761,8 @@ export default function AccountPage() {
                   <span className="hidden sm:inline">{tab.emoji} </span>{tab.label}
                 </button>
               ))}
-            </div>
           </div>
+        </div>
 
           {/* 전체 현황 탭 */}
           {activeTab === 'overview' && (
@@ -911,8 +911,8 @@ export default function AccountPage() {
                             ({isPositive ? '+' : ''}{formatNumber(valueDiff)}, {isPositive ? '+' : ''}{valueChangePercent.toFixed(1)}%)
                           </span>
                         )}
-                      </div>
-                      
+      </div>
+
                       {/* 상세 정보 */}
                       <div className="space-y-2 sm:space-y-2.5 pt-3 border-t border-gray-200 dark:border-gray-700">
                         {/* 선택된 월 배당금 */}
@@ -927,7 +927,7 @@ export default function AccountPage() {
                                 ({isDividendPositive ? '+' : ''}{formatNumber(dividendDiff)})
                               </span>
                             )}
-                          </div>
+    </div>
                         </div>
                         
                         {/* 해당월까지 누적 배당금 */}

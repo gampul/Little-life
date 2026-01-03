@@ -122,7 +122,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <GlobalNav />
-        <div className="max-w-[480px] mx-auto px-4 py-8">
+        <div className="max-w-[412px] mx-auto px-4 py-8">
           <div className="flex items-center justify-center py-20">
             <div className="text-gray-400">로딩 중...</div>
           </div>
@@ -136,7 +136,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <GlobalNav />
-        <div className="max-w-[480px] mx-auto px-4 py-8">
+        <div className="max-w-[412px] mx-auto px-4 py-8">
           <div className="text-center py-20">
             <div className="text-4xl mb-4">📭</div>
             <p className="text-gray-500 dark:text-gray-400">글을 찾을 수 없습니다</p>
@@ -159,7 +159,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* 상단 네비게이션 */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-[480px] mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-[412px] mx-auto px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => router.back()}
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -195,7 +195,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* 본문 */}
-      <div className="max-w-[480px] mx-auto px-4 py-6">
+      <div className="max-w-[412px] mx-auto px-4 py-6">
         {/* 제목 */}
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">
           {memo.title || '제목 없음'}
