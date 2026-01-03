@@ -55,12 +55,33 @@ export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
   const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-    });
+    if (!supabase) {
+      console.error('❌ Supabase 클라이언트를 초기화할 수 없습니다.');
+      setAuthLoading(false);
+      return;
+    }
+    
+    console.log('🔍 사용자 인증 정보 확인 중...');
+    supabase.auth.getUser()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('❌ 인증 오류:', error);
+          setUserId(null);
+        } else {
+          console.log('✅ 사용자 인증 완료:', data.user?.id);
+          setUserId(data.user?.id ?? null);
+        }
+      })
+      .catch((err) => {
+        console.error('❌ 예상치 못한 인증 오류:', err);
+        setUserId(null);
+      })
+      .finally(() => {
+        setAuthLoading(false);
+      });
   }, [supabase]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -945,11 +966,33 @@ export default function Home() {
   }
 
   // 전역 로그인 필수 전환: userId가 아직 로드되지 않았으면 잠시 대기
-  if (!userId) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
         <div className="max-w-[480px] w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 sm:p-6 text-center">
           <div className="text-sm text-gray-700 dark:text-gray-300">로그인 정보 확인 중...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 인증 완료 후 userId가 없으면 에러 표시
+  if (!userId) {
+    return (
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 flex items-center justify-center p-4">
+        <div className="max-w-[480px] w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4 sm:p-6 text-center">
+          <div className="text-sm text-red-600 dark:text-red-400 mb-4">
+            ❌ 로그인 정보를 확인할 수 없습니다.
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+            브라우저 콘솔(F12)에서 에러를 확인하세요.
+          </div>
+          <a
+            href="/login"
+            className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            로그인 페이지로 이동
+          </a>
         </div>
       </div>
     );
