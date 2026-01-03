@@ -95,7 +95,7 @@ export default function Home() {
   const [hasData, setHasData] = useState(false);
   const [allRecords, setAllRecords] = useState<DailyRecord[]>([]);
   const [weightPeriod, setWeightPeriod] = useState<PeriodFilter>('1month');
-  const [expandedWeightMonths, setExpandedWeightMonths] = useState<Set<string>>(new Set());
+  const [isWeightListExpanded, setIsWeightListExpanded] = useState(false);
   
   // 루틴 관련 상태
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
@@ -1413,88 +1413,47 @@ export default function Home() {
 
               {/* 날짜별 체중 리스트 (차트 아래) */}
               <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-3">
-                <div className="flex items-center justify-between mb-2">
+                <button
+                  onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
+                  className="w-full flex items-center justify-between mb-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg px-2 py-1 transition-colors"
+                >
                   <div className="text-sm font-semibold text-gray-900 dark:text-white">📅 체중 기록</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {allRecords.filter(r => r.weight != null).length}개
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {allRecords.filter(r => r.weight != null).length}개
+                    </div>
+                    <svg
+                      className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${isWeightListExpanded ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
-                </div>
-                {allRecords.filter(r => r.weight != null).length === 0 ? (
-                  <div className="text-xs text-gray-500 dark:text-gray-400">표시할 체중 기록이 없습니다.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {(() => {
-                      const weightRecords = [...allRecords]
+                </button>
+                
+                {isWeightListExpanded && (
+                  allRecords.filter(r => r.weight != null).length === 0 ? (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">표시할 체중 기록이 없습니다.</div>
+                  ) : (
+                    <div className="max-h-60 overflow-auto space-y-1">
+                      {[...allRecords]
                         .filter(r => r.weight != null)
-                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                      
-                      // 월별로 그룹화
-                      const groupedByMonth = weightRecords.reduce((acc, r) => {
-                        const monthKey = r.date.substring(0, 7); // YYYY-MM
-                        if (!acc[monthKey]) acc[monthKey] = [];
-                        acc[monthKey].push(r);
-                        return acc;
-                      }, {} as Record<string, DailyRecord[]>);
-                      
-                      const monthKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
-                      
-                      return monthKeys.map((monthKey) => {
-                        const [year, month] = monthKey.split('-');
-                        const isExpanded = expandedWeightMonths.has(monthKey);
-                        const records = groupedByMonth[monthKey];
-                        
-                        return (
-                          <div key={monthKey} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                            <button
-                              onClick={() => {
-                                const newSet = new Set(expandedWeightMonths);
-                                if (isExpanded) {
-                                  newSet.delete(monthKey);
-                                } else {
-                                  newSet.add(monthKey);
-                                }
-                                setExpandedWeightMonths(newSet);
-                              }}
-                              className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                  {year}년 {parseInt(month)}월
-                                </span>
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  {records.length}개
-                                </span>
-                              </div>
-                              <svg
-                                className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-                            
-                            {isExpanded && (
-                              <div className="bg-white dark:bg-gray-900 divide-y divide-gray-100 dark:divide-gray-800">
-                                {records.map((r) => (
-                                  <button
-                                    key={r.date}
-                                    onClick={() => setSelectedDate(r.date)}
-                                    className="w-full flex items-center justify-between text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
-                                    title={`${r.date}로 이동`}
-                                  >
-                                    <span className="text-xs text-gray-700 dark:text-gray-200">{r.date}</span>
-                                    <span className="text-xs font-bold text-gray-900 dark:text-white">{r.weight}kg</span>
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
+                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .map((r) => (
+                          <button
+                            key={r.date}
+                            onClick={() => setSelectedDate(r.date)}
+                            className="w-full flex items-center justify-between text-left rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700/40"
+                            title={`${r.date}로 이동`}
+                          >
+                            <span className="text-xs text-gray-700 dark:text-gray-200">{r.date}</span>
+                            <span className="text-xs font-bold text-gray-900 dark:text-white">{r.weight}kg</span>
+                          </button>
+                        ))}
+                    </div>
+                  )
                 )}
               </div>
               
