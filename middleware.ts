@@ -49,10 +49,10 @@ export async function middleware(request: NextRequest) {
 
   const isPublic = pathname === '/login';
 
-  // Make ledger the default home when logged in
+  // Make daily the default home when logged in
   if (user && pathname === '/') {
     const url = request.nextUrl.clone();
-    url.pathname = '/ledger';
+    url.pathname = '/daily';
     url.search = '';
     const redirectRes = NextResponse.redirect(url);
     // preserve cookie mutations (refresh token etc.)
@@ -63,7 +63,7 @@ export async function middleware(request: NextRequest) {
   // Logged-in users should not stay on /login
   if (user && isPublic) {
     const url = request.nextUrl.clone();
-    url.pathname = '/ledger';
+    url.pathname = '/daily';
     url.search = '';
     const redirectRes = NextResponse.redirect(url);
     for (const c of response.cookies.getAll()) redirectRes.cookies.set(c);

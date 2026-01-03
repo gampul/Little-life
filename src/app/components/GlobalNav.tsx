@@ -60,7 +60,7 @@ export function GlobalNav(props: GlobalNavProps) {
       <div className="max-w-[480px] mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* 로고/타이틀 */}
-          <Link href="/ledger" className="flex items-center gap-2">
+          <Link href="/daily" className="flex items-center gap-2">
             {!imgError && (
               <img
                 ref={imgRef}
