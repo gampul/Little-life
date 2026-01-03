@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
+import { AuthGuard } from '../components/AuthGuard';
 
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -858,18 +859,20 @@ function MemoPageContent() {
 
 export default function MemoPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-        <GlobalNav />
-        <div className="max-w-[480px] mx-auto px-4 py-8">
-          <div className="flex items-center justify-center py-20">
-            <div className="text-gray-400">로딩 중...</div>
+    <AuthGuard>
+      <Suspense fallback={
+        <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+          <GlobalNav />
+          <div className="max-w-[480px] mx-auto px-4 py-8">
+            <div className="flex items-center justify-center py-20">
+              <div className="text-gray-400">로딩 중...</div>
+            </div>
           </div>
+          <FooterNav />
         </div>
-        <FooterNav />
-      </div>
-    }>
-      <MemoPageContent />
-    </Suspense>
+      }>
+        <MemoPageContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

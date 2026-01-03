@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
+import { AuthGuard } from '../components/AuthGuard';
 import { getSupabase } from '../../lib/supabase';
 import {
   LineChart,
@@ -722,10 +723,11 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-      <GlobalNav />
+    <AuthGuard>
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+        <GlobalNav />
 
-      <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         <div className="space-y-2">
           {/* 제목 */}
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
@@ -2521,9 +2523,10 @@ export default function AccountPage() {
             </div>
           )}
         </div>
-      </div>
+        </div>
 
-      <FooterNav />
-    </div>
+        <FooterNav />
+      </div>
+    </AuthGuard>
   );
 }

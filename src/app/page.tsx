@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
+import { AuthGuard } from './components/AuthGuard';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -999,9 +1000,10 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-      <GlobalNav />
-      <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+    <AuthGuard>
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+        <GlobalNav />
+        <div className="max-w-[480px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
         {/* 루틴 설정 모달 */}
         {isRoutineSettingOpen && (
@@ -1909,10 +1911,11 @@ export default function Home() {
             </div>
             </div>
           </div>
+        </div>
+        
+        <FooterNav />
       </div>
-      
-      <FooterNav />
-    </div>
+    </AuthGuard>
   );
 }
 
