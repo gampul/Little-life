@@ -2404,15 +2404,24 @@ function RoutineItem({
                   }
                   
                   try {
+                    console.log('💾 숫자 입력 저장 시작:', { dateStr, numValue, routineId, userId });
+                    
                     if (numValue === null || inputValue === '') {
-                      await supabase
+                      const { error } = await supabase
                         .from('daily_routine_checks')
                         .delete()
                         .eq('date', dateStr)
                         .eq('routine_id', routineId)
                         .eq('user_id', userId);
+                      
+                      if (error) {
+                        console.error('❌ 삭제 오류:', error);
+                        alert(`삭제 실패: ${error.message}`);
+                        return;
+                      }
+                      console.log('✅ 삭제 완료');
                     } else {
-                      await supabase
+                      const { error } = await supabase
                         .from('daily_routine_checks')
                         .upsert({
                           user_id: userId,
@@ -2423,7 +2432,15 @@ function RoutineItem({
                         }, {
                           onConflict: 'user_id,date,routine_id'
                         });
+                      
+                      if (error) {
+                        console.error('❌ 저장 오류:', error);
+                        alert(`저장 실패: ${error.message}`);
+                        return;
+                      }
+                      console.log('✅ 저장 완료');
                     }
+                    
                     // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
                     setNumberDateValues(prev => {
                       const next = { ...prev };
@@ -2432,11 +2449,14 @@ function RoutineItem({
                       } else {
                         next[dateStr] = numValue;
                       }
+                      console.log('🔄 UI 업데이트:', next);
                       return next;
                     });
                     onSync();
+                    console.log('✅ 동기화 트리거 완료');
                   } catch (err) {
-                    console.error('숫자 입력 오류:', err);
+                    console.error('❌ 숫자 입력 오류:', err);
+                    alert(`오류 발생: ${err}`);
                   }
                 };
                 
