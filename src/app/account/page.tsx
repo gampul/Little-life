@@ -762,36 +762,6 @@ export default function AccountPage() {
     <AuthGuard>
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
-
-      {/* Desktop(>=sm): 오른쪽 스티키 탭 메뉴 */}
-      <div className="hidden sm:flex fixed right-4 top-24 z-40">
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 p-1 shadow-sm">
-          <div className="flex flex-col gap-1">
-            {[
-              { key: 'overview', label: '전체', emoji: '📊' },
-              { key: 'category', label: '비중', emoji: '📈' },
-              { key: 'owner', label: '소유자', emoji: '👤' },
-              { key: 'division', label: '계좌', emoji: '📁' },
-              { key: 'add', label: '등록', emoji: '➕' },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                className={`w-20 px-2 py-2 text-sm font-medium rounded-xl transition-colors whitespace-nowrap text-left ${
-                  activeTab === tab.key
-                    ? 'bg-red-600 text-white'
-                    : 'bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-                aria-label={tab.label}
-                title={tab.label}
-              >
-                <span className="mr-1">{tab.emoji}</span>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
       
         <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         <div className="space-y-2">
@@ -806,7 +776,7 @@ export default function AccountPage() {
           </div>
 
           {/* 탭 메뉴 */}
-          <div className="sm:hidden bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-2">
+          <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-2">
             <div className="flex gap-1">
               {[
                 { key: 'overview', label: '전체', emoji: '📊' },
