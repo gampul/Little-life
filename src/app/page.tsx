@@ -2048,6 +2048,11 @@ function RoutineItem({
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
+  const [numberInputModal, setNumberInputModal] = useState<{
+    open: boolean;
+    dateStr: string;
+    valueText: string;
+  }>({ open: false, dateStr: '', valueText: '' });
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -2325,9 +2330,208 @@ function RoutineItem({
     // 부모 컴포넌트의 onChange 호출 (체크박스 상태 업데이트)
     onChange();
   };
+
+  // 숫자 입력 저장/삭제 (prompt 대신 모달에서 호출)
+  const saveNumberValueForDate = async (dateStr: string, valueText: string) => {
+    if (!supabase) return;
+
+    const trimmed = String(valueText ?? '').trim();
+    const isEmpty = trimmed === '';
+
+    let numValue: number | null = null;
+    if (!isEmpty) {
+      const parsed = parseFloat(trimmed);
+      if (Number.isNaN(parsed)) {
+        alert('올바른 숫자를 입력해주세요.');
+        return;
+      }
+      // 소수점 1자리로 반올림
+      numValue = Math.round(parsed * 10) / 10;
+    }
+
+    try {
+      console.log('💾 숫자 입력 저장 시작:', { dateStr, numValue, routineId, userId });
+
+      if (numValue === null) {
+        const { error } = await supabase
+          .from('daily_routine_checks')
+          .delete()
+          .eq('date', dateStr)
+          .eq('routine_id', routineId)
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('❌ 삭제 오류(raw):', error);
+          alert(`삭제 실패: ${error.message || '알 수 없는 오류'}`);
+          return;
+        }
+        console.log('✅ 삭제 완료');
+      } else {
+        const { data, error } = await supabase
+          .from('daily_routine_checks')
+          .upsert(
+            {
+              user_id: userId,
+              date: dateStr,
+              routine_id: routineId,
+              checked: true,
+              value: numValue,
+            },
+            {
+              onConflict: 'user_id,date,routine_id',
+            }
+          );
+
+        if (error) {
+          // Next/Turbopack 콘솔 오버레이에서 Error 객체가 `{}`로 보이는 경우가 있어,
+          // 실제 정보(키/프로퍼티/문자열 표현)를 강제로 펼쳐서 로깅합니다.
+          const errAny: any = error as any;
+          const errInfo = {
+            typeof: typeof errAny,
+            isError: errAny instanceof Error,
+            name: errAny?.name,
+            message: errAny?.message,
+            code: errAny?.code,
+            details: errAny?.details,
+            hint: errAny?.hint,
+            status: errAny?.status,
+            statusCode: errAny?.statusCode,
+            toString: (() => {
+              try {
+                return String(errAny);
+              } catch {
+                return '[toString failed]';
+              }
+            })(),
+            keys: (() => {
+              try {
+                return Object.keys(errAny ?? {});
+              } catch {
+                return ['[Object.keys failed]'];
+              }
+            })(),
+            props: (() => {
+              try {
+                return Object.getOwnPropertyNames(errAny ?? {});
+              } catch {
+                return ['[getOwnPropertyNames failed]'];
+              }
+            })(),
+          };
+
+          console.error('❌ 저장 오류(raw):', error);
+          console.error('❌ 저장 오류(info):', errInfo);
+          try {
+            console.error('❌ 저장 오류(JSON):', JSON.stringify(error, null, 2));
+          } catch (e) {
+            console.error('❌ 저장 오류(JSON stringify 실패):', e);
+          }
+
+          const alertMsg =
+            errAny?.message ||
+            errAny?.details ||
+            errAny?.hint ||
+            (errInfo.toString && errInfo.toString !== '[object Object]' ? errInfo.toString : '') ||
+            `저장에 실패했습니다. (에러 객체가 비어있습니다)`;
+          alert(`저장 실패: ${alertMsg}`);
+          return;
+        }
+        console.log('✅ 저장 완료:', data);
+      }
+
+      // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
+      setNumberDateValues(prev => {
+        const next = { ...prev };
+        if (numValue == null) {
+          delete next[dateStr];
+        } else {
+          next[dateStr] = numValue;
+        }
+        console.log('🔄 UI 업데이트:', next);
+        return next;
+      });
+      onSync();
+      console.log('✅ 동기화 트리거 완료');
+    } catch (err) {
+      console.error('❌ 숫자 입력 오류:', err);
+      alert(`오류 발생: ${err}`);
+    }
+  };
   
   return (
     <div>
+      {/* 숫자 입력 모달 (prompt 대신 사용) */}
+      {numberInputModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="숫자 입력"
+        >
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setNumberInputModal({ open: false, dateStr: '', valueText: '' })}
+          />
+          <div className="relative w-full max-w-[412px] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+              <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                {numberInputModal.dateStr} 값 입력
+              </div>
+              <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                {label} {unit ? `(${unit})` : ''}
+              </div>
+            </div>
+
+            <div className="px-4 py-4">
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                value={numberInputModal.valueText}
+                onChange={(e) =>
+                  setNumberInputModal((prev) => ({ ...prev, valueText: e.target.value }))
+                }
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setNumberInputModal({ open: false, dateStr: '', valueText: '' });
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    saveNumberValueForDate(numberInputModal.dateStr, numberInputModal.valueText).then(
+                      () => setNumberInputModal({ open: false, dateStr: '', valueText: '' })
+                    );
+                  }
+                }}
+                placeholder="예: 7.6"
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base focus:ring-2 focus:ring-blue-500 outline-none"
+              />
+              <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
+                소수점 1자리까지 저장됩니다. (예: 7.64 → 7.6)
+              </div>
+            </div>
+
+            <div className="px-4 pb-4 flex gap-2 justify-end">
+              <button
+                className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                onClick={() => setNumberInputModal({ open: false, dateStr: '', valueText: '' })}
+              >
+                취소
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                onClick={async () => {
+                  await saveNumberValueForDate(numberInputModal.dateStr, numberInputModal.valueText);
+                  setNumberInputModal({ open: false, dateStr: '', valueText: '' });
+                }}
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div 
         className="flex items-center gap-3 py-2 min-h-[44px] cursor-pointer"
           onClick={onExpandToggle}
@@ -2389,133 +2593,6 @@ function RoutineItem({
                 const today = new Date();
                 const buttons = [];
                 
-                const handleNumberInput = async (dateStr: string, currentVal: number | null) => {
-                  if (!supabase) return;
-                  
-                  // 현재 값을 소수점 1자리로 표시
-                  const currentDisplay = currentVal !== null ? currentVal.toFixed(1) : '0';
-                  const inputValue = prompt(`${dateStr} 값을 입력하세요 (${unit}):`, currentDisplay);
-                  
-                  if (inputValue === null) return;
-                  
-                  let numValue = inputValue === '' ? null : parseFloat(inputValue);
-                  
-                  if (inputValue !== '' && (isNaN(numValue as number) || numValue === null)) {
-                    alert('올바른 숫자를 입력해주세요.');
-                    return;
-                  }
-                  
-                  // 소수점 1자리로 반올림
-                  if (numValue !== null) {
-                    numValue = Math.round(numValue * 10) / 10;
-                  }
-                  
-                  try {
-                    console.log('💾 숫자 입력 저장 시작:', { dateStr, numValue, routineId, userId });
-                    
-                    if (numValue === null || inputValue === '') {
-                      const { error } = await supabase
-                        .from('daily_routine_checks')
-                        .delete()
-                        .eq('date', dateStr)
-                        .eq('routine_id', routineId)
-                        .eq('user_id', userId);
-                      
-                      if (error) {
-                        console.error('❌ 삭제 오류:', error);
-                        alert(`삭제 실패: ${error.message}`);
-                        return;
-                      }
-                      console.log('✅ 삭제 완료');
-                    } else {
-                      const { data, error } = await supabase
-                        .from('daily_routine_checks')
-                        .upsert({
-                          user_id: userId,
-                          date: dateStr,
-                          routine_id: routineId,
-                          checked: true,
-                          value: numValue
-                        }, {
-                          onConflict: 'user_id,date,routine_id'
-                        });
-                      
-                      if (error) {
-                        // Next/Turbopack 콘솔 오버레이에서 Error 객체가 `{}`로 보이는 경우가 있어,
-                        // 실제 정보(키/프로퍼티/문자열 표현)를 강제로 펼쳐서 로깅합니다.
-                        const errAny: any = error as any;
-                        const errInfo = {
-                          typeof: typeof errAny,
-                          isError: errAny instanceof Error,
-                          name: errAny?.name,
-                          message: errAny?.message,
-                          code: errAny?.code,
-                          details: errAny?.details,
-                          hint: errAny?.hint,
-                          status: errAny?.status,
-                          statusCode: errAny?.statusCode,
-                          toString: (() => {
-                            try {
-                              return String(errAny);
-                            } catch {
-                              return '[toString failed]';
-                            }
-                          })(),
-                          keys: (() => {
-                            try {
-                              return Object.keys(errAny ?? {});
-                            } catch {
-                              return ['[Object.keys failed]'];
-                            }
-                          })(),
-                          props: (() => {
-                            try {
-                              return Object.getOwnPropertyNames(errAny ?? {});
-                            } catch {
-                              return ['[getOwnPropertyNames failed]'];
-                            }
-                          })(),
-                        };
-
-                        console.error('❌ 저장 오류(raw):', error);
-                        console.error('❌ 저장 오류(info):', errInfo);
-                        try {
-                          console.error('❌ 저장 오류(JSON):', JSON.stringify(error, null, 2));
-                        } catch (e) {
-                          console.error('❌ 저장 오류(JSON stringify 실패):', e);
-                        }
-
-                        const alertMsg =
-                          errAny?.message ||
-                          errAny?.details ||
-                          errAny?.hint ||
-                          (errInfo.toString && errInfo.toString !== '[object Object]' ? errInfo.toString : '') ||
-                          `저장에 실패했습니다. (에러 객체가 비어있습니다)`;
-                        alert(`저장 실패: ${alertMsg}`);
-                        return;
-                      }
-                      console.log('✅ 저장 완료:', data);
-                    }
-                    
-                    // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
-                    setNumberDateValues(prev => {
-                      const next = { ...prev };
-                      if (numValue == null) {
-                        delete next[dateStr];
-                      } else {
-                        next[dateStr] = numValue;
-                      }
-                      console.log('🔄 UI 업데이트:', next);
-                      return next;
-                    });
-                    onSync();
-                    console.log('✅ 동기화 트리거 완료');
-                  } catch (err) {
-                    console.error('❌ 숫자 입력 오류:', err);
-                    alert(`오류 발생: ${err}`);
-                  }
-                };
-                
                 for (let i = 4; i >= 0; i--) {
                   const date = new Date(today);
                   date.setDate(date.getDate() - i);
@@ -2533,7 +2610,11 @@ function RoutineItem({
                       key={dateStr}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleNumberInput(dateStr, dayValue);
+                        setNumberInputModal({
+                          open: true,
+                          dateStr,
+                          valueText: dayValue !== null ? dayValue.toFixed(1) : '0.0',
+                        });
                       }}
                       className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
