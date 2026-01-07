@@ -2856,7 +2856,7 @@ function RoutineItem({
           
           {/* 숫자 입력 필드 (숫자 타입일 때) - 최근 5일 */}
           {routineType === 'number' && unit && (
-            <div className="flex items-center gap-1 shrink-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-800/70 p-1">
+            <div className="flex items-center gap-1 shrink-0">
               {(() => {
                 const today = new Date();
                 const buttons = [];
