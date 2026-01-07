@@ -2620,7 +2620,7 @@ function RoutineItem({
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
-                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '12px' }}>
+                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '10px' }}>
                         {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
                       </span>
                       <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
