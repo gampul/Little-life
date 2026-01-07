@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServer } from '../../../lib/supabase_ssr';
 
 // OpenAI 클라이언트
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// Supabase 클라이언트
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
+// Supabase 클라이언트는 요청 쿠키 기반(SSR)로 생성 (로그인 사용자 스코프)
+async function getSupabaseWithUserId() {
+  const supabase = await createSupabaseServer();
+  const { data } = await supabase.auth.getUser();
+  return { supabase, userId: data.user?.id ?? null };
+}
 
 // ============================================
 // Function Calling용 도구 정의
@@ -254,9 +255,13 @@ async function getExpenseData(days: number = 30, category?: string) {
 
 // Property 데이터 조회
 async function getPropertyData(stockName?: string, owner?: string) {
+  const { supabase, userId } = await getSupabaseWithUserId();
+  if (!userId) return { message: '로그인이 필요합니다.' };
+
   const { data, error } = await supabase
     .from('finance_records')
     .select('*')
+    .eq('user_id', userId)
     .order('period', { ascending: false })
     .limit(100);
 
@@ -480,6 +485,7 @@ export async function POST(request: NextRequest) {
 // 디버그용 엔드포인트 - 환경변수 및 데이터 확인
 export async function GET() {
   try {
+    const { supabase, userId } = await getSupabaseWithUserId();
     const envCheck = {
       supabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
       supabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
@@ -488,10 +494,18 @@ export async function GET() {
 
     // 각 테이블 데이터 개수 확인
     const [daily, memos, expense, finance] = await Promise.all([
-      supabase.from('daily_records').select('id', { count: 'exact', head: true }),
-      supabase.from('memos').select('id', { count: 'exact', head: true }),
-      supabase.from('expense_records').select('id', { count: 'exact', head: true }),
-      supabase.from('finance_records').select('id', { count: 'exact', head: true }),
+      userId
+        ? supabase.from('daily_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+        : supabase.from('daily_records').select('id', { count: 'exact', head: true }),
+      userId
+        ? supabase.from('memos').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+        : supabase.from('memos').select('id', { count: 'exact', head: true }),
+      userId
+        ? supabase.from('expense_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+        : supabase.from('expense_records').select('id', { count: 'exact', head: true }),
+      userId
+        ? supabase.from('finance_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
+        : supabase.from('finance_records').select('id', { count: 'exact', head: true }),
     ]);
 
     return NextResponse.json({

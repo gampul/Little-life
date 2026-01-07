@@ -24,6 +24,7 @@ import {
 
 interface FinanceRecord {
   id?: string;
+  user_id?: string;
   period: string;
   owner: string;
   division: string;
@@ -85,6 +86,7 @@ export default function AccountPage() {
   const [activeTab, setActiveTab] = useState<'overview' | 'owner' | 'division' | 'category' | 'add'>('overview');
   const [message, setMessage] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // 다크모드 감지
   useEffect(() => {
@@ -96,6 +98,24 @@ export default function AccountPage() {
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
   }, []);
+
+  // 로그인 사용자 id 로드 (finance_records 스코프용)
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getUser()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('user fetch error:', error);
+          setUserId(null);
+          return;
+        }
+        setUserId(data.user?.id ?? null);
+      })
+      .catch((err) => {
+        console.error('user fetch error:', err);
+        setUserId(null);
+      });
+  }, [supabase]);
 
   // 카테고리 토글 상태 (최근 3개월 추이 테이블)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -198,6 +218,11 @@ export default function AccountPage() {
       setIsLoading(false);
       return;
     }
+    if (!userId) {
+      console.log('사용자 정보가 없습니다.');
+      setIsLoading(false);
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -205,6 +230,7 @@ export default function AccountPage() {
       const { data, error } = await supabase
         .from('finance_records')
         .select('*')
+        .eq('user_id', userId)
         .order('period', { ascending: true });
 
       if (error) {
@@ -223,11 +249,12 @@ export default function AccountPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, userId]);
 
   useEffect(() => {
+    if (!userId) return;
     loadRecords();
-  }, [loadRecords]);
+  }, [userId, loadRecords]);
 
   // 기간별 합계 데이터 계산
   const getPeriodSummary = (): PeriodSummary[] => {
@@ -472,21 +499,26 @@ export default function AccountPage() {
         return;
       }
 
-      // 기존 데이터 삭제
+      if (!userId) {
+        setMessage('❌ 로그인 정보가 없습니다.');
+        return;
+      }
+
+      // 기존 데이터 삭제 (현재 사용자 스코프)
       const { error: deleteError } = await supabase
         .from('finance_records')
         .delete()
-        .neq('id', ''); // 모든 레코드 삭제
+        .eq('user_id', userId);
 
       if (deleteError) {
         console.error('삭제 오류:', deleteError);
         // 삭제 실패해도 계속 진행
       }
 
-      // 새 데이터 삽입
+      // 새 데이터 삽입 (현재 사용자 user_id 부여)
       const { error: insertError } = await supabase
         .from('finance_records')
-        .insert(records);
+        .insert(records.map(r => ({ ...r, user_id: userId })));
 
       if (insertError) throw insertError;
 
@@ -506,6 +538,10 @@ export default function AccountPage() {
       setMessage('❌ Supabase 연결이 설정되지 않았습니다.');
       return;
     }
+    if (!userId) {
+      setMessage('❌ 로그인 정보가 없습니다.');
+      return;
+    }
 
     if (!newRecord.period || !newRecord.owner || !newRecord.stock) {
       setMessage('❌ 기간, 소유자, 종목명은 필수입니다.');
@@ -513,7 +549,7 @@ export default function AccountPage() {
     }
 
     try {
-      const { error } = await supabase.from('finance_records').insert([newRecord]);
+      const { error } = await supabase.from('finance_records').insert([{ ...newRecord, user_id: userId }]);
 
       if (error) throw error;
 

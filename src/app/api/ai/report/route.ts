@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseServer } from '../../../lib/supabase_ssr';
 
 // OpenAI 클라이언트
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-// Supabase 클라이언트
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
-);
-
 // 상세 사용자 데이터 수집
 async function collectDetailedData() {
+  const supabase = await createSupabaseServer();
+  const { data: authData } = await supabase.auth.getUser();
+  const userId = authData.user?.id;
+  if (!userId) {
+    return { daily: [], diary: [], expense: [], property: [] };
+  }
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -23,6 +23,7 @@ async function collectDetailedData() {
   const { data: dailyData } = await supabase
     .from('daily_records')
     .select('*')
+    .eq('user_id', userId)
     .gte('date', sevenDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false });
 
@@ -30,6 +31,7 @@ async function collectDetailedData() {
   const { data: diaryData } = await supabase
     .from('memos')
     .select('title, content, created_at')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(5);
 
@@ -37,6 +39,7 @@ async function collectDetailedData() {
   const { data: expenseData } = await supabase
     .from('expense_records')
     .select('*')
+    .eq('user_id', userId)
     .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false });
 
@@ -44,6 +47,7 @@ async function collectDetailedData() {
   const { data: propertyData } = await supabase
     .from('finance_records')
     .select('*')
+    .eq('user_id', userId)
     .order('period', { ascending: false })
     .limit(300);
 
