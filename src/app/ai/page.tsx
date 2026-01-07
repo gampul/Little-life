@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
+import { SwipeNav } from '../components/SwipeNav';
 
 interface Message {
   id: string;
@@ -157,6 +158,7 @@ export default function AIPage() {
   ];
 
   return (
+    <SwipeNav>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
       <GlobalNav />
 
@@ -363,5 +365,6 @@ export default function AIPage() {
 
       <FooterNav />
     </div>
+    </SwipeNav>
   );
 }

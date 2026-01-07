@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServer } from '../../lib/supabase_ssr';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
+import { SwipeNav } from '../components/SwipeNav';
 
 type TxType = 'income' | 'expense' | 'transfer_out' | 'transfer_in';
 
@@ -129,6 +130,7 @@ export default async function LedgerPage({
   })();
 
   return (
+    <SwipeNav>
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-24">
       <GlobalNav />
       <div className="max-w-[412px] mx-auto px-4 py-6">
@@ -276,6 +278,7 @@ export default async function LedgerPage({
       </div>
       <FooterNav />
     </div>
+    </SwipeNav>
   );
 }
 

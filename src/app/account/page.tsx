@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
+import { SwipeNav } from '../components/SwipeNav';
 import { getSupabase } from '../../lib/supabase';
 import {
   LineChart,
@@ -760,6 +761,7 @@ export default function AccountPage() {
 
   return (
     <AuthGuard>
+    <SwipeNav>
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
@@ -2563,6 +2565,7 @@ export default function AccountPage() {
 
         <FooterNav />
       </div>
+    </SwipeNav>
     </AuthGuard>
   );
 }

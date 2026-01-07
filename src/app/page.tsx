@@ -6,6 +6,7 @@ import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
+import { SwipeNav } from './components/SwipeNav';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -1159,6 +1160,7 @@ export default function Home() {
 
   return (
     <AuthGuard>
+      <SwipeNav>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         {/* 체중 입력 모달 */}
         {weightInputModal.open && (
@@ -2198,6 +2200,7 @@ export default function Home() {
         
         <FooterNav />
       </div>
+      </SwipeNav>
     </AuthGuard>
   );
 }
