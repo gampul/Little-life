@@ -2392,15 +2392,22 @@ function RoutineItem({
                 const handleNumberInput = async (dateStr: string, currentVal: number | null) => {
                   if (!supabase) return;
                   
-                  const inputValue = prompt(`${dateStr} 값을 입력하세요 (${unit}):`, String(currentVal ?? 0));
+                  // 현재 값을 소수점 1자리로 표시
+                  const currentDisplay = currentVal !== null ? currentVal.toFixed(1) : '0';
+                  const inputValue = prompt(`${dateStr} 값을 입력하세요 (${unit}):`, currentDisplay);
                   
                   if (inputValue === null) return;
                   
-                  const numValue = inputValue === '' ? null : parseFloat(inputValue);
+                  let numValue = inputValue === '' ? null : parseFloat(inputValue);
                   
                   if (inputValue !== '' && (isNaN(numValue as number) || numValue === null)) {
                     alert('올바른 숫자를 입력해주세요.');
                     return;
+                  }
+                  
+                  // 소수점 1자리로 반올림
+                  if (numValue !== null) {
+                    numValue = Math.round(numValue * 10) / 10;
                   }
                   
                   try {
@@ -2483,7 +2490,9 @@ function RoutineItem({
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
-                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '12px' }}>{dayValue ?? 0}</span>
+                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '12px' }}>
+                        {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
+                      </span>
                       <span style={{ fontSize: '7px' }}>{unit}</span>
                     </button>
                   );
