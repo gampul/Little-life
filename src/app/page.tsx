@@ -2580,9 +2580,10 @@ function RoutineItem({
                 backgroundColor: colorClasses.bgLight,
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
               } : {}}
-              title="연간 누적"
+              title=""
             >
-              누적 {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}{unit || ''}
+              {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}
+              {(unit || '').toLowerCase()}
             </div>
           )}
           
