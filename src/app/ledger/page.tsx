@@ -61,7 +61,7 @@ export default async function LedgerPage({
 
   const sp = await searchParams;
   const currentMonth = sp.m || monthParamFromDate(new Date());
-  const filter = sp.filter || 'all'; // all | income | expense
+  const filter = sp.filter || 'expense'; // income | expense | net
 
   const { startIso, nextIso } = monthStartEndIso(currentMonth);
 
@@ -106,7 +106,7 @@ export default async function LedgerPage({
   const filtered = txList.filter((t) => {
     if (filter === 'income') return t.type === 'income';
     if (filter === 'expense') return t.type === 'expense';
-    return true;
+    return false;
   });
 
   const incomeSum = txList.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
@@ -190,16 +190,6 @@ export default async function LedgerPage({
         {/* Filter */}
         <div className="flex items-center gap-2 mb-4">
           <Link
-            href={`/ledger?m=${currentMonth}&filter=all`}
-            className={`px-3 py-1 rounded-lg text-sm border ${
-              filter === 'all'
-                ? 'bg-gray-900 text-white border-gray-900'
-                : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
-            }`}
-          >
-            전체
-          </Link>
-          <Link
             href={`/ledger?m=${currentMonth}&filter=income`}
             className={`px-3 py-1 rounded-lg text-sm border ${
               filter === 'income'
@@ -219,22 +209,39 @@ export default async function LedgerPage({
           >
             지출
           </Link>
+          <Link
+            href={`/ledger?m=${currentMonth}&filter=net`}
+            className={`px-3 py-1 rounded-lg text-sm border ${
+              filter === 'net'
+                ? 'bg-gray-900 text-white border-gray-900'
+                : 'border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+            }`}
+          >
+            순자산
+          </Link>
+          <Link
+            href="/ledger/import"
+            className="ml-auto px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm"
+          >
+            CSV
+          </Link>
         </div>
 
-        {/* List grouped by date */}
-        <div className="space-y-3">
-          {dateKeys.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center text-gray-500 dark:text-gray-400">
-              이번 달 거래가 없습니다.
-            </div>
-          ) : (
-            dateKeys.map((dk) => (
-              <div key={dk} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">
-                  {prettyDateKST(dk)}
-                </div>
-                <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {grouped.get(dk)!.map((t) => {
+        {/* List grouped by date (income/expense only) */}
+        {filter !== 'net' ? (
+          <div className="space-y-3">
+            {dateKeys.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center text-gray-500 dark:text-gray-400">
+                이번 달 거래가 없습니다.
+              </div>
+            ) : (
+              dateKeys.map((dk) => (
+                <div key={dk} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-900 dark:text-white">
+                    {prettyDateKST(dk)}
+                  </div>
+                  <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {grouped.get(dk)!.map((t) => {
                     const assetName = assetMap.get(t.asset_id)?.name || '자산';
                     const categoryName = t.category_id ? (categoryMap.get(t.category_id)?.name || '카테고리') : '';
                     const isIncome = t.type === 'income';
@@ -274,11 +281,35 @@ export default async function LedgerPage({
                       </Link>
                     );
                   })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+            <div className="text-sm font-semibold text-gray-900 dark:text-white mb-2">이번 달 순자산(=순현금흐름)</div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">수입</div>
+                <div className="text-blue-600 dark:text-blue-400 font-bold">{incomeSum.toLocaleString()}원</div>
+              </div>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">지출</div>
+                <div className="text-red-500 dark:text-red-400 font-bold">{expenseSum.toLocaleString()}원</div>
+              </div>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">순자산</div>
+                <div className="text-gray-900 dark:text-white font-bold">
+                  {(net >= 0 ? '+' : '') + net.toLocaleString()}원
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              순자산은 “총수입 − 총지출”로 계산됩니다. (이체는 제외)
+            </div>
+          </div>
+        )}
       </div>
       <FooterNav />
     </div>
