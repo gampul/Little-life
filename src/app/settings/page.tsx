@@ -713,7 +713,7 @@ export default function SettingsPage() {
                   aria-label="추가"
                 >
                   <img
-                    src="/그림1.png"
+                    src="/플러스.png"
                     alt="추가"
                     className="h-[18px] w-auto object-contain select-none"
                     draggable={false}
