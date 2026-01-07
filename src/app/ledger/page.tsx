@@ -188,7 +188,7 @@ export default async function LedgerPage({
         </div>
 
         {/* Filter */}
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
           <Link
             href={`/ledger?m=${currentMonth}&filter=income`}
             className={`px-3 py-1 rounded-lg text-sm border ${
