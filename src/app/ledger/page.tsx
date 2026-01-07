@@ -139,7 +139,15 @@ export default async function LedgerPage({
       <GlobalNav />
       <div className="max-w-[412px] mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Ledger</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">Ledger</h1>
+            <Link
+              href="/ledger/import"
+              className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-xs font-medium whitespace-nowrap"
+            >
+              CSV
+            </Link>
+          </div>
         </div>
 
         {/* Month controls */}
@@ -218,12 +226,6 @@ export default async function LedgerPage({
             }`}
           >
             순자산
-          </Link>
-          <Link
-            href="/ledger/import"
-            className="ml-auto px-3 py-1 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm"
-          >
-            CSV
           </Link>
         </div>
 
