@@ -2428,7 +2428,7 @@ function RoutineItem({
                       }
                       console.log('✅ 삭제 완료');
                     } else {
-                      const { error } = await supabase
+                      const { data, error } = await supabase
                         .from('daily_routine_checks')
                         .upsert({
                           user_id: userId,
@@ -2442,10 +2442,15 @@ function RoutineItem({
                       
                       if (error) {
                         console.error('❌ 저장 오류:', error);
-                        alert(`저장 실패: ${error.message}`);
+                        console.error('❌ 에러 상세:', JSON.stringify(error, null, 2));
+                        console.error('❌ 에러 코드:', error.code);
+                        console.error('❌ 에러 메시지:', error.message);
+                        console.error('❌ 에러 힌트:', error.hint);
+                        console.error('❌ 에러 상세 정보:', error.details);
+                        alert(`저장 실패: ${error.message || error.hint || JSON.stringify(error)}`);
                         return;
                       }
-                      console.log('✅ 저장 완료');
+                      console.log('✅ 저장 완료:', data);
                     }
                     
                     // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
