@@ -692,7 +692,7 @@ export default function SettingsPage() {
                   title={isRoutineSectionExpanded ? '접기' : '펼치기'}
                 >
                   <img
-                    src="/그림2.png"
+                    src="/화살표 아래.png"
                     alt={isRoutineSectionExpanded ? '접기' : '펼치기'}
                     className="h-[18px] w-auto object-contain select-none"
                     draggable={false}
