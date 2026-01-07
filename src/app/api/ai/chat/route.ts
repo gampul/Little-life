@@ -118,12 +118,16 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 
 // Daily 데이터 조회
 async function getDailyData(days: number = 7) {
+  const { supabase, userId } = await getSupabaseWithUserId();
+  if (!userId) return { message: '로그인이 필요합니다.' };
+
   const now = new Date();
   const pastDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   
   const { data, error } = await supabase
     .from('daily_records')
-    .select('*')
+    .select('date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+    .eq('user_id', userId)
     .gte('date', pastDate.toISOString().split('T')[0])
     .order('date', { ascending: false })
     .limit(days);
@@ -141,13 +145,15 @@ async function getDailyData(days: number = 7) {
     const parts = [];
     if (d.date) parts.push(`날짜: ${d.date}`);
     if (d.weight) parts.push(`체중: ${d.weight}kg`);
-    if (d.wake_time) parts.push(`기상: ${d.wake_time}`);
-    if (d.sleep_time) parts.push(`취침: ${d.sleep_time}`);
-    if (d.exercise) parts.push(`운동: ${d.exercise}`);
-    if (d.mood) parts.push(`기분: ${d.mood}`);
-    if (d.meals) parts.push(`식사: ${d.meals}`);
-    if (d.water) parts.push(`물: ${d.water}잔`);
-    if (d.memo) parts.push(`메모: ${d.memo}`);
+    if (d.meal_breakfast || d.meal_lunch || d.meal_dinner) {
+      parts.push(`식사: ${[
+        d.meal_breakfast ? '아침' : null,
+        d.meal_lunch ? '점심' : null,
+        d.meal_dinner ? '저녁' : null,
+      ].filter(Boolean).join('/')}`);
+    }
+    if (d.meal_memo) parts.push(`식사메모: ${String(d.meal_memo).slice(0, 80)}`);
+    if (d.daily_memo) parts.push(`메모: ${String(d.daily_memo).slice(0, 80)}`);
     return parts.join(', ');
   });
 
@@ -160,9 +166,13 @@ async function getDailyData(days: number = 7) {
 
 // Diary 데이터 조회
 async function getDiaryData(limit: number = 5, keyword?: string) {
+  const { supabase, userId } = await getSupabaseWithUserId();
+  if (!userId) return { message: '로그인이 필요합니다.' };
+
   let query = supabase
     .from('memos')
     .select('title, content, created_at')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -202,12 +212,16 @@ async function getDiaryData(limit: number = 5, keyword?: string) {
 
 // Expense 데이터 조회
 async function getExpenseData(days: number = 30, category?: string) {
+  const { supabase, userId } = await getSupabaseWithUserId();
+  if (!userId) return { message: '로그인이 필요합니다.' };
+
   const now = new Date();
   const pastDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   
   let query = supabase
     .from('expense_records')
     .select('*')
+    .eq('user_id', userId)
     .gte('date', pastDate.toISOString().split('T')[0])
     .order('date', { ascending: false });
 

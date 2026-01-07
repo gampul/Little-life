@@ -22,7 +22,7 @@ async function collectDetailedData() {
   // Daily 루틴 데이터 (최근 7일 상세)
   const { data: dailyData } = await supabase
     .from('daily_records')
-    .select('*')
+    .select('date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
     .eq('user_id', userId)
     .gte('date', sevenDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false });
@@ -71,10 +71,9 @@ function analyzeData(data: {
     totalDays: data.daily.length,
     records: data.daily.map(d => ({
       date: d.date,
-      wakeTime: d.wake_time,
-      sleepTime: d.sleep_time,
-      exercise: d.exercise,
-      mood: d.mood,
+      weight: d.weight ?? null,
+      mealMemo: d.meal_memo ?? null,
+      dailyMemo: d.daily_memo ?? null,
     })),
   };
 
