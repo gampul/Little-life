@@ -2384,7 +2384,7 @@ function RoutineItem({
           
           {/* 숫자 입력 필드 (숫자 타입일 때) - 최근 5일 */}
           {routineType === 'number' && unit && (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-800/70 p-1">
               {(() => {
                 const today = new Date();
                 const buttons = [];
@@ -2535,14 +2535,14 @@ function RoutineItem({
                         e.stopPropagation();
                         handleNumberInput(dateStr, dayValue);
                       }}
-                      className="flex flex-col items-center justify-center font-medium text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors cursor-pointer active:scale-95 overflow-hidden"
+                      className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
                       <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '12px' }}>
                         {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
                       </span>
-                      <span style={{ fontSize: '7px' }}>{unit}</span>
+                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
                     </button>
                   );
                 }
