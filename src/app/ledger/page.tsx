@@ -35,9 +35,13 @@ function monthParamFromDate(d: Date) {
 }
 
 function dateKeyKST(iso: string) {
+  // KST(UTC+9)는 DST가 없어서, +9시간 후 UTC 기준 날짜로 키를 만드는 게 빠르고 충분합니다.
   const d = new Date(iso);
-  const fmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
-  return fmt.format(d);
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(kst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function prettyDateKST(key: string) {
