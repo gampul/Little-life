@@ -2441,13 +2441,57 @@ function RoutineItem({
                         });
                       
                       if (error) {
-                        console.error('❌ 저장 오류:', error);
-                        console.error('❌ 에러 상세:', JSON.stringify(error, null, 2));
-                        console.error('❌ 에러 코드:', error.code);
-                        console.error('❌ 에러 메시지:', error.message);
-                        console.error('❌ 에러 힌트:', error.hint);
-                        console.error('❌ 에러 상세 정보:', error.details);
-                        alert(`저장 실패: ${error.message || error.hint || JSON.stringify(error)}`);
+                        // Next/Turbopack 콘솔 오버레이에서 Error 객체가 `{}`로 보이는 경우가 있어,
+                        // 실제 정보(키/프로퍼티/문자열 표현)를 강제로 펼쳐서 로깅합니다.
+                        const errAny: any = error as any;
+                        const errInfo = {
+                          typeof: typeof errAny,
+                          isError: errAny instanceof Error,
+                          name: errAny?.name,
+                          message: errAny?.message,
+                          code: errAny?.code,
+                          details: errAny?.details,
+                          hint: errAny?.hint,
+                          status: errAny?.status,
+                          statusCode: errAny?.statusCode,
+                          toString: (() => {
+                            try {
+                              return String(errAny);
+                            } catch {
+                              return '[toString failed]';
+                            }
+                          })(),
+                          keys: (() => {
+                            try {
+                              return Object.keys(errAny ?? {});
+                            } catch {
+                              return ['[Object.keys failed]'];
+                            }
+                          })(),
+                          props: (() => {
+                            try {
+                              return Object.getOwnPropertyNames(errAny ?? {});
+                            } catch {
+                              return ['[getOwnPropertyNames failed]'];
+                            }
+                          })(),
+                        };
+
+                        console.error('❌ 저장 오류(raw):', error);
+                        console.error('❌ 저장 오류(info):', errInfo);
+                        try {
+                          console.error('❌ 저장 오류(JSON):', JSON.stringify(error, null, 2));
+                        } catch (e) {
+                          console.error('❌ 저장 오류(JSON stringify 실패):', e);
+                        }
+
+                        const alertMsg =
+                          errAny?.message ||
+                          errAny?.details ||
+                          errAny?.hint ||
+                          (errInfo.toString && errInfo.toString !== '[object Object]' ? errInfo.toString : '') ||
+                          `저장에 실패했습니다. (에러 객체가 비어있습니다)`;
+                        alert(`저장 실패: ${alertMsg}`);
                         return;
                       }
                       console.log('✅ 저장 완료:', data);
