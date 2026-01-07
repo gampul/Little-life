@@ -96,6 +96,12 @@ export default function Home() {
   const [allRecords, setAllRecords] = useState<DailyRecord[]>([]);
   const [weightPeriod, setWeightPeriod] = useState<PeriodFilter>('1month');
   const [isWeightListExpanded, setIsWeightListExpanded] = useState(false);
+  const [weightInputModal, setWeightInputModal] = useState<{
+    open: boolean;
+    dateStr: string;
+    weightText: string;
+  }>({ open: false, dateStr: '', weightText: '' });
+  const [isWeightModalSaving, setIsWeightModalSaving] = useState(false);
   
   // 루틴 관련 상태
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
@@ -671,6 +677,157 @@ export default function Home() {
     }));
   };
 
+  const openWeightModal = () => {
+    const baseDateRaw = (formData?.date || selectedDate || '').toString();
+    const baseDate = baseDateRaw.includes('T')
+      ? baseDateRaw.split('T')[0]
+      : (baseDateRaw.includes(' ') ? baseDateRaw.split(' ')[0] : baseDateRaw);
+    const current = typeof formData?.weight === 'number' ? formData.weight : null;
+    setWeightInputModal({
+      open: true,
+      dateStr: baseDate,
+      weightText: current != null ? current.toFixed(1) : '',
+    });
+  };
+
+  const saveWeightForDate = async (dateStr: string, weightText: string) => {
+    if (!supabase) {
+      alert('❌ Supabase 연결이 설정되지 않았습니다.');
+      return;
+    }
+    if (!userId) {
+      alert('❌ 로그인 정보가 없습니다. 다시 로그인 후 시도해주세요.');
+      return;
+    }
+
+    const normalizedDate = dateStr.includes('T')
+      ? dateStr.split('T')[0]
+      : (dateStr.includes(' ') ? dateStr.split(' ')[0] : dateStr);
+
+    const trimmed = String(weightText ?? '').trim();
+    const hasValue = trimmed !== '';
+
+    let weightValue: number | null = null;
+    if (hasValue) {
+      const parsed = parseFloat(trimmed);
+      if (Number.isNaN(parsed)) {
+        alert('올바른 숫자를 입력해주세요.');
+        return;
+      }
+      weightValue = Math.round(parsed * 10) / 10; // 소수점 1자리
+    }
+
+    setIsWeightModalSaving(true);
+    setMessage('');
+    try {
+      const { data: existingData, error: checkError } = await supabase
+        .from('daily_records')
+        .select('id')
+        .eq('date', normalizedDate)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('체중 저장 - 레코드 확인 오류:', checkError);
+        throw checkError;
+      }
+
+      if (existingData) {
+        const { error } = await supabase
+          .from('daily_records')
+          .update({
+            weight: weightValue,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('date', normalizedDate)
+          .eq('user_id', userId);
+
+        if (error) {
+          console.error('체중 저장 - 업데이트 오류:', error);
+          throw error;
+        }
+      } else {
+        const baseInsert: any = {
+          date: normalizedDate,
+          user_id: userId,
+          weight: weightValue,
+          meal_breakfast: false,
+          meal_lunch: false,
+          meal_dinner: false,
+          meal_memo: '',
+          daily_memo: '',
+          updated_at: new Date().toISOString(),
+        };
+
+        const first = await supabase
+          .from('daily_records')
+          .insert([{ ...baseInsert, meal_images: [] }]);
+
+        if (first.error) {
+          if (first.error.code === '42703' || String(first.error.message || '').includes('column')) {
+            const second = await supabase.from('daily_records').insert([baseInsert]);
+            if (second.error) {
+              console.error('체중 저장 - 삽입 오류(재시도):', second.error);
+              throw second.error;
+            }
+          } else {
+            console.error('체중 저장 - 삽입 오류:', first.error);
+            throw first.error;
+          }
+        }
+      }
+
+      setAllRecords(prev => {
+        const normalizedPrev = prev.map(r => ({
+          ...r,
+          date: r.date.includes('T') ? r.date.split('T')[0] : (r.date.includes(' ') ? r.date.split(' ')[0] : r.date),
+        }));
+        const idx = normalizedPrev.findIndex(r => r.date === normalizedDate);
+        if (idx >= 0) {
+          const updated = [...normalizedPrev];
+          updated[idx] = {
+            ...updated[idx],
+            weight: weightValue,
+            updated_at: new Date().toISOString(),
+          } as DailyRecord;
+          return updated;
+        }
+        return [
+          ...normalizedPrev,
+          {
+            id: (globalThis as any).crypto?.randomUUID?.() ?? `local-${Date.now()}`,
+            date: normalizedDate,
+            weight: weightValue,
+            meal_breakfast: false,
+            meal_lunch: false,
+            meal_dinner: false,
+            meal_memo: '',
+            daily_memo: '',
+            updated_at: new Date().toISOString(),
+          } as DailyRecord,
+        ];
+      });
+
+      if (normalizedDate === selectedDate) {
+        setFormData(prev => ({
+          ...prev,
+          date: normalizedDate,
+          weight: weightValue,
+        }));
+      }
+
+      setMessage('✅ 체중이 저장되었습니다!');
+      loadAllRecords();
+      setTimeout(() => setMessage(''), 2500);
+    } catch (err: any) {
+      const msg = err?.message || '알 수 없는 오류';
+      setMessage(`❌ 저장 실패: ${msg}`);
+      setTimeout(() => setMessage(''), 5000);
+    } finally {
+      setIsWeightModalSaving(false);
+    }
+  };
+
 
   const handleSave = async () => {
     if (!supabase) {
@@ -1003,6 +1160,111 @@ export default function Home() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+        {/* 체중 입력 모달 */}
+        {weightInputModal.open && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="체중 입력"
+          >
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setWeightInputModal({ open: false, dateStr: '', weightText: '' })}
+            />
+            <div className="relative w-full max-w-[412px] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">체중 기록</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                  날짜를 선택하고 체중을 입력해주세요.
+                </div>
+              </div>
+
+              <div className="px-4 py-4 space-y-3">
+                {/* 날짜 선택 */}
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={weightInputModal.dateStr}
+                    onChange={(e) =>
+                      setWeightInputModal(prev => ({ ...prev, dateStr: e.target.value }))
+                    }
+                    className="w-full px-4 py-3 text-base bg-transparent text-transparent border border-gray-300 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    style={{ color: 'transparent', WebkitAppearance: 'none' }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if ((e.currentTarget as any).showPicker) {
+                        try {
+                          (e.currentTarget as any).showPicker();
+                        } catch {}
+                      }
+                    }}
+                  />
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-900 dark:text-white font-medium whitespace-nowrap">
+                    {(() => {
+                      const d = new Date(weightInputModal.dateStr);
+                      const year = d.getFullYear();
+                      const month = d.getMonth() + 1;
+                      const day = d.getDate();
+                      return `${year}년 ${month}월 ${day}일`;
+                    })()}
+                  </div>
+                </div>
+
+                {/* 체중 입력 */}
+                <div>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    value={weightInputModal.weightText}
+                    onChange={(e) =>
+                      setWeightInputModal(prev => ({ ...prev, weightText: e.target.value }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setWeightInputModal({ open: false, dateStr: '', weightText: '' });
+                        return;
+                      }
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveWeightForDate(weightInputModal.dateStr, weightInputModal.weightText).then(
+                          () => setWeightInputModal({ open: false, dateStr: '', weightText: '' })
+                        );
+                      }
+                    }}
+                    placeholder="예: 85.5"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <div className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                    소수점 1자리까지 저장됩니다. (예: 85.54 → 85.5)
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-4 pb-4 flex gap-2 justify-end">
+                <button
+                  className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  onClick={() => setWeightInputModal({ open: false, dateStr: '', weightText: '' })}
+                  disabled={isWeightModalSaving}
+                >
+                  취소
+                </button>
+                <button
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={isWeightModalSaving}
+                  onClick={async () => {
+                    await saveWeightForDate(weightInputModal.dateStr, weightInputModal.weightText);
+                    setWeightInputModal({ open: false, dateStr: '', weightText: '' });
+                  }}
+                >
+                  {isWeightModalSaving ? '저장중' : '저장'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <GlobalNav />
         <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
 
@@ -1090,8 +1352,13 @@ export default function Home() {
                 handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : '')
               }
               placeholder="체중"
-              disabled={!isEditMode}
-              className="w-20 px-3 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px]"
+              readOnly={!isEditMode}
+              onClick={() => {
+                if (!isEditMode) openWeightModal();
+              }}
+              className={`w-20 px-3 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] ${
+                !isEditMode ? 'cursor-pointer' : ''
+              }`}
             />
             {/* 수정/저장 버튼 */}
                 {!isEditMode ? (
