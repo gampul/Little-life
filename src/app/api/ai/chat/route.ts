@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createSupabaseServer } from '../../../lib/supabase_ssr';
+import { createSupabaseServer } from '../../../../lib/supabase_ssr';
 
 // OpenAI 클라이언트
 const openai = new OpenAI({
