@@ -11,7 +11,7 @@ interface DiaryEntry {
 }
 
 export default function InvestmentDiary() {
-  const [activeTab, setActiveTab] = useState<'write' | 'view'>('write');
+  const [activeTab, setActiveTab] = useState<'write' | 'view' | null>(null);
   const [entries, setEntries] = useState<DiaryEntry[]>([]);
   const [selectedDate, setSelectedDate] = useState('');
   const [content, setContent] = useState('');
@@ -121,18 +121,18 @@ export default function InvestmentDiary() {
       {/* 헤더: 제목 + 탭 */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-          📝 투자일기
+          📝 투자다짐
         </h2>
         <div className="flex gap-2">
           <button
-            onClick={() => setActiveTab('write')}
+            onClick={() => setActiveTab(activeTab === 'write' ? null : 'write')}
             className={`px-3 py-1 text-sm font-medium rounded-lg transition-colors ${
               activeTab === 'write'
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
             }`}
           >
-            쓰기
+            쓰기 {activeTab === 'write' ? '▲' : '▼'}
           </button>
           <button
             onClick={() => setActiveTab('view')}
@@ -159,7 +159,7 @@ export default function InvestmentDiary() {
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="오늘의 투자 기록을 남겨보세요..."
+            placeholder="오늘의 투자 다짐을 남겨보세요..."
             rows={4}
             className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm resize-none"
           />
@@ -197,7 +197,7 @@ export default function InvestmentDiary() {
           )}
           {!isLoading && entries.length === 0 && (
             <div className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
-              아직 작성된 일기가 없습니다.
+              아직 작성된 다짐이 없습니다.
             </div>
           )}
           {!isLoading &&
