@@ -5,7 +5,6 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
-import InvestmentDiary from '../components/InvestmentDiary';
 import { getSupabase } from '../../lib/supabase';
 import {
   LineChart,
@@ -774,9 +773,6 @@ export default function AccountPage() {
               💰 투자현황
             </h1>
           </div>
-
-          {/* 투자일기 */}
-          <InvestmentDiary />
 
           {/* 탭 메뉴 */}
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-2">
