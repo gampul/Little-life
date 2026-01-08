@@ -768,13 +768,6 @@ export default function AccountPage() {
       
         <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
         <div className="space-y-2">
-          {/* 제목 */}
-          <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
-              💰 투자현황
-            </h1>
-          </div>
-
           {/* 투자일기 */}
           <InvestmentDiary />
 
