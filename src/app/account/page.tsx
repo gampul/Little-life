@@ -5,6 +5,7 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
+import InvestmentDiary from '../components/InvestmentDiary';
 import { getSupabase } from '../../lib/supabase';
 import {
   LineChart,
@@ -769,13 +770,13 @@ export default function AccountPage() {
         <div className="space-y-2">
           {/* 제목 */}
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
-              💰 금융투자 포트폴리오
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+              💰 투자현황
             </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              투자 현황을 기록하고 분석하세요.
-            </p>
           </div>
+
+          {/* 투자일기 */}
+          <InvestmentDiary />
 
           {/* 탭 메뉴 */}
           <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-2">
