@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSupabaseServer } from '@/lib/supabase_ssr';
+import { createSupabaseServer } from '../../../../lib/supabase_ssr';
 
 // GET: 투자일기 목록 조회 (최신순)
 export async function GET(request: NextRequest) {
