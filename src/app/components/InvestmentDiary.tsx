@@ -116,6 +116,11 @@ export default function InvestmentDiary() {
     return `${year}년 ${month}월 ${day}일`;
   };
 
+  // 오늘 날짜인지 확인
+  const isToday = (dateStr: string) => {
+    return dateStr === getTodayDate();
+  };
+
   return (
     <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5">
       {/* 헤더: 제목 + 탭 */}
@@ -207,7 +212,13 @@ export default function InvestmentDiary() {
                 className="border border-gray-300 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-700"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  <span
+                    className={
+                      isToday(entry.entry_date)
+                        ? 'text-[12px] font-bold text-blue-600 dark:text-blue-400'
+                        : 'text-sm font-medium text-gray-900 dark:text-white'
+                    }
+                  >
                     {formatDate(entry.entry_date)}
                   </span>
                   <div className="flex gap-2">

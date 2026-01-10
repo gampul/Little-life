@@ -133,3 +133,18 @@ input[type="date"] {
   -webkit-appearance: none !important;
   appearance: none !important;
 }
+
+/* 체크박스 투명 배경 및 파란색 체크 표시 */
+input[type="checkbox"] {
+  background-color: transparent !important;
+  -webkit-appearance: checkbox;
+  appearance: checkbox;
+}
+
+input[type="checkbox"]:checked {
+  background-color: transparent !important;
+}
+
+input[type="checkbox"]:focus {
+  outline: none;
+}

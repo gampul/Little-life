@@ -2891,7 +2891,7 @@ function RoutineItem({
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
-                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '10px' }}>
+                      <span className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} style={{ fontSize: isToday ? '12px' : '10px' }}>
                         {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
                       </span>
                       <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
@@ -2974,6 +2974,8 @@ function RoutineItem({
                   const dateStr = `${koreaTime.getUTCFullYear()}-${String(koreaTime.getUTCMonth() + 1).padStart(2, '0')}-${String(koreaTime.getUTCDate()).padStart(2, '0')}`;
                   const isChecked = checkedDates[dateStr]?.has(routineId) || false;
                   const isToday = i === 0;
+                  // 과거 날짜이고 체크 안됨: 회색, 나머지: 파란색
+                  const accentColor = (!isToday && !isChecked) ? '#9ca3af' : '#3b82f6'; // gray-400 or blue-500
                   
                   checkboxes.push(
                     <div 
@@ -2987,8 +2989,13 @@ function RoutineItem({
                         type="checkbox"
                         checked={isChecked}
                         readOnly
-                        className="cursor-pointer shrink-0 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                        style={{ width: '20px', height: '20px' }}
+                        className="cursor-pointer shrink-0 bg-transparent border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                        style={{ 
+                          width: '20px', 
+                          height: '20px',
+                          accentColor: accentColor,
+                          backgroundColor: 'transparent'
+                        }}
                       />
                     </div>
                   );

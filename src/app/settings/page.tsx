@@ -119,7 +119,20 @@ function RoutineItemWithChart({
         />
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           <button
-            onClick={() => onSave(template.id)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              console.log('저장 버튼 클릭:', { templateId: template.id, isDirty, isSaving });
+              if (!isDirty) {
+                console.warn('저장할 변경 사항이 없습니다.');
+                return;
+              }
+              if (isSaving) {
+                console.warn('이미 저장 중입니다.');
+                return;
+              }
+              onSave(template.id);
+            }}
             disabled={!isDirty || isSaving}
             className={`px-1.5 sm:px-2 py-0 text-[11px] rounded min-h-[26px] sm:min-h-[28px] whitespace-nowrap ${
               !isDirty || isSaving
@@ -497,27 +510,99 @@ export default function SettingsPage() {
     );
   };
 
-  const handleSaveOne = async (templateId: string) => {
-    const idx = routineTemplates.findIndex(t => t.id === templateId);
-    if (idx < 0) return;
-    const template = routineTemplates[idx];
+  // UUID v4 생성 함수 (crypto.randomUUID가 없는 경우 대비)
+  const generateUUID = (): string => {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID();
+    }
+    // UUID v4 형식: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
 
-    setSavingById(prev => ({ ...prev, [templateId]: true }));
+  // UUID 형식 검증 함수
+  const isValidUUID = (str: string): boolean => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  };
+
+  const handleSaveOne = async (templateId: string) => {
+    console.log('=== 저장 시작 ===', { templateId });
+    const idx = routineTemplates.findIndex(t => t.id === templateId);
+    if (idx < 0) {
+      console.error('템플릿을 찾을 수 없습니다:', templateId);
+      setMessage('❌ 저장 실패: 템플릿을 찾을 수 없습니다.');
+      setTimeout(() => setMessage(''), 5000);
+      return;
+    }
+    let template = routineTemplates[idx];
+    console.log('저장할 템플릿:', template);
+    
+    // ID가 UUID 형식이 아닌 경우, 새 UUID 생성 (새로 추가한 루틴인 경우)
+    if (!isValidUUID(template.id)) {
+      console.warn('ID가 UUID 형식이 아닙니다. 새 UUID를 생성합니다:', template.id);
+      template = { ...template, id: generateUUID() };
+      // 상태 업데이트
+      const updated = [...routineTemplates];
+      updated[idx] = template;
+      setRoutineTemplates(updated);
+      setDirtyById(prev => ({ ...prev, [template.id]: true }));
+    }
+
+    if (!supabase) {
+      console.error('Supabase 연결이 없습니다.');
+      setMessage('❌ 저장 실패: Supabase 연결이 설정되지 않았습니다.');
+      setTimeout(() => setMessage(''), 5000);
+      return;
+    }
+
+    if (!userId) {
+      console.error('사용자 ID가 없습니다.');
+      setMessage('❌ 저장 실패: 로그인 정보가 없습니다.');
+      setTimeout(() => setMessage(''), 5000);
+      return;
+    }
+
+    // UUID가 새로 생성된 경우 templateId 업데이트
+    const finalTemplateId = template.id;
+    setSavingById(prev => ({ ...prev, [finalTemplateId]: true }));
+    // 원래 templateId가 변경된 경우 dirtyById도 업데이트
+    if (templateId !== finalTemplateId) {
+      setDirtyById(prev => {
+        const newDirty = { ...prev };
+        delete newDirty[templateId];
+        newDirty[finalTemplateId] = true;
+        return newDirty;
+      });
+    }
     setMessage('');
     try {
       // 항목 1개만 저장하되, sort_order는 현재 index 기준으로 저장
+      console.log('upsertTemplates 호출 전', { template });
       await upsertTemplates([{ ...template, sort_order: idx }]);
-      setDirtyById(prev => ({ ...prev, [templateId]: false }));
+      console.log('upsertTemplates 성공');
+      setDirtyById(prev => ({ ...prev, [finalTemplateId]: false }));
       setMessage('✅ 저장되었습니다!');
       setTimeout(() => setMessage(''), 2000);
       // 저장 후 DB 기준으로 재로딩(서버 default/trigger 등 반영)
       await loadRoutineTemplates();
     } catch (err: any) {
+      console.error('=== 저장 에러 ===', err);
       const msg = err?.message || '저장 실패';
       setMessage(`❌ 저장 실패: ${msg}`);
       setTimeout(() => setMessage(''), 5000);
     } finally {
-      setSavingById(prev => ({ ...prev, [templateId]: false }));
+      setSavingById(prev => {
+        const newSaving = { ...prev };
+        delete newSaving[templateId];
+        if (finalTemplateId !== templateId) {
+          delete newSaving[finalTemplateId];
+        }
+        return newSaving;
+      });
     }
   };
 
@@ -578,9 +663,7 @@ export default function SettingsPage() {
     }
     
     const newFieldKey = `routine_${Date.now()}`;
-    const newId = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-      ? crypto.randomUUID()
-      : `routine_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const newId = generateUUID(); // 항상 유효한 UUID 생성
     setRoutineTemplates([
       ...routineTemplates,
       {
