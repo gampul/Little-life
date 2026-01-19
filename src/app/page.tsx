@@ -7,6 +7,23 @@ import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -53,6 +70,18 @@ interface WeatherData {
   city: string;
 }
 
+// 한국 시간(KST, UTC+9) 기준 오늘 날짜를 YYYY-MM-DD 형식으로 반환
+const getKoreaTodayDate = (): string => {
+  const now = new Date();
+  // 한국 시간(UTC+9) 계산
+  const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+  // UTC로 변환된 날짜를 YYYY-MM-DD 형식으로 반환
+  const year = koreaTime.getUTCFullYear();
+  const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(koreaTime.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -87,7 +116,7 @@ export default function Home() {
   }, [supabase]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    getKoreaTodayDate()
   );
   const [isEditMode, setIsEditMode] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -671,6 +700,63 @@ export default function Home() {
     });
   };
 
+  // 드래그 앤 드롭 센서 설정
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // 루틴 순서 변경 핸들러
+  const handleRoutineDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = routineTemplates.findIndex((r) => r.id === active.id);
+    const newIndex = routineTemplates.findIndex((r) => r.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) {
+      return;
+    }
+
+    // 배열 순서 변경
+    const newRoutines = arrayMove(routineTemplates, oldIndex, newIndex);
+    
+    // sort_order 업데이트
+    const updatedRoutines = newRoutines.map((routine, index) => ({
+      ...routine,
+      sort_order: index,
+    }));
+
+    setRoutineTemplates(updatedRoutines);
+
+    // Supabase에 저장
+    if (supabase && userId) {
+      try {
+        const updates = updatedRoutines.map((routine) => ({
+          id: routine.id,
+          sort_order: routine.sort_order,
+        }));
+
+        for (const update of updates) {
+          await supabase
+            .from('routine_templates')
+            .update({ sort_order: update.sort_order })
+            .eq('id', update.id)
+            .eq('user_id', userId);
+        }
+
+        console.log('✅ 루틴 순서 저장 완료');
+      } catch (error) {
+        console.error('❌ 루틴 순서 저장 오류:', error);
+      }
+    }
+  };
+
   const handleCheckboxChange = (field: keyof DailyRecord) => {
     setFormData((prev) => ({
       ...prev,
@@ -680,13 +766,12 @@ export default function Home() {
 
   const openWeightModal = () => {
     const baseDateRaw = (formData?.date || selectedDate || '').toString();
-    const baseDate = baseDateRaw.includes('T')
-      ? baseDateRaw.split('T')[0]
-      : (baseDateRaw.includes(' ') ? baseDateRaw.split(' ')[0] : baseDateRaw);
+    // 체중 입력 모달을 열 때 항상 한국 시간 기준 오늘 날짜로 설정
+    const todayDate = getKoreaTodayDate();
     const current = typeof formData?.weight === 'number' ? formData.weight : null;
     setWeightInputModal({
       open: true,
-      dateStr: baseDate,
+      dateStr: todayDate,
       weightText: current != null ? current.toFixed(1) : '',
     });
   };
@@ -1187,7 +1272,7 @@ export default function Home() {
                 <div className="relative">
                   <input
                     type="date"
-                    value={weightInputModal.dateStr}
+                    value={weightInputModal.dateStr || getKoreaTodayDate()}
                     onChange={(e) =>
                       setWeightInputModal(prev => ({ ...prev, dateStr: e.target.value }))
                     }
@@ -1204,7 +1289,8 @@ export default function Home() {
                   />
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-900 dark:text-white font-medium whitespace-nowrap">
                     {(() => {
-                      const d = new Date(weightInputModal.dateStr);
+                      const dateStr = weightInputModal.dateStr || getKoreaTodayDate();
+                      const d = new Date(dateStr + 'T00:00:00');
                       const year = d.getFullYear();
                       const month = d.getMonth() + 1;
                       const day = d.getDate();
@@ -1811,60 +1897,49 @@ export default function Home() {
                   })()}
                 </div>
               </div>
-              {routineTemplates.map((routine, index) => (
-                <div key={routine.id}>
-                  <RoutineItem
-                    emoji={routine.emoji}
-                    label={routine.label}
-                    checked={isRoutineChecked(routine.id)}
-                    onChange={() => handleRoutineCheckChange(routine.id)}
-                    disabled={false}
-                    isLast={index === routineTemplates.length - 1}
-                    isExpanded={expandedRoutineId === routine.id}
-                    onExpandToggle={() => {
-                      const newExpandedId = expandedRoutineId === routine.id ? null : routine.id;
-                      setExpandedRoutineId(newExpandedId);
-                      // 아코디언을 펼칠 때 자동으로 수정 모드 활성화
-                      if (newExpandedId) {
-                        setEditModeRoutine(newExpandedId);
-                      }
-                    }}
-                    userId={userId}
-                    routineId={routine.id}
-                    routineTemplates={routineTemplates}
-                    editModeRoutine={editModeRoutine}
-                    setEditModeRoutine={setEditModeRoutine}
-                    routineType={routine.type || 'checkbox'}
-                    value={routineValues[routine.id] ?? null}
-                    onValueChange={(value) => {
-                      setRoutineValues(prev => ({
-                        ...prev,
-                        [routine.id]: value
-                      }));
-                    }}
-                    unit={routine.unit}
-                    syncTick={routineSyncTick}
-                    onSync={bumpRoutineSync}
-                  />
-                  {/* 확장된 루틴의 캘린더 표시 */}
-                  {expandedRoutineId === routine.id && (
-                    <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
-                      <RoutineCalendar
-                        userId={userId}
-                        routineId={routine.id}
-                        routineLabel={routine.label}
-                        routineEmoji={routine.emoji}
-                        routineTemplates={routineTemplates}
-                        isExpanded={true}
-                        editModeRoutine={editModeRoutine}
-                        setEditModeRoutine={setEditModeRoutine}
-                        syncTick={routineSyncTick}
-                        onSync={bumpRoutineSync}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleRoutineDragEnd}
+              >
+                <SortableContext
+                  items={routineTemplates.map((r) => r.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {routineTemplates.map((routine, index) => (
+                    <SortableRoutineItem
+                      key={routine.id}
+                      routine={routine}
+                      index={index}
+                      isLast={index === routineTemplates.length - 1}
+                      isChecked={isRoutineChecked(routine.id)}
+                      onCheckChange={() => handleRoutineCheckChange(routine.id)}
+                      isExpanded={expandedRoutineId === routine.id}
+                      onExpandToggle={() => {
+                        const newExpandedId = expandedRoutineId === routine.id ? null : routine.id;
+                        setExpandedRoutineId(newExpandedId);
+                        if (newExpandedId) {
+                          setEditModeRoutine(newExpandedId);
+                        }
+                      }}
+                      userId={userId}
+                      routineTemplates={routineTemplates}
+                      editModeRoutine={editModeRoutine}
+                      setEditModeRoutine={setEditModeRoutine}
+                      routineValue={routineValues[routine.id] ?? null}
+                      onValueChange={(value) => {
+                        setRoutineValues(prev => ({
+                          ...prev,
+                          [routine.id]: value
+                        }));
+                      }}
+                      syncTick={routineSyncTick}
+                      onSync={bumpRoutineSync}
+                      expandedRoutineId={expandedRoutineId}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
               {routineTemplates.length === 0 && (
                 <div className="text-center text-gray-400 dark:text-gray-500 py-4">
                   루틴을 추가해주세요
@@ -2208,7 +2283,7 @@ export default function Home() {
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
   progress, 
-  size = 36
+  size = 30
 }: { 
   progress: number; 
   size?: number;
@@ -2264,11 +2339,129 @@ function CircularProgressChart({
       </svg>
       {/* 달성률 텍스트 (중앙) */}
       <div 
-        className="absolute inset-0 flex items-center justify-center text-xs font-medium pointer-events-none"
-        style={{ color }}
+        className="absolute inset-0 flex items-center justify-center font-medium pointer-events-none"
+        style={{ color, fontSize: '10px' }}
       >
         {Math.round(progress)}%
       </div>
+    </div>
+  );
+}
+
+// Sortable Routine Item 래퍼 컴포넌트
+function SortableRoutineItem({
+  routine,
+  index,
+  isLast,
+  isChecked,
+  onCheckChange,
+  isExpanded,
+  onExpandToggle,
+  userId,
+  routineTemplates,
+  editModeRoutine,
+  setEditModeRoutine,
+  routineValue,
+  onValueChange,
+  syncTick,
+  onSync,
+  expandedRoutineId,
+}: {
+  routine: RoutineTemplate;
+  index: number;
+  isLast: boolean;
+  isChecked: boolean;
+  onCheckChange: () => void;
+  isExpanded: boolean;
+  onExpandToggle: () => void;
+  userId: string;
+  routineTemplates: RoutineTemplate[];
+  editModeRoutine: string | null;
+  setEditModeRoutine: (routineId: string | null) => void;
+  routineValue: number | null;
+  onValueChange: (value: number | null) => void;
+  syncTick: number;
+  onSync: () => void;
+  expandedRoutineId: string | null;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: routine.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div className="flex items-stretch gap-1">
+        {/* 드래그 핸들 */}
+        <div
+          {...attributes}
+          {...listeners}
+          className="flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          style={{ width: '24px', flexShrink: 0 }}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="6" cy="4" r="1.5" />
+            <circle cx="10" cy="4" r="1.5" />
+            <circle cx="6" cy="8" r="1.5" />
+            <circle cx="10" cy="8" r="1.5" />
+            <circle cx="6" cy="12" r="1.5" />
+            <circle cx="10" cy="12" r="1.5" />
+          </svg>
+        </div>
+        
+        {/* 루틴 아이템 */}
+        <div className="flex-1">
+          <RoutineItem
+            emoji={routine.emoji}
+            label={routine.label}
+            checked={isChecked}
+            onChange={onCheckChange}
+            disabled={false}
+            isLast={isLast}
+            isExpanded={isExpanded}
+            onExpandToggle={onExpandToggle}
+            userId={userId}
+            routineId={routine.id}
+            routineTemplates={routineTemplates}
+            editModeRoutine={editModeRoutine}
+            setEditModeRoutine={setEditModeRoutine}
+            routineType={routine.type || 'checkbox'}
+            value={routineValue}
+            onValueChange={onValueChange}
+            unit={routine.unit}
+            syncTick={syncTick}
+            onSync={onSync}
+          />
+        </div>
+      </div>
+      
+      {/* 확장된 루틴의 캘린더 표시 */}
+      {expandedRoutineId === routine.id && (
+        <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
+          <RoutineCalendar
+            userId={userId}
+            routineId={routine.id}
+            routineLabel={routine.label}
+            routineEmoji={routine.emoji}
+            routineTemplates={routineTemplates}
+            isExpanded={true}
+            editModeRoutine={editModeRoutine}
+            setEditModeRoutine={setEditModeRoutine}
+            syncTick={syncTick}
+            onSync={onSync}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -2807,14 +3000,14 @@ function RoutineItem({
           onClick={onExpandToggle}
       >
         {/* 원형 그래프 + 텍스트 영역 */}
-        <div className="flex items-center gap-3 flex-1">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="flex-shrink-0">
             <CircularProgressChart 
               progress={getMonthProgress(currentYear, currentMonth, routineId)} 
-              size={36}
+              size={30}
             />
           </div>
-          <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
+          <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'} truncate`} style={{ lineHeight: '22px' }}>
             {label}
           </span>
         </div>
@@ -2889,12 +3082,12 @@ function RoutineItem({
                       }}
                       className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
-                      style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
+                      style={{ width: '15px', height: '15px', minWidth: '15px', maxWidth: '15px', fontSize: '6px', padding: '1px', lineHeight: '1' }}
                     >
-                      <span className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} style={{ fontSize: isToday ? '12px' : '10px' }}>
+                      <span className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} style={{ fontSize: isToday ? '9px' : '8px' }}>
                         {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
                       </span>
-                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
+                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '5px' }}>{unit}</span>
                     </button>
                   );
                 }
@@ -2991,8 +3184,8 @@ function RoutineItem({
                         readOnly
                         className="cursor-pointer shrink-0 bg-transparent border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
                         style={{ 
-                          width: '20px', 
-                          height: '20px',
+                          width: '15px', 
+                          height: '15px',
                           accentColor: accentColor,
                           backgroundColor: 'transparent'
                         }}
