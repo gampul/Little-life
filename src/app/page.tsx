@@ -323,7 +323,7 @@ export default function Home() {
         }));
 
         console.log('✅ 이미지 업로드 완료:', uploadedUrls);
-        alert(`✅ ${successCount}개 이미지 업로드 완료!`);
+        alert(`${successCount}개 이미지 업로드 완료!`);
       } else if (errorCount > 0) {
         alert(`❌ 모든 이미지 업로드 실패 (${errorCount}개)`);
       }
@@ -700,9 +700,14 @@ export default function Home() {
     });
   };
 
-  // 드래그 앤 드롭 센서 설정
+  // 드래그 앤 드롭 센서 설정 (롱프레스 500ms)
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 500,        // 500ms 길게 누르기
+        tolerance: 5,      // 5px 이내 움직임 허용
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -902,7 +907,7 @@ export default function Home() {
         }));
       }
 
-      setMessage('✅ 체중이 저장되었습니다!');
+      setMessage('체중이 저장되었습니다!');
       loadAllRecords();
       setTimeout(() => setMessage(''), 2500);
     } catch (err: any) {
@@ -1035,7 +1040,7 @@ export default function Home() {
         console.log('⚠️ 저장할 루틴 체크 없음 (모두 체크 해제됨)');
       }
 
-      setMessage('✅ 저장되었습니다!');
+      setMessage('저장되었습니다!');
       setIsEditMode(false);
       setHasData(true);
       // 저장된 날짜로 selectedDate 업데이트 (상단 날짜 필드와 동기화)
@@ -1178,14 +1183,14 @@ export default function Home() {
             <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-3">
               <li>
                 NEXT_PUBLIC_SUPABASE_URL: {supabaseUrl ? (
-                  <span className="text-green-600">✅ 설정됨 ({supabaseUrl.substring(0, 30)}...)</span>
+                  <span className="text-green-600">설정됨 ({supabaseUrl.substring(0, 30)}...)</span>
                 ) : (
                   <span className="text-red-600">❌ 없음</span>
                 )}
               </li>
               <li>
                 NEXT_PUBLIC_SUPABASE_ANON_KEY: {supabaseAnonKey ? (
-                  <span className="text-green-600">✅ 설정됨 (길이: {supabaseAnonKey.length})</span>
+                  <span className="text-green-600">설정됨 (길이: {supabaseAnonKey.length})</span>
                 ) : (
                   <span className="text-red-600">❌ 없음</span>
                 )}
@@ -1906,35 +1911,35 @@ export default function Home() {
                   items={routineTemplates.map((r) => r.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {routineTemplates.map((routine, index) => (
+              {routineTemplates.map((routine, index) => (
                     <SortableRoutineItem
                       key={routine.id}
                       routine={routine}
                       index={index}
-                      isLast={index === routineTemplates.length - 1}
+                    isLast={index === routineTemplates.length - 1}
                       isChecked={isRoutineChecked(routine.id)}
                       onCheckChange={() => handleRoutineCheckChange(routine.id)}
-                      isExpanded={expandedRoutineId === routine.id}
-                      onExpandToggle={() => {
-                        const newExpandedId = expandedRoutineId === routine.id ? null : routine.id;
-                        setExpandedRoutineId(newExpandedId);
-                        if (newExpandedId) {
-                          setEditModeRoutine(newExpandedId);
-                        }
-                      }}
-                      userId={userId}
-                      routineTemplates={routineTemplates}
-                      editModeRoutine={editModeRoutine}
-                      setEditModeRoutine={setEditModeRoutine}
+                    isExpanded={expandedRoutineId === routine.id}
+                    onExpandToggle={() => {
+                      const newExpandedId = expandedRoutineId === routine.id ? null : routine.id;
+                      setExpandedRoutineId(newExpandedId);
+                      if (newExpandedId) {
+                        setEditModeRoutine(newExpandedId);
+                      }
+                    }}
+                    userId={userId}
+                    routineTemplates={routineTemplates}
+                    editModeRoutine={editModeRoutine}
+                    setEditModeRoutine={setEditModeRoutine}
                       routineValue={routineValues[routine.id] ?? null}
-                      onValueChange={(value) => {
-                        setRoutineValues(prev => ({
-                          ...prev,
-                          [routine.id]: value
-                        }));
-                      }}
-                      syncTick={routineSyncTick}
-                      onSync={bumpRoutineSync}
+                    onValueChange={(value) => {
+                      setRoutineValues(prev => ({
+                        ...prev,
+                        [routine.id]: value
+                      }));
+                    }}
+                    syncTick={routineSyncTick}
+                    onSync={bumpRoutineSync}
                       expandedRoutineId={expandedRoutineId}
                     />
                   ))}
@@ -2401,48 +2406,33 @@ function SortableRoutineItem({
 
   return (
     <div ref={setNodeRef} style={style}>
-      <div className="flex items-stretch gap-1">
-        {/* 드래그 핸들 */}
-        <div
-          {...attributes}
-          {...listeners}
-          className="flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          style={{ width: '24px', flexShrink: 0 }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <circle cx="6" cy="4" r="1.5" />
-            <circle cx="10" cy="4" r="1.5" />
-            <circle cx="6" cy="8" r="1.5" />
-            <circle cx="10" cy="8" r="1.5" />
-            <circle cx="6" cy="12" r="1.5" />
-            <circle cx="10" cy="12" r="1.5" />
-          </svg>
-        </div>
-        
-        {/* 루틴 아이템 */}
-        <div className="flex-1">
-          <RoutineItem
-            emoji={routine.emoji}
-            label={routine.label}
-            checked={isChecked}
-            onChange={onCheckChange}
-            disabled={false}
-            isLast={isLast}
-            isExpanded={isExpanded}
-            onExpandToggle={onExpandToggle}
-            userId={userId}
-            routineId={routine.id}
-            routineTemplates={routineTemplates}
-            editModeRoutine={editModeRoutine}
-            setEditModeRoutine={setEditModeRoutine}
-            routineType={routine.type || 'checkbox'}
-            value={routineValue}
-            onValueChange={onValueChange}
-            unit={routine.unit}
-            syncTick={syncTick}
-            onSync={onSync}
-          />
-        </div>
+      {/* 루틴 아이템 (드래그 핸들 제거, 전체 영역 롱프레스 드래그) */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={`${isDragging ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''}`}
+      >
+        <RoutineItem
+          emoji={routine.emoji}
+          label={routine.label}
+          checked={isChecked}
+          onChange={onCheckChange}
+          disabled={false}
+          isLast={isLast}
+          isExpanded={isExpanded}
+          onExpandToggle={onExpandToggle}
+          userId={userId}
+          routineId={routine.id}
+          routineTemplates={routineTemplates}
+          editModeRoutine={editModeRoutine}
+          setEditModeRoutine={setEditModeRoutine}
+          routineType={routine.type || 'checkbox'}
+          value={routineValue}
+          onValueChange={onValueChange}
+          unit={routine.unit}
+          syncTick={syncTick}
+          onSync={onSync}
+        />
       </div>
       
       {/* 확장된 루틴의 캘린더 표시 */}
@@ -2941,7 +2931,7 @@ function RoutineItem({
                 {numberInputModal.dateStr} 값 입력
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                {label} {unit ? `(${unit})` : ''}
+                {label.replace(/✅/g, '').trim()} {unit ? `(${unit})` : ''}
               </div>
             </div>
 
@@ -3000,24 +2990,24 @@ function RoutineItem({
           onClick={onExpandToggle}
       >
         {/* 원형 그래프 + 텍스트 영역 */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
           <div className="flex-shrink-0">
             <CircularProgressChart 
               progress={getMonthProgress(currentYear, currentMonth, routineId)} 
               size={30}
             />
           </div>
-          <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'} truncate`} style={{ lineHeight: '22px' }}>
-            {label}
+          <span className={`${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'} whitespace-nowrap overflow-visible`} style={{ fontSize: '13px', lineHeight: '18px' }}>
+            {emoji.replace(/✅/g, '').trim()} {label.replace(/✅/g, '').trim()}
           </span>
         </div>
         
         {/* 연속 일수 + 슬라이더 + 오늘 날짜 체크박스 */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {/* 스트릭 (체크박스 타입일 때만) */}
           {routineType === 'checkbox' && consecutiveDays > 0 && (
             <div
-              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
+              className={`px-1.5 py-0.5 text-[8px] font-medium rounded-full flex items-center ${
                 isHexColor 
                   ? '' 
                   : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
@@ -3025,7 +3015,10 @@ function RoutineItem({
               style={isHexColor ? {
                 backgroundColor: colorClasses.bgLight,
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-              } : {}}
+                height: '18px',
+              } : {
+                height: '18px',
+              }}
             >
               {consecutiveDays}일 연속
             </div>
@@ -3034,7 +3027,7 @@ function RoutineItem({
           {/* 연간 누적 (숫자 타입일 때) */}
           {routineType === 'number' && yearlyTotal > 0 && (
             <div
-              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
+              className={`px-1.5 py-0.5 text-[8px] font-medium rounded-full flex items-center ${
                 isHexColor 
                   ? '' 
                   : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
@@ -3042,7 +3035,10 @@ function RoutineItem({
               style={isHexColor ? {
                 backgroundColor: colorClasses.bgLight,
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-              } : {}}
+                height: '18px',
+              } : {
+                height: '18px',
+              }}
               title=""
             >
               {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}
@@ -3080,14 +3076,14 @@ function RoutineItem({
                           valueText: dayValue !== null ? dayValue.toFixed(1) : '0.0',
                         });
                       }}
-                      className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
+                      className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-visible"
                       title={`${dateStr} 값 입력`}
-                      style={{ width: '15px', height: '15px', minWidth: '15px', maxWidth: '15px', fontSize: '6px', padding: '1px', lineHeight: '1' }}
+                      style={{ width: '18px', height: '18px', minWidth: '18px', maxWidth: '18px', fontSize: '6px', padding: '2px 1px', lineHeight: '1' }}
                     >
-                      <span className={`font-bold ${isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} style={{ fontSize: isToday ? '9px' : '8px' }}>
-                        {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
+                      <span className={`font-bold ${dayValue !== null && dayValue > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`} style={{ fontSize: isToday ? '11px' : '10px' }}>
+                        {dayValue !== null ? (Number.isInteger(dayValue) ? dayValue.toString() : dayValue.toFixed(1)) : '0'}
                       </span>
-                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '5px' }}>{unit}</span>
+                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '8px' }}>{unit}</span>
                     </button>
                   );
                 }
@@ -3099,7 +3095,7 @@ function RoutineItem({
           
           {/* 최근 5일 체크박스 (체크박스 타입일 때) */}
           {routineType === 'checkbox' && (
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0">
               {(() => {
                 const today = new Date();
                 const checkboxes = [];
@@ -3184,8 +3180,8 @@ function RoutineItem({
                         readOnly
                         className="cursor-pointer shrink-0 bg-transparent border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
                         style={{ 
-                          width: '15px', 
-                          height: '15px',
+                          width: '18px', 
+                          height: '18px',
                           accentColor: accentColor,
                           backgroundColor: 'transparent'
                         }}
@@ -3227,7 +3223,7 @@ function MealCheckbox({
         className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
       />
       <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
-        {label}
+        {label.replace(/✅/g, '').trim()}
       </span>
     </label>
   );
@@ -3337,7 +3333,7 @@ function RoutineSettingModal({
         }
       }
 
-      alert('✅ 저장되었습니다!');
+      alert('저장되었습니다!');
       onClose();
     } catch (err: any) {
       console.error('=== 루틴 설정 저장 오류 ===');
@@ -4148,7 +4144,9 @@ function RoutineCalendar({
                           {dateValues[date] ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                               <span className="hover-date" style={{ fontSize: '6px', fontWeight: '400', color: 'rgba(156, 163, 175, 0.6)', display: 'none' }}>{day}</span>
-                              <span style={{ fontSize: '9px', fontWeight: '900', color: '#1F2937' }}>{dateValues[date]}</span>
+                              <span style={{ fontSize: '11px', fontWeight: '900', color: '#EF4444' }}>
+                                {Number.isInteger(dateValues[date]) ? dateValues[date] : dateValues[date].toFixed(1)}
+                              </span>
                             </div>
                           ) : (
                             <span style={{ fontSize: '8px' }}>{day}</span>
@@ -4406,7 +4404,9 @@ function RoutineCalendar({
                           {dateValues[date] != null ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                               <span className="hover-date-monthly" style={{ fontSize: '7px', fontWeight: '400', color: 'rgba(156, 163, 175, 0.6)', display: 'none' }}>{day}</span>
-                              <span style={{ fontSize: '9px', fontWeight: '900', color: '#1F2937' }}>{dateValues[date]}</span>
+                              <span style={{ fontSize: '11px', fontWeight: '900', color: '#EF4444' }}>
+                                {Number.isInteger(dateValues[date]) ? dateValues[date] : dateValues[date].toFixed(1)}
+                              </span>
                             </div>
                           ) : (
                             <span style={{ fontSize: '10px' }}>{day}</span>
