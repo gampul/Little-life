@@ -7,23 +7,6 @@ import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -70,18 +53,6 @@ interface WeatherData {
   city: string;
 }
 
-// 한국 시간(KST, UTC+9) 기준 오늘 날짜를 YYYY-MM-DD 형식으로 반환
-const getKoreaTodayDate = (): string => {
-  const now = new Date();
-  // 한국 시간(UTC+9) 계산
-  const koreaTime = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-  // UTC로 변환된 날짜를 YYYY-MM-DD 형식으로 반환
-  const year = koreaTime.getUTCFullYear();
-  const month = String(koreaTime.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(koreaTime.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -116,7 +87,7 @@ export default function Home() {
   }, [supabase]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    getKoreaTodayDate()
+    new Date().toISOString().split('T')[0]
   );
   const [isEditMode, setIsEditMode] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -147,10 +118,18 @@ export default function Home() {
   // 식사 기록 목록
   const [mealRecords, setMealRecords] = useState<DailyRecord[]>([]);
   const [expandedMealMonth, setExpandedMealMonth] = useState<string | null>(null);
+  const [mealRecordsPage, setMealRecordsPage] = useState(1);
   
   // 그래프에서 선택된 날짜의 식사 메모
   const [selectedChartDate, setSelectedChartDate] = useState<string | null>(null);
   const [selectedDateMealMemo, setSelectedDateMealMemo] = useState<string | null>(null);
+  
+  // 차트 팝업 편집 상태
+  const [chartPopupWeight, setChartPopupWeight] = useState<string>('');
+  const [chartPopupMemo, setChartPopupMemo] = useState<string>('');
+  const [chartPopupImages, setChartPopupImages] = useState<string[]>([]);
+  const [chartPopupSaving, setChartPopupSaving] = useState(false);
+  const chartPopupFileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<DailyRecord>({
     date: selectedDate,
@@ -323,7 +302,7 @@ export default function Home() {
         }));
 
         console.log('✅ 이미지 업로드 완료:', uploadedUrls);
-        alert(`${successCount}개 이미지 업로드 완료!`);
+        alert(`✅ ${successCount}개 이미지 업로드 완료!`);
       } else if (errorCount > 0) {
         alert(`❌ 모든 이미지 업로드 실패 (${errorCount}개)`);
       }
@@ -700,68 +679,6 @@ export default function Home() {
     });
   };
 
-  // 드래그 앤 드롭 센서 설정 (롱프레스 500ms)
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        delay: 500,        // 500ms 길게 누르기
-        tolerance: 5,      // 5px 이내 움직임 허용
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  // 루틴 순서 변경 핸들러
-  const handleRoutineDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-
-    if (!over || active.id === over.id) {
-      return;
-    }
-
-    const oldIndex = routineTemplates.findIndex((r) => r.id === active.id);
-    const newIndex = routineTemplates.findIndex((r) => r.id === over.id);
-
-    if (oldIndex === -1 || newIndex === -1) {
-      return;
-    }
-
-    // 배열 순서 변경
-    const newRoutines = arrayMove(routineTemplates, oldIndex, newIndex);
-    
-    // sort_order 업데이트
-    const updatedRoutines = newRoutines.map((routine, index) => ({
-      ...routine,
-      sort_order: index,
-    }));
-
-    setRoutineTemplates(updatedRoutines);
-
-    // Supabase에 저장
-    if (supabase && userId) {
-      try {
-        const updates = updatedRoutines.map((routine) => ({
-          id: routine.id,
-          sort_order: routine.sort_order,
-        }));
-
-        for (const update of updates) {
-          await supabase
-            .from('routine_templates')
-            .update({ sort_order: update.sort_order })
-            .eq('id', update.id)
-            .eq('user_id', userId);
-        }
-
-        console.log('✅ 루틴 순서 저장 완료');
-      } catch (error) {
-        console.error('❌ 루틴 순서 저장 오류:', error);
-      }
-    }
-  };
-
   const handleCheckboxChange = (field: keyof DailyRecord) => {
     setFormData((prev) => ({
       ...prev,
@@ -771,12 +688,13 @@ export default function Home() {
 
   const openWeightModal = () => {
     const baseDateRaw = (formData?.date || selectedDate || '').toString();
-    // 체중 입력 모달을 열 때 항상 한국 시간 기준 오늘 날짜로 설정
-    const todayDate = getKoreaTodayDate();
+    const baseDate = baseDateRaw.includes('T')
+      ? baseDateRaw.split('T')[0]
+      : (baseDateRaw.includes(' ') ? baseDateRaw.split(' ')[0] : baseDateRaw);
     const current = typeof formData?.weight === 'number' ? formData.weight : null;
     setWeightInputModal({
       open: true,
-      dateStr: todayDate,
+      dateStr: baseDate,
       weightText: current != null ? current.toFixed(1) : '',
     });
   };
@@ -907,7 +825,7 @@ export default function Home() {
         }));
       }
 
-      setMessage('체중이 저장되었습니다!');
+      setMessage('✅ 체중이 저장되었습니다!');
       loadAllRecords();
       setTimeout(() => setMessage(''), 2500);
     } catch (err: any) {
@@ -1040,7 +958,7 @@ export default function Home() {
         console.log('⚠️ 저장할 루틴 체크 없음 (모두 체크 해제됨)');
       }
 
-      setMessage('저장되었습니다!');
+      setMessage('✅ 저장되었습니다!');
       setIsEditMode(false);
       setHasData(true);
       // 저장된 날짜로 selectedDate 업데이트 (상단 날짜 필드와 동기화)
@@ -1183,14 +1101,14 @@ export default function Home() {
             <ul className="list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-3">
               <li>
                 NEXT_PUBLIC_SUPABASE_URL: {supabaseUrl ? (
-                  <span className="text-green-600">설정됨 ({supabaseUrl.substring(0, 30)}...)</span>
+                  <span className="text-green-600">✅ 설정됨 ({supabaseUrl.substring(0, 30)}...)</span>
                 ) : (
                   <span className="text-red-600">❌ 없음</span>
                 )}
               </li>
               <li>
                 NEXT_PUBLIC_SUPABASE_ANON_KEY: {supabaseAnonKey ? (
-                  <span className="text-green-600">설정됨 (길이: {supabaseAnonKey.length})</span>
+                  <span className="text-green-600">✅ 설정됨 (길이: {supabaseAnonKey.length})</span>
                 ) : (
                   <span className="text-red-600">❌ 없음</span>
                 )}
@@ -1277,7 +1195,7 @@ export default function Home() {
                 <div className="relative">
                   <input
                     type="date"
-                    value={weightInputModal.dateStr || getKoreaTodayDate()}
+                    value={weightInputModal.dateStr}
                     onChange={(e) =>
                       setWeightInputModal(prev => ({ ...prev, dateStr: e.target.value }))
                     }
@@ -1294,8 +1212,7 @@ export default function Home() {
                   />
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-900 dark:text-white font-medium whitespace-nowrap">
                     {(() => {
-                      const dateStr = weightInputModal.dateStr || getKoreaTodayDate();
-                      const d = new Date(dateStr + 'T00:00:00');
+                      const d = new Date(weightInputModal.dateStr);
                       const year = d.getFullYear();
                       const month = d.getMonth() + 1;
                       const day = d.getDate();
@@ -1758,6 +1675,20 @@ export default function Home() {
                         console.log('🎯 차트 날짜 클릭:', date, '→ 메모:', mealMemo || '없음');
                         setSelectedChartDate(date);
                         setSelectedDateMealMemo(mealMemo);
+                        
+                        // 해당 날짜의 데이터 로드
+                        const record = allRecords.find(r => r.date === date);
+                        setChartPopupWeight(record?.weight != null ? record.weight.toString() : '');
+                        setChartPopupMemo(mealMemo || '');
+                        setChartPopupImages(record?.meal_images || []);
+                        
+                        // 팝업으로 자동 스크롤
+                        setTimeout(() => {
+                          const popup = document.getElementById('chart-edit-popup');
+                          if (popup) {
+                            popup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }
+                        }, 100);
                       }}
                     />
                   );
@@ -1771,87 +1702,352 @@ export default function Home() {
                 )}
               </div>
 
-              {/* 날짜별 체중 리스트 (차트 아래) */}
+              {/* 체중 기록 & 식사 기록 버튼 (병렬 배치) */}
               <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-3">
                 <button
                   onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
-                  className="w-full flex items-center justify-between mb-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg px-2 py-1 transition-colors"
+                  className={`w-full flex items-center justify-center py-2 rounded-lg transition-colors mb-2 ${
+                    isWeightListExpanded 
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' 
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-900 dark:text-white'
+                  }`}
                 >
-                  <div className="text-sm font-semibold text-gray-900 dark:text-white">📅 체중 기록</div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                      {allRecords.filter(r => r.weight != null).length}개
-                    </div>
-                    <svg
-                      className={`w-4 h-4 text-gray-500 dark:text-gray-400 transition-transform ${isWeightListExpanded ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
+                  <div className="text-sm font-semibold">📅 체중 기록</div>
                 </button>
                 
+                {/* 체중 기록 드롭다운 */}
                 {isWeightListExpanded && (
                   allRecords.filter(r => r.weight != null).length === 0 ? (
-                    <div className="text-xs text-gray-500 dark:text-gray-400">표시할 체중 기록이 없습니다.</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 py-2">표시할 체중 기록이 없습니다.</div>
                   ) : (
-                    <div className="max-h-60 overflow-auto space-y-1">
+                    <div className="max-h-80 overflow-auto space-y-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 border-b border-gray-200 dark:border-gray-700 mb-1">
+                        총 {allRecords.filter(r => r.weight != null).length}개 기록
+                      </div>
                       {[...allRecords]
                         .filter(r => r.weight != null)
                         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                        .map((r) => (
-                          <button
-                            key={r.date}
-                            onClick={() => setSelectedDate(r.date)}
-                            className="w-full flex items-center justify-between text-left rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700/40"
-                            title={`${r.date}로 이동`}
-                          >
-                            <span className="text-xs text-gray-700 dark:text-gray-200">{r.date}</span>
-                            <span className="text-xs font-bold text-gray-900 dark:text-white">{r.weight}kg</span>
-                          </button>
-                        ))}
+                        .map((r) => {
+                          const dateObj = new Date(r.date);
+                          const formattedDate = `${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`;
+                          const hasImages = r.meal_images && r.meal_images.length > 0;
+                          const hasMemo = r.meal_memo && r.meal_memo.trim() !== '';
+                          
+                          return (
+                            <div
+                              key={r.date}
+                              onClick={() => {
+                                // 클릭 시 편집 팝업 열기
+                                setSelectedChartDate(r.date);
+                                setChartPopupWeight(r.weight?.toString() || '');
+                                setChartPopupMemo(r.meal_memo || '');
+                                setChartPopupImages(r.meal_images || []);
+                                setTimeout(() => {
+                                  const popup = document.getElementById('chart-edit-popup');
+                                  if (popup) {
+                                    popup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  }
+                                }, 100);
+                              }}
+                              className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
+                            >
+                              {/* 날짜 & 체중 */}
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">{formattedDate}</span>
+                                <span className="text-sm font-bold text-red-500 dark:text-red-400">{r.weight}kg</span>
+                              </div>
+                              
+                              {/* 사진 썸네일 */}
+                              {hasImages && (
+                                <div className="flex gap-1 mb-2">
+                                  {r.meal_images!.slice(0, 4).map((url, idx) => (
+                                    <div key={idx} className="relative w-10 h-10 rounded overflow-hidden">
+                                      <img 
+                                        src={url} 
+                                        alt={`사진 ${idx + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      {idx === 3 && r.meal_images!.length > 4 && (
+                                        <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
+                                          <span className="text-white text-xs font-bold">+{r.meal_images!.length - 4}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              {/* 메모 */}
+                              {hasMemo && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{r.meal_memo}</p>
+                              )}
+                              
+                              {/* 편집 힌트 */}
+                              {!hasImages && !hasMemo && (
+                                <p className="text-xs text-gray-400 dark:text-gray-500 italic">클릭하여 메모/사진 추가</p>
+                              )}
+                            </div>
+                          );
+                        })}
                     </div>
                   )
                 )}
+
               </div>
               
-              {/* 선택된 날짜의 식사 메모 표시 */}
+              {/* 선택된 날짜 편집 팝업 */}
               {selectedChartDate && (
-                <div className="mt-4 pt-4 border-t-2 border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-base font-bold text-gray-900 dark:text-white">
-                      📅 {(() => {
-                        const date = new Date(selectedChartDate);
-                        return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
-                      })()}
-                    </span>
+                <div 
+                  id="chart-edit-popup"
+                  className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl border-2 border-blue-400 dark:border-blue-600 shadow-lg"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">✏️</span>
+                      <span className="text-lg font-bold text-gray-900 dark:text-white">
+                        {(() => {
+                          const date = new Date(selectedChartDate);
+                          return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+                        })()}
+                      </span>
+                    </div>
                     <button
                       onClick={() => {
                         setSelectedChartDate(null);
                         setSelectedDateMealMemo(null);
+                        setChartPopupWeight('');
+                        setChartPopupMemo('');
+                        setChartPopupImages([]);
                       }}
-                      className="text-lg text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white font-bold"
+                      className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
                       aria-label="닫기"
                     >
                       ✕
                     </button>
                   </div>
-                  {selectedDateMealMemo ? (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border-2 border-blue-300 dark:border-blue-700">
-                      <p className="text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2">🍽️ 식사 메모</p>
-                      <p className="text-sm text-gray-900 dark:text-white font-medium" style={{ lineHeight: '22px' }}>
-                        {selectedDateMealMemo}
-                      </p>
+                  
+                  {/* 몸무게 수정 */}
+                  <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">⚖️ 몸무게</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={chartPopupWeight}
+                        onChange={(e) => setChartPopupWeight(e.target.value)}
+                        placeholder="예: 75.5"
+                        className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                      />
+                      <span className="text-sm text-gray-600 dark:text-gray-400">kg</span>
                     </div>
-                  ) : (
-                    <div className="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 border-2 border-gray-300 dark:border-gray-600">
-                      <p className="text-base text-gray-600 dark:text-gray-300 italic text-center">
-                        이 날짜에는 식사 메모가 없습니다.
-                      </p>
-                    </div>
-                  )}
+                  </div>
+                  
+                  {/* 식사 메모 수정 */}
+                  <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">🍽️ 식사 메모</label>
+                    <textarea
+                      value={chartPopupMemo}
+                      onChange={(e) => setChartPopupMemo(e.target.value)}
+                      placeholder="식사 내용을 입력하세요..."
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                    />
+                  </div>
+                  
+                  {/* 사진 업로드 */}
+                  <div className="mb-4">
+                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">📷 사진</label>
+                    <input
+                      ref={chartPopupFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (!files || files.length === 0) {
+                          console.log('❌ 파일이 선택되지 않음');
+                          return;
+                        }
+                        if (!supabase) {
+                          alert('Supabase 연결이 안 되어 있습니다.');
+                          return;
+                        }
+                        if (!userId) {
+                          alert('로그인이 필요합니다.');
+                          return;
+                        }
+                        
+                        console.log('📤 사진 업로드 시작:', files.length, '개');
+                        const uploadedUrls: string[] = [];
+                        const errors: string[] = [];
+                        
+                        for (const file of Array.from(files)) {
+                          try {
+                            const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+                            const fileName = `${userId}/${selectedChartDate}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                            
+                            console.log('📁 업로드 중:', fileName);
+                            
+                            const { data: uploadData, error: uploadError } = await supabase.storage
+                              .from('meal-images')
+                              .upload(fileName, file, {
+                                cacheControl: '3600',
+                                upsert: false
+                              });
+                            
+                            if (uploadError) {
+                              console.error('❌ 업로드 오류:', uploadError);
+                              errors.push(`${file.name}: ${uploadError.message}`);
+                              continue;
+                            }
+                            
+                            console.log('✅ 업로드 성공:', uploadData);
+                            
+                            const { data: urlData } = supabase.storage
+                              .from('meal-images')
+                              .getPublicUrl(fileName);
+                            
+                            if (urlData?.publicUrl) {
+                              console.log('🔗 공개 URL:', urlData.publicUrl);
+                              uploadedUrls.push(urlData.publicUrl);
+                            }
+                          } catch (err) {
+                            console.error('❌ 파일 처리 오류:', err);
+                            errors.push(`${file.name}: 처리 오류`);
+                          }
+                        }
+                        
+                        if (uploadedUrls.length > 0) {
+                          setChartPopupImages(prev => [...prev, ...uploadedUrls]);
+                          console.log('✅ 총', uploadedUrls.length, '개 업로드 완료');
+                        }
+                        
+                        if (errors.length > 0) {
+                          alert(`일부 파일 업로드 실패:\n${errors.join('\n')}\n\nSupabase Storage에 'meal-images' 버킷이 있는지 확인하세요.`);
+                        }
+                        
+                        e.target.value = '';
+                      }}
+                    />
+                    <button
+                      onClick={() => chartPopupFileInputRef.current?.click()}
+                      className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <span>📷</span>
+                      <span>사진 추가</span>
+                    </button>
+                    
+                    {/* 업로드된 이미지 미리보기 */}
+                    {chartPopupImages.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {chartPopupImages.map((url, idx) => (
+                          <div key={idx} className="relative w-16 h-16">
+                            <img
+                              src={url}
+                              alt={`사진 ${idx + 1}`}
+                              className="w-full h-full object-cover rounded border border-gray-300 dark:border-gray-600"
+                            />
+                            <button
+                              onClick={() => setChartPopupImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* 저장 버튼 */}
+                  <button
+                    onClick={async () => {
+                      if (!supabase || !userId || !selectedChartDate) {
+                        console.log('❌ 저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
+                        return;
+                      }
+                      
+                      setChartPopupSaving(true);
+                      try {
+                        const weightValue = chartPopupWeight ? parseFloat(chartPopupWeight) : null;
+                        console.log('💾 저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
+                        
+                        // 기존 레코드 확인 (maybeSingle 사용으로 에러 방지)
+                        const { data: existing, error: selectError } = await supabase
+                          .from('daily_records')
+                          .select('id')
+                          .eq('user_id', userId)
+                          .eq('date', selectedChartDate)
+                          .maybeSingle();
+                        
+                        if (selectError) {
+                          console.error('❌ 레코드 조회 오류:', selectError);
+                        }
+                        
+                        if (existing) {
+                          console.log('📝 기존 레코드 업데이트:', existing.id);
+                          // 업데이트
+                          const { error: updateError } = await supabase
+                            .from('daily_records')
+                            .update({
+                              weight: weightValue,
+                              meal_memo: chartPopupMemo || null,
+                              meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
+                              updated_at: new Date().toISOString(),
+                            })
+                            .eq('id', existing.id);
+                          
+                          if (updateError) {
+                            console.error('❌ 업데이트 오류:', updateError);
+                            throw updateError;
+                          }
+                        } else {
+                          console.log('➕ 새 레코드 생성');
+                          // 새로 생성
+                          const { error: insertError } = await supabase
+                            .from('daily_records')
+                            .insert({
+                              user_id: userId,
+                              date: selectedChartDate,
+                              weight: weightValue,
+                              meal_memo: chartPopupMemo || null,
+                              meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
+                            });
+                          
+                          if (insertError) {
+                            console.error('❌ 삽입 오류:', insertError);
+                            throw insertError;
+                          }
+                        }
+                        
+                        console.log('✅ 저장 완료');
+                        
+                        // 데이터 새로고침
+                        loadAllRecords();
+                        loadMealRecords();
+                        
+                        // 팝업 닫기
+                        setSelectedChartDate(null);
+                        setSelectedDateMealMemo(null);
+                        setChartPopupWeight('');
+                        setChartPopupMemo('');
+                        setChartPopupImages([]);
+                        
+                        setMessage('✅ 저장되었습니다!');
+                        setTimeout(() => setMessage(''), 2500);
+                      } catch (err) {
+                        console.error('저장 오류:', err);
+                        alert('저장 중 오류가 발생했습니다: ' + (err as any)?.message);
+                      } finally {
+                        setChartPopupSaving(false);
+                      }
+                    }}
+                    disabled={chartPopupSaving}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
+                  >
+                    {chartPopupSaving ? '저장 중...' : '💾 저장'}
+                  </button>
                 </div>
               )}
             </div>
@@ -1902,49 +2098,60 @@ export default function Home() {
                   })()}
                 </div>
               </div>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleRoutineDragEnd}
-              >
-                <SortableContext
-                  items={routineTemplates.map((r) => r.id)}
-                  strategy={verticalListSortingStrategy}
-                >
               {routineTemplates.map((routine, index) => (
-                    <SortableRoutineItem
-                      key={routine.id}
-                      routine={routine}
-                      index={index}
+                <div key={routine.id}>
+                  <RoutineItem
+                    emoji={routine.emoji}
+                    label={routine.label}
+                    checked={isRoutineChecked(routine.id)}
+                    onChange={() => handleRoutineCheckChange(routine.id)}
+                    disabled={false}
                     isLast={index === routineTemplates.length - 1}
-                      isChecked={isRoutineChecked(routine.id)}
-                      onCheckChange={() => handleRoutineCheckChange(routine.id)}
                     isExpanded={expandedRoutineId === routine.id}
                     onExpandToggle={() => {
                       const newExpandedId = expandedRoutineId === routine.id ? null : routine.id;
                       setExpandedRoutineId(newExpandedId);
+                      // 아코디언을 펼칠 때 자동으로 수정 모드 활성화
                       if (newExpandedId) {
                         setEditModeRoutine(newExpandedId);
                       }
                     }}
                     userId={userId}
+                    routineId={routine.id}
                     routineTemplates={routineTemplates}
                     editModeRoutine={editModeRoutine}
                     setEditModeRoutine={setEditModeRoutine}
-                      routineValue={routineValues[routine.id] ?? null}
+                    routineType={routine.type || 'checkbox'}
+                    value={routineValues[routine.id] ?? null}
                     onValueChange={(value) => {
                       setRoutineValues(prev => ({
                         ...prev,
                         [routine.id]: value
                       }));
                     }}
+                    unit={routine.unit}
                     syncTick={routineSyncTick}
                     onSync={bumpRoutineSync}
-                      expandedRoutineId={expandedRoutineId}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
+                  />
+                  {/* 확장된 루틴의 캘린더 표시 */}
+                  {expandedRoutineId === routine.id && (
+                    <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
+                      <RoutineCalendar
+                        userId={userId}
+                        routineId={routine.id}
+                        routineLabel={routine.label}
+                        routineEmoji={routine.emoji}
+                        routineTemplates={routineTemplates}
+                        isExpanded={true}
+                        editModeRoutine={editModeRoutine}
+                        setEditModeRoutine={setEditModeRoutine}
+                        syncTick={routineSyncTick}
+                        onSync={bumpRoutineSync}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
               {routineTemplates.length === 0 && (
                 <div className="text-center text-gray-400 dark:text-gray-500 py-4">
                   루틴을 추가해주세요
@@ -1952,8 +2159,8 @@ export default function Home() {
               )}
             </div>
 
-            {/* 식사 기록 */}
-            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            {/* 식사 기록 섹션 삭제됨 - 체중 기록에서 메모/사진 관리 */}
+            <div className="hidden">
               <div className="flex items-center gap-3 mb-4">
                 <h3 
                   className="text-lg font-semibold text-gray-900 dark:text-white shrink-0 flex items-center gap-2 cursor-pointer"
@@ -2120,154 +2327,143 @@ export default function Home() {
                 )}
               </div>
               
-              {/* 날짜별 식사 기록 목록 - 월별 아코디언 */}
+              {/* 날짜별 식사 기록 목록 - 일별 리스트 + 페이지네이션 */}
               {mealRecords.length > 0 && (() => {
-                // 월별로 그룹화
-                const recordsByMonth = mealRecords.reduce((acc, record) => {
-                  const recordDate = new Date(record.date);
-                  const monthKey = `${recordDate.getFullYear()}-${String(recordDate.getMonth() + 1).padStart(2, '0')}`;
-                  if (!acc[monthKey]) {
-                    acc[monthKey] = [];
-                  }
-                  acc[monthKey].push(record);
-                  return acc;
-                }, {} as Record<string, DailyRecord[]>);
-
-                // 월별 키를 최신순으로 정렬
-                const sortedMonths = Object.keys(recordsByMonth).sort((a, b) => b.localeCompare(a));
+                // 최신순으로 정렬
+                const sortedRecords = [...mealRecords].sort((a, b) => 
+                  new Date(b.date).getTime() - new Date(a.date).getTime()
+                );
+                
+                // 페이지네이션
+                const itemsPerPage = 10;
+                const totalPages = Math.ceil(sortedRecords.length / itemsPerPage);
+                const startIndex = (mealRecordsPage - 1) * itemsPerPage;
+                const paginatedRecords = sortedRecords.slice(startIndex, startIndex + itemsPerPage);
 
                 return (
                   <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
-                      📅 식사 기록
-                    </h4>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-base font-semibold text-gray-900 dark:text-white">
+                        📅 식사 기록
+                      </h4>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        총 {sortedRecords.length}개
+                      </span>
+                    </div>
+                    
+                    {/* 일별 기록 리스트 */}
                     <div className="space-y-2">
-                      {sortedMonths.map((monthKey) => {
-                        const [year, month] = monthKey.split('-');
-                        const monthRecords = recordsByMonth[monthKey];
-                        const isExpanded = expandedMealMonth === monthKey;
+                      {paginatedRecords.map((record) => {
+                        const recordDate = new Date(record.date);
+                        const formattedDate = `${recordDate.getFullYear()}년 ${recordDate.getMonth() + 1}월 ${recordDate.getDate()}일`;
+                        const meals = [];
+                        if (record.meal_breakfast) meals.push('아침');
+                        if (record.meal_lunch) meals.push('점심');
+                        if (record.meal_dinner) meals.push('저녁');
                         
                         return (
-                          <div key={monthKey} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                            {/* 월별 헤더 */}
-                            <button
-                              onClick={() => setExpandedMealMonth(isExpanded ? null : monthKey)}
-                              className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
-                            >
+                          <div
+                            key={record.id}
+                            className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
+                            onClick={async () => {
+                              console.log('📋 기록 클릭:', record.date);
+                              await loadDailyRecord(record.date);
+                              await loadRoutineChecks(record.date);
+                              setSelectedDate(record.date);
+                              setIsEditMode(true);
+                              window.scrollTo({ top: 0, behavior: 'smooth' });
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                {formattedDate}
+                              </span>
                               <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                                  {year}년 {parseInt(month)}월
-                                </span>
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
-                                  ({monthRecords.length}개)
-                                </span>
+                                {meals.length > 0 && (
+                                  <div className="flex gap-1.5">
+                                    {meals.map((meal, idx) => (
+                                      <span
+                                        key={idx}
+                                        className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
+                                      >
+                                        {meal}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                                <button 
+                                  className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    console.log('✏️ 수정 아이콘 클릭:', record.date);
+                                    await loadDailyRecord(record.date);
+                                    await loadRoutineChecks(record.date);
+                                    setSelectedDate(record.date);
+                                    setIsEditMode(true);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }}
+                                  title="수정하기"
+                                  aria-label="수정하기"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
                               </div>
-                              <svg
-                                className={`w-5 h-5 text-gray-500 dark:text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </button>
-
-                            {/* 월별 기록 목록 */}
-                            {isExpanded && (
-                              <div className="p-3 space-y-2 bg-white dark:bg-gray-900">
-                                {monthRecords.map((record) => {
-                                  const recordDate = new Date(record.date);
-                                  const formattedDate = `${recordDate.getMonth() + 1}월 ${recordDate.getDate()}일`;
-                                  const meals = [];
-                                  if (record.meal_breakfast) meals.push('아침');
-                                  if (record.meal_lunch) meals.push('점심');
-                                  if (record.meal_dinner) meals.push('저녁');
-                                  
-                                  return (
-                                    <div
-                                      key={record.id}
-                                      className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
-                                      onClick={async () => {
-                                        console.log('📋 기록 클릭:', record.date);
-                                        await loadDailyRecord(record.date);
-                                        await loadRoutineChecks(record.date);
-                                        setSelectedDate(record.date);
-                                        setIsEditMode(true);
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                      }}
-                                    >
-                                      <div className="flex items-center justify-between mb-2">
-                                        <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                          {formattedDate}
+                            </div>
+                            {record.meal_memo && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">
+                                {record.meal_memo}
+                              </p>
+                            )}
+                            {/* 이미지 미리보기 (최대 3개) */}
+                            {record.meal_images && record.meal_images.length > 0 && (
+                              <div className="flex gap-2 mt-2">
+                                {record.meal_images.slice(0, 3).map((imageUrl, idx) => (
+                                  <div key={idx} className="relative w-16 h-16 flex-shrink-0">
+                                    <img
+                                      src={imageUrl}
+                                      alt={`식사 사진 ${idx + 1}`}
+                                      className="w-full h-full object-cover rounded border border-gray-300 dark:border-gray-600"
+                                    />
+                                    {idx === 2 && record.meal_images.length > 3 && (
+                                      <div className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center">
+                                        <span className="text-white text-xs font-medium">
+                                          +{record.meal_images.length - 3}
                                         </span>
-                                        <div className="flex items-center gap-2">
-                                          {meals.length > 0 && (
-                                            <div className="flex gap-1.5">
-                                              {meals.map((meal, idx) => (
-                                                <span
-                                                  key={idx}
-                                                  className="px-2 py-0.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded"
-                                                >
-                                                  {meal}
-                                                </span>
-                                              ))}
-                                            </div>
-                                          )}
-                                          <button 
-                                            className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
-                                            onClick={async (e) => {
-                                              e.stopPropagation();
-                                              console.log('✏️ 수정 아이콘 클릭:', record.date);
-                                              await loadDailyRecord(record.date);
-                                              await loadRoutineChecks(record.date);
-                                              setSelectedDate(record.date);
-                                              setIsEditMode(true);
-                                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                                            }}
-                                            title="수정하기"
-                                            aria-label="수정하기"
-                                          >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                          </button>
-                                        </div>
                                       </div>
-                                      {record.meal_memo && (
-                                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">
-                                          {record.meal_memo}
-                                        </p>
-                                      )}
-                                      {/* 이미지 미리보기 (최대 3개) */}
-                                      {record.meal_images && record.meal_images.length > 0 && (
-                                        <div className="flex gap-2 mt-2">
-                                          {record.meal_images.slice(0, 3).map((imageUrl, idx) => (
-                                            <div key={idx} className="relative w-16 h-16 flex-shrink-0">
-                                              <img
-                                                src={imageUrl}
-                                                alt={`식사 사진 ${idx + 1}`}
-                                                className="w-full h-full object-cover rounded border border-gray-300 dark:border-gray-600"
-                                              />
-                                              {idx === 2 && record.meal_images.length > 3 && (
-                                                <div className="absolute inset-0 bg-black bg-opacity-50 rounded flex items-center justify-center">
-                                                  <span className="text-white text-xs font-medium">
-                                                    +{record.meal_images.length - 3}
-                                                  </span>
-                                                </div>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             )}
                           </div>
                         );
                       })}
                     </div>
+                    
+                    {/* 페이지네이션 */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-center gap-2 mt-4">
+                        <button
+                          onClick={() => setMealRecordsPage(prev => Math.max(1, prev - 1))}
+                          disabled={mealRecordsPage === 1}
+                          className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        >
+                          ◀ 이전
+                        </button>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {mealRecordsPage} / {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setMealRecordsPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={mealRecordsPage === totalPages}
+                          className="px-3 py-1.5 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        >
+                          다음 ▶
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2288,7 +2484,7 @@ export default function Home() {
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
   progress, 
-  size = 30
+  size = 36
 }: { 
   progress: number; 
   size?: number;
@@ -2344,114 +2540,11 @@ function CircularProgressChart({
       </svg>
       {/* 달성률 텍스트 (중앙) */}
       <div 
-        className="absolute inset-0 flex items-center justify-center font-medium pointer-events-none"
-        style={{ color, fontSize: '10px' }}
+        className="absolute inset-0 flex items-center justify-center text-xs font-medium pointer-events-none"
+        style={{ color }}
       >
         {Math.round(progress)}%
       </div>
-    </div>
-  );
-}
-
-// Sortable Routine Item 래퍼 컴포넌트
-function SortableRoutineItem({
-  routine,
-  index,
-  isLast,
-  isChecked,
-  onCheckChange,
-  isExpanded,
-  onExpandToggle,
-  userId,
-  routineTemplates,
-  editModeRoutine,
-  setEditModeRoutine,
-  routineValue,
-  onValueChange,
-  syncTick,
-  onSync,
-  expandedRoutineId,
-}: {
-  routine: RoutineTemplate;
-  index: number;
-  isLast: boolean;
-  isChecked: boolean;
-  onCheckChange: () => void;
-  isExpanded: boolean;
-  onExpandToggle: () => void;
-  userId: string;
-  routineTemplates: RoutineTemplate[];
-  editModeRoutine: string | null;
-  setEditModeRoutine: (routineId: string | null) => void;
-  routineValue: number | null;
-  onValueChange: (value: number | null) => void;
-  syncTick: number;
-  onSync: () => void;
-  expandedRoutineId: string | null;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: routine.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      {/* 루틴 아이템 (드래그 핸들 제거, 전체 영역 롱프레스 드래그) */}
-      <div
-        {...attributes}
-        {...listeners}
-        className={`${isDragging ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20' : ''}`}
-      >
-        <RoutineItem
-          emoji={routine.emoji}
-          label={routine.label}
-          checked={isChecked}
-          onChange={onCheckChange}
-          disabled={false}
-          isLast={isLast}
-          isExpanded={isExpanded}
-          onExpandToggle={onExpandToggle}
-          userId={userId}
-          routineId={routine.id}
-          routineTemplates={routineTemplates}
-          editModeRoutine={editModeRoutine}
-          setEditModeRoutine={setEditModeRoutine}
-          routineType={routine.type || 'checkbox'}
-          value={routineValue}
-          onValueChange={onValueChange}
-          unit={routine.unit}
-          syncTick={syncTick}
-          onSync={onSync}
-        />
-      </div>
-      
-      {/* 확장된 루틴의 캘린더 표시 */}
-      {expandedRoutineId === routine.id && (
-        <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
-          <RoutineCalendar
-            userId={userId}
-            routineId={routine.id}
-            routineLabel={routine.label}
-            routineEmoji={routine.emoji}
-            routineTemplates={routineTemplates}
-            isExpanded={true}
-            editModeRoutine={editModeRoutine}
-            setEditModeRoutine={setEditModeRoutine}
-            syncTick={syncTick}
-            onSync={onSync}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -2931,7 +3024,7 @@ function RoutineItem({
                 {numberInputModal.dateStr} 값 입력
               </div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                {label.replace(/✅/g, '').trim()} {unit ? `(${unit})` : ''}
+                {label} {unit ? `(${unit})` : ''}
               </div>
             </div>
 
@@ -2990,24 +3083,24 @@ function RoutineItem({
           onClick={onExpandToggle}
       >
         {/* 원형 그래프 + 텍스트 영역 */}
-        <div className="flex items-center gap-1 flex-1 min-w-0">
+        <div className="flex items-center gap-3 flex-1">
           <div className="flex-shrink-0">
             <CircularProgressChart 
               progress={getMonthProgress(currentYear, currentMonth, routineId)} 
-              size={30}
+              size={36}
             />
           </div>
-          <span className={`${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'} whitespace-nowrap overflow-visible`} style={{ fontSize: '13px', lineHeight: '18px' }}>
-            {emoji.replace(/✅/g, '').trim()} {label.replace(/✅/g, '').trim()}
+          <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
+            {label}
           </span>
         </div>
         
         {/* 연속 일수 + 슬라이더 + 오늘 날짜 체크박스 */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {/* 스트릭 (체크박스 타입일 때만) */}
           {routineType === 'checkbox' && consecutiveDays > 0 && (
             <div
-              className={`px-1.5 py-0.5 text-[8px] font-medium rounded-full flex items-center ${
+              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
                 isHexColor 
                   ? '' 
                   : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
@@ -3015,10 +3108,7 @@ function RoutineItem({
               style={isHexColor ? {
                 backgroundColor: colorClasses.bgLight,
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-                height: '18px',
-              } : {
-                height: '18px',
-              }}
+              } : {}}
             >
               {consecutiveDays}일 연속
             </div>
@@ -3027,7 +3117,7 @@ function RoutineItem({
           {/* 연간 누적 (숫자 타입일 때) */}
           {routineType === 'number' && yearlyTotal > 0 && (
             <div
-              className={`px-1.5 py-0.5 text-[8px] font-medium rounded-full flex items-center ${
+              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
                 isHexColor 
                   ? '' 
                   : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
@@ -3035,10 +3125,7 @@ function RoutineItem({
               style={isHexColor ? {
                 backgroundColor: colorClasses.bgLight,
                 color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-                height: '18px',
-              } : {
-                height: '18px',
-              }}
+              } : {}}
               title=""
             >
               {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}
@@ -3076,14 +3163,14 @@ function RoutineItem({
                           valueText: dayValue !== null ? dayValue.toFixed(1) : '0.0',
                         });
                       }}
-                      className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-visible"
+                      className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
-                      style={{ width: '18px', height: '18px', minWidth: '18px', maxWidth: '18px', fontSize: '6px', padding: '2px 1px', lineHeight: '1' }}
+                      style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
-                      <span className={`font-bold ${dayValue !== null && dayValue > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`} style={{ fontSize: isToday ? '11px' : '10px' }}>
-                        {dayValue !== null ? (Number.isInteger(dayValue) ? dayValue.toString() : dayValue.toFixed(1)) : '0'}
+                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '10px' }}>
+                        {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
                       </span>
-                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '8px' }}>{unit}</span>
+                      <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
                     </button>
                   );
                 }
@@ -3095,7 +3182,7 @@ function RoutineItem({
           
           {/* 최근 5일 체크박스 (체크박스 타입일 때) */}
           {routineType === 'checkbox' && (
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               {(() => {
                 const today = new Date();
                 const checkboxes = [];
@@ -3163,8 +3250,6 @@ function RoutineItem({
                   const dateStr = `${koreaTime.getUTCFullYear()}-${String(koreaTime.getUTCMonth() + 1).padStart(2, '0')}-${String(koreaTime.getUTCDate()).padStart(2, '0')}`;
                   const isChecked = checkedDates[dateStr]?.has(routineId) || false;
                   const isToday = i === 0;
-                  // 과거 날짜이고 체크 안됨: 회색, 나머지: 파란색
-                  const accentColor = (!isToday && !isChecked) ? '#9ca3af' : '#3b82f6'; // gray-400 or blue-500
                   
                   checkboxes.push(
                     <div 
@@ -3178,13 +3263,8 @@ function RoutineItem({
                         type="checkbox"
                         checked={isChecked}
                         readOnly
-                        className="cursor-pointer shrink-0 bg-transparent border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                        style={{ 
-                          width: '18px', 
-                          height: '18px',
-                          accentColor: accentColor,
-                          backgroundColor: 'transparent'
-                        }}
+                        className="cursor-pointer shrink-0 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                        style={{ width: '20px', height: '20px' }}
                       />
                     </div>
                   );
@@ -3223,7 +3303,7 @@ function MealCheckbox({
         className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
       />
       <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
-        {label.replace(/✅/g, '').trim()}
+        {label}
       </span>
     </label>
   );
@@ -3333,7 +3413,7 @@ function RoutineSettingModal({
         }
       }
 
-      alert('저장되었습니다!');
+      alert('✅ 저장되었습니다!');
       onClose();
     } catch (err: any) {
       console.error('=== 루틴 설정 저장 오류 ===');
@@ -4144,9 +4224,7 @@ function RoutineCalendar({
                           {dateValues[date] ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                               <span className="hover-date" style={{ fontSize: '6px', fontWeight: '400', color: 'rgba(156, 163, 175, 0.6)', display: 'none' }}>{day}</span>
-                              <span style={{ fontSize: '11px', fontWeight: '900', color: '#EF4444' }}>
-                                {Number.isInteger(dateValues[date]) ? dateValues[date] : dateValues[date].toFixed(1)}
-                              </span>
+                              <span style={{ fontSize: '9px', fontWeight: '900', color: '#1F2937' }}>{dateValues[date]}</span>
                             </div>
                           ) : (
                             <span style={{ fontSize: '8px' }}>{day}</span>
@@ -4404,9 +4482,7 @@ function RoutineCalendar({
                           {dateValues[date] != null ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
                               <span className="hover-date-monthly" style={{ fontSize: '7px', fontWeight: '400', color: 'rgba(156, 163, 175, 0.6)', display: 'none' }}>{day}</span>
-                              <span style={{ fontSize: '11px', fontWeight: '900', color: '#EF4444' }}>
-                                {Number.isInteger(dateValues[date]) ? dateValues[date] : dateValues[date].toFixed(1)}
-                              </span>
+                              <span style={{ fontSize: '9px', fontWeight: '900', color: '#1F2937' }}>{dateValues[date]}</span>
                             </div>
                           ) : (
                             <span style={{ fontSize: '10px' }}>{day}</span>

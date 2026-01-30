@@ -19,6 +19,7 @@ interface DailyRecord {
   meal_lunch: boolean;
   meal_dinner: boolean;
   meal_memo: string;
+  meal_images?: string[];
   daily_memo: string;
 }
 
@@ -75,20 +76,40 @@ const CustomTooltip = ({
     <div 
       className="bg-gray-900 dark:bg-gray-800 text-white rounded-xl shadow-2xl border-2 border-gray-700"
       style={{ 
-        padding: '12px 16px',
-        minWidth: '200px',
-        maxWidth: '320px'
+        padding: '14px 18px',
+        minWidth: '180px',
+        maxWidth: '280px'
       }}
     >
-      <p className="font-bold text-sm mb-2 text-gray-200">{formattedDate}</p>
-      <p className="text-lg font-bold text-red-400 mb-2">🏋️ {weight} kg</p>
-      {record?.meal_memo && record.meal_memo.trim() !== '' && (
-        <div className="mt-2 pt-2 border-t border-gray-700">
-          <p className="text-xs text-gray-400 mb-1">🍽️ 식사 메모</p>
-          <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap break-words">
-            {record.meal_memo}
-          </p>
+      {/* 날짜 & 체중 */}
+      <p className="font-bold text-sm text-gray-300 mb-1">{formattedDate}</p>
+      <p className="font-bold text-red-400" style={{ fontSize: '16px' }}>{weight} kg</p>
+      
+      {/* 사진 썸네일 (2배 크기) */}
+      {record?.meal_images && record.meal_images.length > 0 && (
+        <div className="mt-3 flex gap-2 flex-wrap">
+          {record.meal_images.slice(0, 2).map((url, idx) => (
+            <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-600">
+              <img 
+                src={url} 
+                alt=""
+                className="w-full h-full object-cover"
+              />
+              {idx === 1 && record.meal_images && record.meal_images.length > 2 && (
+                <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
+                  <span className="text-white text-sm font-bold">+{record.meal_images.length - 2}</span>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
+      )}
+      
+      {/* 메모 텍스트만 표시 */}
+      {record?.meal_memo && record.meal_memo.trim() !== '' && (
+        <p className="mt-3 text-sm text-gray-300 leading-relaxed line-clamp-2">
+          {record.meal_memo}
+        </p>
       )}
     </div>
   );
@@ -100,11 +121,52 @@ export default function WeightChart({
   allRecords,
   onDateClick,
 }: WeightChartProps) {
+  // 클릭한 날짜의 meal_memo 찾기
+  const getMealMemo = (date: string): string | null => {
+    const record = allRecords.find((r: DailyRecord) => {
+      let recordDate = r.date;
+      if (recordDate.includes('T')) {
+        recordDate = recordDate.split('T')[0];
+      } else if (recordDate.includes(' ')) {
+        recordDate = recordDate.split(' ')[0];
+      }
+      
+      let normalizedDate = date;
+      if (date.includes('T')) {
+        normalizedDate = date.split('T')[0];
+      } else if (date.includes(' ')) {
+        normalizedDate = date.split(' ')[0];
+      }
+      
+      return recordDate === normalizedDate;
+    });
+    return record?.meal_memo || null;
+  };
+
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart 
         data={chartData}
         margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
+        onClick={(data, event) => {
+          console.log('📊 차트 클릭됨:', data);
+          if (data && data.activePayload && data.activePayload.length > 0) {
+            const clickedData = data.activePayload[0].payload;
+            const date = clickedData.date;
+            const mealMemo = getMealMemo(date);
+            console.log('🎯 날짜 선택:', date, '메모:', mealMemo);
+            onDateClick(date, mealMemo);
+          } else if (data && data.activeLabel) {
+            // activePayload가 없어도 activeLabel로 날짜 찾기
+            const date = data.activeLabel;
+            const mealMemo = getMealMemo(date);
+            console.log('🎯 날짜 선택 (label):', date, '메모:', mealMemo);
+            onDateClick(date, mealMemo);
+          } else {
+            console.log('⚠️ 유효한 데이터 포인트가 아님');
+          }
+        }}
+        style={{ cursor: 'pointer' }}
       >
         <defs>
           <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
@@ -152,7 +214,13 @@ export default function WeightChart({
           stroke="#EF4444" 
           strokeWidth={2}
           dot={false}
-          activeDot={{ r: 6, fill: '#EF4444', stroke: '#fff', strokeWidth: 2 }}
+          activeDot={{ 
+            r: 6, 
+            fill: '#EF4444', 
+            stroke: '#fff', 
+            strokeWidth: 2,
+            cursor: 'pointer',
+          }}
           fill="url(#colorWeight)"
         />
       </LineChart>
