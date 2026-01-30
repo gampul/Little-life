@@ -36,6 +36,10 @@ export default function LedgerPage() {
   
   // 거래 목록
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const PAGE_SIZE = 20;
   
   // 필터
   const [filters, setFilters] = useState<FilterState>({
@@ -112,63 +116,125 @@ export default function LedgerPage() {
     }
   }, [supabase, userId]);
 
-  // 거래 목록 로드
+  // 필터 조건 생성 함수
+  const getFilterConditions = useCallback(() => {
+    let startDate: Date | null = null;
+    
+    if (filters.period !== 'all') {
+      const now = new Date();
+      switch (filters.period) {
+        case '7days':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '1month':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+          break;
+        case '3months':
+          startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+          break;
+        case '1year':
+          startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+          break;
+      }
+    }
+    
+    return { startDate, type: filters.type };
+  }, [filters]);
+
+  // 거래 목록 로드 (초기 로드)
   const loadTransactions = useCallback(async () => {
     if (!supabase || !userId) return;
     
     try {
+      const { startDate, type } = getFilterConditions();
+      
+      // 먼저 총 개수 조회
+      let countQuery = supabase
+        .from('ledger_transactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      
+      if (startDate) {
+        countQuery = countQuery.gte('date', startDate.toISOString());
+      }
+      if (type !== 'all') {
+        countQuery = countQuery.eq('type', type);
+      }
+      
+      const { count } = await countQuery;
+      setTotalCount(count || 0);
+      
+      // 첫 페이지 데이터 조회
+      let dataQuery = supabase
+        .from('ledger_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .range(0, PAGE_SIZE - 1);
+      
+      if (startDate) {
+        dataQuery = dataQuery.gte('date', startDate.toISOString());
+      }
+      if (type !== 'all') {
+        dataQuery = dataQuery.eq('type', type);
+      }
+      
+      const { data, error } = await dataQuery;
+      
+      if (error) {
+        console.log('거래 로드: 테이블이 없거나 오류 발생');
+        setTransactions([]);
+        setHasMore(false);
+      } else {
+        setTransactions(data || []);
+        setHasMore((data?.length || 0) < (count || 0));
+      }
+    } catch (err) {
+      console.log('거래 로드:', err);
+      setTransactions([]);
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabase, userId, getFilterConditions]);
+
+  // 더 불러오기
+  const loadMoreTransactions = useCallback(async () => {
+    if (!supabase || !userId || isLoadingMore) return;
+    
+    setIsLoadingMore(true);
+    try {
+      const { startDate, type } = getFilterConditions();
+      const offset = transactions.length;
+      
       let query = supabase
         .from('ledger_transactions')
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false })
-        .limit(100);
+        .range(offset, offset + PAGE_SIZE - 1);
       
-      // 기간 필터
-      if (filters.period !== 'all') {
-        const now = new Date();
-        let startDate: Date;
-        
-        switch (filters.period) {
-          case '7days':
-            startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            break;
-          case '1month':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-            break;
-          case '3months':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-            break;
-          case '1year':
-            startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-            break;
-          default:
-            startDate = new Date(0);
-        }
-        
+      if (startDate) {
         query = query.gte('date', startDate.toISOString());
       }
-      
-      // 타입 필터
-      if (filters.type !== 'all') {
-        query = query.eq('type', filters.type);
+      if (type !== 'all') {
+        query = query.eq('type', type);
       }
       
       const { data, error } = await query;
       
       if (error) {
-        console.log('거래 로드: 테이블이 없거나 오류 발생');
-        setTransactions([]);
-      } else {
-        setTransactions(data || []);
+        console.log('추가 로드 오류');
+      } else if (data) {
+        setTransactions(prev => [...prev, ...data]);
+        setHasMore(transactions.length + data.length < totalCount);
       }
     } catch (err) {
-      console.log('거래 로드:', err);
-      setTransactions([]);
+      console.log('추가 로드:', err);
     } finally {
-      setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  }, [supabase, userId, filters]);
+  }, [supabase, userId, getFilterConditions, transactions.length, totalCount, isLoadingMore]);
 
   // 데이터 로드
   useEffect(() => {
@@ -293,13 +359,32 @@ export default function LedgerPage() {
           {/* 거래 리스트 */}
           <div className="mb-4">
             <p style={{ fontSize: '14px' }} className="text-gray-500 dark:text-gray-400 mb-2">
-              최근 거래 ({transactions.length}건)
+              거래 내역 ({transactions.length} / {totalCount}건)
             </p>
             <TransactionList
               transactions={transactions}
               isLoading={isLoading}
               onDelete={handleDeleteTransaction}
             />
+            
+            {/* 더 보기 버튼 */}
+            {hasMore && !isLoading && (
+              <button
+                onClick={loadMoreTransactions}
+                disabled={isLoadingMore}
+                style={{ fontSize: '14px' }}
+                className="w-full mt-3 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isLoadingMore ? '불러오는 중...' : `더 보기 (${totalCount - transactions.length}건 남음)`}
+              </button>
+            )}
+            
+            {/* 전체 로드 완료 메시지 */}
+            {!hasMore && transactions.length > 0 && transactions.length === totalCount && (
+              <p style={{ fontSize: '12px' }} className="text-center text-gray-400 dark:text-gray-500 mt-3">
+                전체 {totalCount}건 로드 완료
+              </p>
+            )}
           </div>
         </main>
         
