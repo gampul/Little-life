@@ -1804,25 +1804,20 @@ export default function Home() {
                 >
                   {/* 헤더 */}
                   <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
-                        <span className="text-white text-xl">📅</span>
-                      </div>
-                      <div>
-                        <p className="text-lg font-bold text-gray-900 dark:text-white">
-                          {(() => {
-                            const date = new Date(selectedChartDate);
-                            return `${date.getMonth() + 1}월 ${date.getDate()}일`;
-                          })()}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {(() => {
-                            const date = new Date(selectedChartDate);
-                            const days = ['일', '월', '화', '수', '목', '금', '토'];
-                            return `${date.getFullYear()}년 ${days[date.getDay()]}요일`;
-                          })()}
-                        </p>
-                      </div>
+                    <div>
+                      <p style={{ fontSize: '16px' }} className="font-bold text-gray-900 dark:text-white">
+                        {(() => {
+                          const date = new Date(selectedChartDate);
+                          return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+                        })()}
+                      </p>
+                      <p style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400">
+                        {(() => {
+                          const date = new Date(selectedChartDate);
+                          const days = ['일', '월', '화', '수', '목', '금', '토'];
+                          return `${date.getFullYear()}년 ${days[date.getDay()]}요일`;
+                        })()}
+                      </p>
                     </div>
                     <button
                       onClick={() => {
@@ -1845,25 +1840,16 @@ export default function Home() {
                     <div>
                       {/* 몸무게 카드 */}
                       <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl p-4 mb-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
-                              <span className="text-xl">⚖️</span>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">몸무게</p>
-                              <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                {chartPopupWeight ? `${chartPopupWeight} kg` : '기록 없음'}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                        <p style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400 mb-1">몸무게</p>
+                        <p style={{ fontSize: '16px' }} className="font-bold text-gray-900 dark:text-white">
+                          {chartPopupWeight ? `${chartPopupWeight} kg` : '기록 없음'}
+                        </p>
                       </div>
 
                       {/* 사진 */}
                       {chartPopupImages.length > 0 && (
                         <div className="mb-4">
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">📷 사진</p>
+                          <p style={{ fontSize: '16px' }} className="font-medium text-gray-500 dark:text-gray-400 mb-2">사진</p>
                           <div className="grid grid-cols-3 gap-2">
                             {chartPopupImages.map((url, idx) => (
                               <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
@@ -1881,9 +1867,9 @@ export default function Home() {
                       {/* 메모 */}
                       {chartPopupMemo && chartPopupMemo.trim() !== '' && (
                         <div className="mb-4">
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">📝 메모</p>
+                          <p style={{ fontSize: '16px' }} className="font-medium text-gray-500 dark:text-gray-400 mb-2">메모</p>
                           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                            <p style={{ fontSize: '16px' }} className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
                               {chartPopupMemo}
                             </p>
                           </div>
@@ -1893,8 +1879,7 @@ export default function Home() {
                       {/* 데이터 없음 표시 */}
                       {!chartPopupWeight && chartPopupImages.length === 0 && (!chartPopupMemo || chartPopupMemo.trim() === '') && (
                         <div className="text-center py-6 text-gray-400 dark:text-gray-500">
-                          <p className="text-3xl mb-2">📭</p>
-                          <p className="text-sm">기록된 데이터가 없습니다</p>
+                          <p style={{ fontSize: '16px' }}>기록된 데이터가 없습니다</p>
                         </div>
                       )}
 
@@ -1902,10 +1887,10 @@ export default function Home() {
                       <div className="flex gap-3 mt-5">
                         <button
                           onClick={() => setChartPopupEditMode(true)}
-                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                          style={{ fontSize: '16px' }}
+                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
                         >
-                          <span>✏️</span>
-                          <span>수정</span>
+                          수정
                         </button>
                         <button
                           onClick={() => {
@@ -1916,6 +1901,7 @@ export default function Home() {
                             setChartPopupImages([]);
                             setChartPopupEditMode(false);
                           }}
+                          style={{ fontSize: '16px' }}
                           className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
                         >
                           닫기
@@ -1927,7 +1913,7 @@ export default function Home() {
                     <div>
                       {/* 몸무게 수정 */}
                       <div className="mb-4">
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">⚖️ 몸무게</label>
+                        <label style={{ fontSize: '16px' }} className="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">몸무게</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -1935,27 +1921,29 @@ export default function Home() {
                             value={chartPopupWeight}
                             onChange={(e) => setChartPopupWeight(e.target.value)}
                             placeholder="예: 75.5"
-                            className="flex-1 px-4 py-3 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                            style={{ fontSize: '16px' }}
+                            className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           />
-                          <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">kg</span>
+                          <span style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400 font-medium">kg</span>
                         </div>
                       </div>
                       
                       {/* 메모 수정 */}
                       <div className="mb-4">
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">📝 메모</label>
+                        <label style={{ fontSize: '16px' }} className="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">메모</label>
                         <textarea
                           value={chartPopupMemo}
                           onChange={(e) => setChartPopupMemo(e.target.value)}
                           placeholder="메모를 입력하세요..."
                           rows={3}
-                          className="w-full px-4 py-3 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all"
+                          style={{ fontSize: '16px' }}
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all"
                         />
                       </div>
                       
                       {/* 사진 업로드 */}
                       <div className="mb-5">
-                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">📷 사진</label>
+                        <label style={{ fontSize: '16px' }} className="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">사진</label>
                         <input
                           ref={chartPopupFileInputRef}
                           type="file"
@@ -1965,7 +1953,7 @@ export default function Home() {
                           onChange={async (e) => {
                             const files = e.target.files;
                             if (!files || files.length === 0) {
-                              console.log('❌ 파일이 선택되지 않음');
+                              console.log('파일이 선택되지 않음');
                               return;
                             }
                             if (!supabase) {
@@ -1977,7 +1965,7 @@ export default function Home() {
                               return;
                             }
                             
-                            console.log('📤 사진 업로드 시작:', files.length, '개');
+                            console.log('사진 업로드 시작:', files.length, '개');
                             const uploadedUrls: string[] = [];
                             const errors: string[] = [];
                             
@@ -1986,7 +1974,7 @@ export default function Home() {
                                 const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
                                 const fileName = `${userId}/${selectedChartDate}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
                                 
-                                console.log('📁 업로드 중:', fileName);
+                                console.log('업로드 중:', fileName);
                                 
                                 const { data: uploadData, error: uploadError } = await supabase.storage
                                   .from('meal-images')
@@ -1996,30 +1984,30 @@ export default function Home() {
                                   });
                                 
                                 if (uploadError) {
-                                  console.error('❌ 업로드 오류:', uploadError);
+                                  console.error('업로드 오류:', uploadError);
                                   errors.push(`${file.name}: ${uploadError.message}`);
                                   continue;
                                 }
                                 
-                                console.log('✅ 업로드 성공:', uploadData);
+                                console.log('업로드 성공:', uploadData);
                                 
                                 const { data: urlData } = supabase.storage
                                   .from('meal-images')
                                   .getPublicUrl(fileName);
                                 
                                 if (urlData?.publicUrl) {
-                                  console.log('🔗 공개 URL:', urlData.publicUrl);
+                                  console.log('공개 URL:', urlData.publicUrl);
                                   uploadedUrls.push(urlData.publicUrl);
                                 }
                               } catch (err) {
-                                console.error('❌ 파일 처리 오류:', err);
+                                console.error('파일 처리 오류:', err);
                                 errors.push(`${file.name}: 처리 오류`);
                               }
                             }
                             
                             if (uploadedUrls.length > 0) {
                               setChartPopupImages(prev => [...prev, ...uploadedUrls]);
-                              console.log('✅ 총', uploadedUrls.length, '개 업로드 완료');
+                              console.log('총', uploadedUrls.length, '개 업로드 완료');
                             }
                             
                             if (errors.length > 0) {
@@ -2031,9 +2019,9 @@ export default function Home() {
                         />
                         <button
                           onClick={() => chartPopupFileInputRef.current?.click()}
-                          className="w-full px-4 py-3 text-sm bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-all flex items-center justify-center gap-2"
+                          style={{ fontSize: '16px' }}
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-all flex items-center justify-center gap-2"
                         >
-                          <span className="text-lg">📷</span>
                           <span className="text-gray-600 dark:text-gray-400">사진 추가</span>
                         </button>
                         
@@ -2070,6 +2058,7 @@ export default function Home() {
                             setChartPopupImages(record?.meal_images || []);
                             setChartPopupEditMode(false);
                           }}
+                          style={{ fontSize: '16px' }}
                           className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
                         >
                           취소
@@ -2077,14 +2066,14 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             if (!supabase || !userId || !selectedChartDate) {
-                              console.log('❌ 저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
+                              console.log('저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
                               return;
                             }
                             
                             setChartPopupSaving(true);
                             try {
                               const weightValue = chartPopupWeight ? parseFloat(chartPopupWeight) : null;
-                              console.log('💾 저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
+                              console.log('저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
                               
                               // 기존 레코드 확인 (maybeSingle 사용으로 에러 방지)
                               const { data: existing, error: selectError } = await supabase
@@ -2095,11 +2084,11 @@ export default function Home() {
                                 .maybeSingle();
                               
                               if (selectError) {
-                                console.error('❌ 레코드 조회 오류:', selectError);
+                                console.error('레코드 조회 오류:', selectError);
                               }
                               
                               if (existing) {
-                                console.log('📝 기존 레코드 업데이트:', existing.id);
+                                console.log('기존 레코드 업데이트:', existing.id);
                                 // 업데이트
                                 const { error: updateError } = await supabase
                                   .from('daily_records')
@@ -2112,11 +2101,11 @@ export default function Home() {
                                   .eq('id', existing.id);
                                 
                                 if (updateError) {
-                                  console.error('❌ 업데이트 오류:', updateError);
+                                  console.error('업데이트 오류:', updateError);
                                   throw updateError;
                                 }
                               } else {
-                                console.log('➕ 새 레코드 생성');
+                                console.log('새 레코드 생성');
                                 // 새로 생성
                                 const { error: insertError } = await supabase
                                   .from('daily_records')
@@ -2129,12 +2118,12 @@ export default function Home() {
                                   });
                                 
                                 if (insertError) {
-                                  console.error('❌ 삽입 오류:', insertError);
+                                  console.error('삽입 오류:', insertError);
                                   throw insertError;
                                 }
                               }
                               
-                              console.log('✅ 저장 완료');
+                              console.log('저장 완료');
                               
                               // 데이터 새로고침
                               loadAllRecords();
@@ -2143,7 +2132,7 @@ export default function Home() {
                               // 수정 모드 종료 (팝업은 유지)
                               setChartPopupEditMode(false);
                               
-                              setMessage('✅ 저장되었습니다!');
+                              setMessage('저장되었습니다!');
                               setTimeout(() => setMessage(''), 2500);
                             } catch (err) {
                               console.error('저장 오류:', err);
@@ -2153,16 +2142,10 @@ export default function Home() {
                             }
                           }}
                           disabled={chartPopupSaving}
-                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                          style={{ fontSize: '16px' }}
+                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-xl transition-colors"
                         >
-                          {chartPopupSaving ? (
-                            <span>저장 중...</span>
-                          ) : (
-                            <>
-                              <span>💾</span>
-                              <span>저장</span>
-                            </>
-                          )}
+                          {chartPopupSaving ? '저장 중...' : '저장'}
                         </button>
                       </div>
                     </div>
