@@ -9,6 +9,7 @@ import { LedgerSummary } from './components/LedgerSummary';
 import { TransactionForm, TransactionData } from './components/TransactionForm';
 import { TransactionList, Transaction } from './components/TransactionList';
 import { TransactionFilters, FilterState } from './components/TransactionFilters';
+import { ExcelUpload } from './components/ExcelUpload';
 
 interface LedgerSummaryData {
   total_income: number;
@@ -20,8 +21,10 @@ interface LedgerSummaryData {
 export default function LedgerPage() {
   const supabase = getSupabase();
   const [userId, setUserId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   
   // 요약 데이터
   const [summary, setSummary] = useState<LedgerSummaryData>({
@@ -44,65 +47,68 @@ export default function LedgerPage() {
   useEffect(() => {
     if (!supabase) return;
     
-    supabase.auth.getUser().then(({ data, error }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
-        console.error('인증 오류:', error);
+        console.error('세션 오류:', error);
         setUserId(null);
-      } else {
-        setUserId(data.user?.id ?? null);
+        setAccessToken(null);
+      } else if (session) {
+        setUserId(session.user?.id ?? null);
+        setAccessToken(session.access_token ?? null);
       }
     });
   }, [supabase]);
 
-  // 요약 데이터 로드
+  // 요약 데이터 로드 (서버 사이드 계산 사용)
   const loadSummary = useCallback(async () => {
     if (!supabase || !userId) return;
     
     try {
-      // 먼저 직접 테이블에서 계산 시도
-      const { data: txData, error: txError } = await supabase
-        .from('ledger_transactions')
-        .select('amount, type')
-        .eq('user_id', userId);
+      // RPC 함수 호출 시도
+      const { data, error } = await supabase.rpc('get_user_ledger_summary', {
+        p_user_id: userId,
+      });
       
-      if (txError) {
-        // 테이블이 없는 경우 (최초 사용)
-        console.log('ledger_transactions 테이블이 없습니다. Supabase에서 마이그레이션을 실행해주세요.');
-        setSummary({
-          total_income: 0,
-          total_expense: 0,
-          total_transfer: 0,
-          net_cash_position: 0,
-        });
-        return;
-      }
-      
-      if (txData) {
-        const total_income = txData
-          .filter(t => t.type === 'income')
-          .reduce((sum, t) => sum + t.amount, 0);
-        const total_expense = txData
-          .filter(t => t.type === 'expense')
-          .reduce((sum, t) => sum + t.amount, 0);
-        const total_transfer = txData
-          .filter(t => t.type === 'transfer')
-          .reduce((sum, t) => sum + t.amount, 0);
+      if (error) {
+        // RPC가 없으면 직접 계산
+        const { data: txData, error: txError } = await supabase
+          .from('ledger_transactions')
+          .select('amount, type')
+          .eq('user_id', userId);
         
+        if (txError) {
+          console.log('테이블이 없습니다. Supabase에서 마이그레이션을 실행해주세요.');
+          return;
+        }
+        
+        if (txData) {
+          const total_income = txData
+            .filter(t => t.type === 'income')
+            .reduce((sum, t) => sum + t.amount, 0);
+          const total_expense = txData
+            .filter(t => t.type === 'expense')
+            .reduce((sum, t) => sum + t.amount, 0);
+          const total_transfer = txData
+            .filter(t => t.type === 'transfer')
+            .reduce((sum, t) => sum + t.amount, 0);
+          
+          setSummary({
+            total_income,
+            total_expense,
+            total_transfer,
+            net_cash_position: total_income - total_expense - total_transfer,
+          });
+        }
+      } else if (data && data.length > 0) {
         setSummary({
-          total_income,
-          total_expense,
-          total_transfer,
-          net_cash_position: total_income - total_expense - total_transfer,
+          total_income: data[0].total_income || 0,
+          total_expense: data[0].total_expense || 0,
+          total_transfer: data[0].total_transfer || 0,
+          net_cash_position: data[0].net_cash_position || 0,
         });
       }
     } catch (err) {
       console.log('요약 로드:', err);
-      setSummary({
-        total_income: 0,
-        total_expense: 0,
-        total_transfer: 0,
-        net_cash_position: 0,
-      });
     }
   }, [supabase, userId]);
 
@@ -116,7 +122,7 @@ export default function LedgerPage() {
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false })
-        .limit(50);
+        .limit(100);
       
       // 기간 필터
       if (filters.period !== 'all') {
@@ -151,7 +157,6 @@ export default function LedgerPage() {
       const { data, error } = await query;
       
       if (error) {
-        // 테이블이 없는 경우
         console.log('거래 로드: 테이블이 없거나 오류 발생');
         setTransactions([]);
       } else {
@@ -188,6 +193,7 @@ export default function LedgerPage() {
       category: data.category,
       description: data.description || null,
       currency: 'KRW',
+      source: 'app',
     });
     
     if (error) {
@@ -222,6 +228,13 @@ export default function LedgerPage() {
     }
   };
 
+  // 업로드 완료 핸들러
+  const handleUploadComplete = () => {
+    loadSummary();
+    loadTransactions();
+    setShowUpload(false);
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
@@ -237,16 +250,37 @@ export default function LedgerPage() {
             isLoading={isLoading}
           />
           
-          {/* 거래 추가 버튼 */}
-          <div className="my-4">
+          {/* 버튼 그룹 */}
+          <div className="my-4 flex gap-2">
             <button
               onClick={() => setIsFormOpen(true)}
               style={{ fontSize: '16px' }}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
             >
               + 거래 추가
             </button>
+            <button
+              onClick={() => setShowUpload(!showUpload)}
+              style={{ fontSize: '14px' }}
+              className={`px-4 py-3 font-medium rounded-xl transition-colors ${
+                showUpload 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+            >
+              Excel
+            </button>
           </div>
+
+          {/* Excel 업로드 영역 */}
+          {showUpload && (
+            <div className="mb-4">
+              <ExcelUpload 
+                onUploadComplete={handleUploadComplete}
+                accessToken={accessToken}
+              />
+            </div>
+          )}
           
           {/* 필터 */}
           <div className="mb-3">
@@ -259,7 +293,7 @@ export default function LedgerPage() {
           {/* 거래 리스트 */}
           <div className="mb-4">
             <p style={{ fontSize: '14px' }} className="text-gray-500 dark:text-gray-400 mb-2">
-              최근 거래
+              최근 거래 ({transactions.length}건)
             </p>
             <TransactionList
               transactions={transactions}

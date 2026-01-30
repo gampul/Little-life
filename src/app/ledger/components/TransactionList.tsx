@@ -10,6 +10,8 @@ export interface Transaction {
   amount: number;
   type: 'income' | 'expense' | 'transfer';
   currency: string;
+  source: 'excel' | 'app';
+  import_batch_id?: string;
   created_at: string;
 }
 
@@ -91,9 +93,16 @@ export function TransactionList({ transactions, isLoading, onDelete }: Transacti
                   </span>
                 )}
               </div>
-              <p style={{ fontSize: '12px' }} className="text-gray-400 dark:text-gray-500 mt-0.5">
-                {tx.asset}
-              </p>
+              <div className="flex items-center gap-1 mt-0.5">
+                <p style={{ fontSize: '12px' }} className="text-gray-400 dark:text-gray-500">
+                  {tx.asset}
+                </p>
+                {tx.source === 'excel' && (
+                  <span style={{ fontSize: '10px' }} className="px-1 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded">
+                    Excel
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <span style={{ fontSize: '16px' }} className={`font-bold ${getTypeColor(tx.type)}`}>
