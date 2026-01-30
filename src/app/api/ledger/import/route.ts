@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 // 타입 매핑
 const TYPE_MAPPING: Record<string, string> = {
@@ -39,6 +39,11 @@ interface TransactionInsert {
 
 export async function POST(request: NextRequest) {
   try {
+    // 환경 변수 확인
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json({ error: 'Supabase 설정이 없습니다' }, { status: 500 });
+    }
+
     // 인증 확인
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
@@ -47,8 +52,14 @@ export async function POST(request: NextRequest) {
 
     const token = authHeader.replace('Bearer ', '');
     
-    // 서비스 롤 클라이언트 생성
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // 사용자 토큰으로 클라이언트 생성
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    });
     
     // 토큰으로 사용자 확인
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
