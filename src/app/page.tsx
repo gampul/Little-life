@@ -129,6 +129,7 @@ export default function Home() {
   const [chartPopupMemo, setChartPopupMemo] = useState<string>('');
   const [chartPopupImages, setChartPopupImages] = useState<string[]>([]);
   const [chartPopupSaving, setChartPopupSaving] = useState(false);
+  const [chartPopupEditMode, setChartPopupEditMode] = useState(false);
   const chartPopupFileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<DailyRecord>({
@@ -1795,21 +1796,33 @@ export default function Home() {
 
               </div>
               
-              {/* 선택된 날짜 편집 팝업 */}
+              {/* 선택된 날짜 상세보기/편집 팝업 */}
               {selectedChartDate && (
                 <div 
                   id="chart-edit-popup"
-                  className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl border-2 border-blue-400 dark:border-blue-600 shadow-lg"
+                  className="mt-4 p-5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl"
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">✏️</span>
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">
-                        {(() => {
-                          const date = new Date(selectedChartDate);
-                          return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
-                        })()}
-                      </span>
+                  {/* 헤더 */}
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                        <span className="text-white text-xl">📅</span>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white">
+                          {(() => {
+                            const date = new Date(selectedChartDate);
+                            return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+                          })()}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {(() => {
+                            const date = new Date(selectedChartDate);
+                            const days = ['일', '월', '화', '수', '목', '금', '토'];
+                            return `${date.getFullYear()}년 ${days[date.getDay()]}요일`;
+                          })()}
+                        </p>
+                      </div>
                     </div>
                     <button
                       onClick={() => {
@@ -1818,236 +1831,342 @@ export default function Home() {
                         setChartPopupWeight('');
                         setChartPopupMemo('');
                         setChartPopupImages([]);
+                        setChartPopupEditMode(false);
                       }}
-                      className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                       aria-label="닫기"
                     >
                       ✕
                     </button>
                   </div>
-                  
-                  {/* 몸무게 수정 */}
-                  <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">⚖️ 몸무게</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={chartPopupWeight}
-                        onChange={(e) => setChartPopupWeight(e.target.value)}
-                        placeholder="예: 75.5"
-                        className="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                      />
-                      <span className="text-sm text-gray-600 dark:text-gray-400">kg</span>
-                    </div>
-                  </div>
-                  
-                  {/* 식사 메모 수정 */}
-                  <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">🍽️ 식사 메모</label>
-                    <textarea
-                      value={chartPopupMemo}
-                      onChange={(e) => setChartPopupMemo(e.target.value)}
-                      placeholder="식사 내용을 입력하세요..."
-                      rows={3}
-                      className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
-                    />
-                  </div>
-                  
-                  {/* 사진 업로드 */}
-                  <div className="mb-4">
-                    <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">📷 사진</label>
-                    <input
-                      ref={chartPopupFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      onChange={async (e) => {
-                        const files = e.target.files;
-                        if (!files || files.length === 0) {
-                          console.log('❌ 파일이 선택되지 않음');
-                          return;
-                        }
-                        if (!supabase) {
-                          alert('Supabase 연결이 안 되어 있습니다.');
-                          return;
-                        }
-                        if (!userId) {
-                          alert('로그인이 필요합니다.');
-                          return;
-                        }
-                        
-                        console.log('📤 사진 업로드 시작:', files.length, '개');
-                        const uploadedUrls: string[] = [];
-                        const errors: string[] = [];
-                        
-                        for (const file of Array.from(files)) {
-                          try {
-                            const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-                            const fileName = `${userId}/${selectedChartDate}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-                            
-                            console.log('📁 업로드 중:', fileName);
-                            
-                            const { data: uploadData, error: uploadError } = await supabase.storage
-                              .from('meal-images')
-                              .upload(fileName, file, {
-                                cacheControl: '3600',
-                                upsert: false
-                              });
-                            
-                            if (uploadError) {
-                              console.error('❌ 업로드 오류:', uploadError);
-                              errors.push(`${file.name}: ${uploadError.message}`);
-                              continue;
-                            }
-                            
-                            console.log('✅ 업로드 성공:', uploadData);
-                            
-                            const { data: urlData } = supabase.storage
-                              .from('meal-images')
-                              .getPublicUrl(fileName);
-                            
-                            if (urlData?.publicUrl) {
-                              console.log('🔗 공개 URL:', urlData.publicUrl);
-                              uploadedUrls.push(urlData.publicUrl);
-                            }
-                          } catch (err) {
-                            console.error('❌ 파일 처리 오류:', err);
-                            errors.push(`${file.name}: 처리 오류`);
-                          }
-                        }
-                        
-                        if (uploadedUrls.length > 0) {
-                          setChartPopupImages(prev => [...prev, ...uploadedUrls]);
-                          console.log('✅ 총', uploadedUrls.length, '개 업로드 완료');
-                        }
-                        
-                        if (errors.length > 0) {
-                          alert(`일부 파일 업로드 실패:\n${errors.join('\n')}\n\nSupabase Storage에 'meal-images' 버킷이 있는지 확인하세요.`);
-                        }
-                        
-                        e.target.value = '';
-                      }}
-                    />
-                    <button
-                      onClick={() => chartPopupFileInputRef.current?.click()}
-                      className="w-full px-3 py-2 text-sm bg-gray-100 dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
-                    >
-                      <span>📷</span>
-                      <span>사진 추가</span>
-                    </button>
-                    
-                    {/* 업로드된 이미지 미리보기 */}
-                    {chartPopupImages.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {chartPopupImages.map((url, idx) => (
-                          <div key={idx} className="relative w-16 h-16">
-                            <img
-                              src={url}
-                              alt={`사진 ${idx + 1}`}
-                              className="w-full h-full object-cover rounded border border-gray-300 dark:border-gray-600"
-                            />
-                            <button
-                              onClick={() => setChartPopupImages(prev => prev.filter((_, i) => i !== idx))}
-                              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600"
-                            >
-                              ✕
-                            </button>
+
+                  {/* 보기 모드 */}
+                  {!chartPopupEditMode ? (
+                    <div>
+                      {/* 몸무게 카드 */}
+                      <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl p-4 mb-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+                              <span className="text-xl">⚖️</span>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">몸무게</p>
+                              <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                                {chartPopupWeight ? `${chartPopupWeight} kg` : '기록 없음'}
+                              </p>
+                            </div>
                           </div>
-                        ))}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  
-                  {/* 저장 버튼 */}
-                  <button
-                    onClick={async () => {
-                      if (!supabase || !userId || !selectedChartDate) {
-                        console.log('❌ 저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
-                        return;
-                      }
+
+                      {/* 사진 */}
+                      {chartPopupImages.length > 0 && (
+                        <div className="mb-4">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">📷 사진</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {chartPopupImages.map((url, idx) => (
+                              <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                                <img
+                                  src={url}
+                                  alt={`사진 ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 메모 */}
+                      {chartPopupMemo && chartPopupMemo.trim() !== '' && (
+                        <div className="mb-4">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">📝 메모</p>
+                          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
+                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                              {chartPopupMemo}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 데이터 없음 표시 */}
+                      {!chartPopupWeight && chartPopupImages.length === 0 && (!chartPopupMemo || chartPopupMemo.trim() === '') && (
+                        <div className="text-center py-6 text-gray-400 dark:text-gray-500">
+                          <p className="text-3xl mb-2">📭</p>
+                          <p className="text-sm">기록된 데이터가 없습니다</p>
+                        </div>
+                      )}
+
+                      {/* 수정 버튼 */}
+                      <div className="flex gap-3 mt-5">
+                        <button
+                          onClick={() => setChartPopupEditMode(true)}
+                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                        >
+                          <span>✏️</span>
+                          <span>수정</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedChartDate(null);
+                            setSelectedDateMealMemo(null);
+                            setChartPopupWeight('');
+                            setChartPopupMemo('');
+                            setChartPopupImages([]);
+                            setChartPopupEditMode(false);
+                          }}
+                          className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
+                        >
+                          닫기
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* 수정 모드 */
+                    <div>
+                      {/* 몸무게 수정 */}
+                      <div className="mb-4">
+                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">⚖️ 몸무게</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={chartPopupWeight}
+                            onChange={(e) => setChartPopupWeight(e.target.value)}
+                            placeholder="예: 75.5"
+                            className="flex-1 px-4 py-3 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                          />
+                          <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">kg</span>
+                        </div>
+                      </div>
                       
-                      setChartPopupSaving(true);
-                      try {
-                        const weightValue = chartPopupWeight ? parseFloat(chartPopupWeight) : null;
-                        console.log('💾 저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
+                      {/* 메모 수정 */}
+                      <div className="mb-4">
+                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">📝 메모</label>
+                        <textarea
+                          value={chartPopupMemo}
+                          onChange={(e) => setChartPopupMemo(e.target.value)}
+                          placeholder="메모를 입력하세요..."
+                          rows={3}
+                          className="w-full px-4 py-3 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all"
+                        />
+                      </div>
+                      
+                      {/* 사진 업로드 */}
+                      <div className="mb-5">
+                        <label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block">📷 사진</label>
+                        <input
+                          ref={chartPopupFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files || files.length === 0) {
+                              console.log('❌ 파일이 선택되지 않음');
+                              return;
+                            }
+                            if (!supabase) {
+                              alert('Supabase 연결이 안 되어 있습니다.');
+                              return;
+                            }
+                            if (!userId) {
+                              alert('로그인이 필요합니다.');
+                              return;
+                            }
+                            
+                            console.log('📤 사진 업로드 시작:', files.length, '개');
+                            const uploadedUrls: string[] = [];
+                            const errors: string[] = [];
+                            
+                            for (const file of Array.from(files)) {
+                              try {
+                                const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+                                const fileName = `${userId}/${selectedChartDate}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+                                
+                                console.log('📁 업로드 중:', fileName);
+                                
+                                const { data: uploadData, error: uploadError } = await supabase.storage
+                                  .from('meal-images')
+                                  .upload(fileName, file, {
+                                    cacheControl: '3600',
+                                    upsert: false
+                                  });
+                                
+                                if (uploadError) {
+                                  console.error('❌ 업로드 오류:', uploadError);
+                                  errors.push(`${file.name}: ${uploadError.message}`);
+                                  continue;
+                                }
+                                
+                                console.log('✅ 업로드 성공:', uploadData);
+                                
+                                const { data: urlData } = supabase.storage
+                                  .from('meal-images')
+                                  .getPublicUrl(fileName);
+                                
+                                if (urlData?.publicUrl) {
+                                  console.log('🔗 공개 URL:', urlData.publicUrl);
+                                  uploadedUrls.push(urlData.publicUrl);
+                                }
+                              } catch (err) {
+                                console.error('❌ 파일 처리 오류:', err);
+                                errors.push(`${file.name}: 처리 오류`);
+                              }
+                            }
+                            
+                            if (uploadedUrls.length > 0) {
+                              setChartPopupImages(prev => [...prev, ...uploadedUrls]);
+                              console.log('✅ 총', uploadedUrls.length, '개 업로드 완료');
+                            }
+                            
+                            if (errors.length > 0) {
+                              alert(`일부 파일 업로드 실패:\n${errors.join('\n')}\n\nSupabase Storage에 'meal-images' 버킷이 있는지 확인하세요.`);
+                            }
+                            
+                            e.target.value = '';
+                          }}
+                        />
+                        <button
+                          onClick={() => chartPopupFileInputRef.current?.click()}
+                          className="w-full px-4 py-3 text-sm bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-all flex items-center justify-center gap-2"
+                        >
+                          <span className="text-lg">📷</span>
+                          <span className="text-gray-600 dark:text-gray-400">사진 추가</span>
+                        </button>
                         
-                        // 기존 레코드 확인 (maybeSingle 사용으로 에러 방지)
-                        const { data: existing, error: selectError } = await supabase
-                          .from('daily_records')
-                          .select('id')
-                          .eq('user_id', userId)
-                          .eq('date', selectedChartDate)
-                          .maybeSingle();
-                        
-                        if (selectError) {
-                          console.error('❌ 레코드 조회 오류:', selectError);
-                        }
-                        
-                        if (existing) {
-                          console.log('📝 기존 레코드 업데이트:', existing.id);
-                          // 업데이트
-                          const { error: updateError } = await supabase
-                            .from('daily_records')
-                            .update({
-                              weight: weightValue,
-                              meal_memo: chartPopupMemo || null,
-                              meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
-                              updated_at: new Date().toISOString(),
-                            })
-                            .eq('id', existing.id);
-                          
-                          if (updateError) {
-                            console.error('❌ 업데이트 오류:', updateError);
-                            throw updateError;
-                          }
-                        } else {
-                          console.log('➕ 새 레코드 생성');
-                          // 새로 생성
-                          const { error: insertError } = await supabase
-                            .from('daily_records')
-                            .insert({
-                              user_id: userId,
-                              date: selectedChartDate,
-                              weight: weightValue,
-                              meal_memo: chartPopupMemo || null,
-                              meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
-                            });
-                          
-                          if (insertError) {
-                            console.error('❌ 삽입 오류:', insertError);
-                            throw insertError;
-                          }
-                        }
-                        
-                        console.log('✅ 저장 완료');
-                        
-                        // 데이터 새로고침
-                        loadAllRecords();
-                        loadMealRecords();
-                        
-                        // 팝업 닫기
-                        setSelectedChartDate(null);
-                        setSelectedDateMealMemo(null);
-                        setChartPopupWeight('');
-                        setChartPopupMemo('');
-                        setChartPopupImages([]);
-                        
-                        setMessage('✅ 저장되었습니다!');
-                        setTimeout(() => setMessage(''), 2500);
-                      } catch (err) {
-                        console.error('저장 오류:', err);
-                        alert('저장 중 오류가 발생했습니다: ' + (err as any)?.message);
-                      } finally {
-                        setChartPopupSaving(false);
-                      }
-                    }}
-                    disabled={chartPopupSaving}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
-                  >
-                    {chartPopupSaving ? '저장 중...' : '💾 저장'}
-                  </button>
+                        {/* 업로드된 이미지 미리보기 */}
+                        {chartPopupImages.length > 0 && (
+                          <div className="grid grid-cols-4 gap-2 mt-3">
+                            {chartPopupImages.map((url, idx) => (
+                              <div key={idx} className="relative aspect-square">
+                                <img
+                                  src={url}
+                                  alt={`사진 ${idx + 1}`}
+                                  className="w-full h-full object-cover rounded-lg border border-gray-200 dark:border-gray-600"
+                                />
+                                <button
+                                  onClick={() => setChartPopupImages(prev => prev.filter((_, i) => i !== idx))}
+                                  className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 shadow-md"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* 저장/취소 버튼 */}
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => {
+                            // 원래 데이터로 복원
+                            const record = allRecords.find(r => r.date === selectedChartDate);
+                            setChartPopupWeight(record?.weight != null ? record.weight.toString() : '');
+                            setChartPopupMemo(record?.meal_memo || '');
+                            setChartPopupImages(record?.meal_images || []);
+                            setChartPopupEditMode(false);
+                          }}
+                          className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
+                        >
+                          취소
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!supabase || !userId || !selectedChartDate) {
+                              console.log('❌ 저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
+                              return;
+                            }
+                            
+                            setChartPopupSaving(true);
+                            try {
+                              const weightValue = chartPopupWeight ? parseFloat(chartPopupWeight) : null;
+                              console.log('💾 저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
+                              
+                              // 기존 레코드 확인 (maybeSingle 사용으로 에러 방지)
+                              const { data: existing, error: selectError } = await supabase
+                                .from('daily_records')
+                                .select('id')
+                                .eq('user_id', userId)
+                                .eq('date', selectedChartDate)
+                                .maybeSingle();
+                              
+                              if (selectError) {
+                                console.error('❌ 레코드 조회 오류:', selectError);
+                              }
+                              
+                              if (existing) {
+                                console.log('📝 기존 레코드 업데이트:', existing.id);
+                                // 업데이트
+                                const { error: updateError } = await supabase
+                                  .from('daily_records')
+                                  .update({
+                                    weight: weightValue,
+                                    meal_memo: chartPopupMemo || null,
+                                    meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
+                                    updated_at: new Date().toISOString(),
+                                  })
+                                  .eq('id', existing.id);
+                                
+                                if (updateError) {
+                                  console.error('❌ 업데이트 오류:', updateError);
+                                  throw updateError;
+                                }
+                              } else {
+                                console.log('➕ 새 레코드 생성');
+                                // 새로 생성
+                                const { error: insertError } = await supabase
+                                  .from('daily_records')
+                                  .insert({
+                                    user_id: userId,
+                                    date: selectedChartDate,
+                                    weight: weightValue,
+                                    meal_memo: chartPopupMemo || null,
+                                    meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
+                                  });
+                                
+                                if (insertError) {
+                                  console.error('❌ 삽입 오류:', insertError);
+                                  throw insertError;
+                                }
+                              }
+                              
+                              console.log('✅ 저장 완료');
+                              
+                              // 데이터 새로고침
+                              loadAllRecords();
+                              loadMealRecords();
+                              
+                              // 수정 모드 종료 (팝업은 유지)
+                              setChartPopupEditMode(false);
+                              
+                              setMessage('✅ 저장되었습니다!');
+                              setTimeout(() => setMessage(''), 2500);
+                            } catch (err) {
+                              console.error('저장 오류:', err);
+                              alert('저장 중 오류가 발생했습니다: ' + (err as any)?.message);
+                            } finally {
+                              setChartPopupSaving(false);
+                            }
+                          }}
+                          disabled={chartPopupSaving}
+                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                        >
+                          {chartPopupSaving ? (
+                            <span>저장 중...</span>
+                          ) : (
+                            <>
+                              <span>💾</span>
+                              <span>저장</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
