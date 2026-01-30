@@ -148,17 +148,19 @@ export default function WeightChart({
       <LineChart 
         data={chartData}
         margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
-        onClick={(data, event) => {
+        onClick={(data) => {
           console.log('📊 차트 클릭됨:', data);
-          if (data && data.activePayload && data.activePayload.length > 0) {
-            const clickedData = data.activePayload[0].payload;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const chartData = data as any;
+          if (chartData && chartData.activePayload && chartData.activePayload.length > 0) {
+            const clickedData = chartData.activePayload[0].payload;
             const date = clickedData.date;
             const mealMemo = getMealMemo(date);
             console.log('🎯 날짜 선택:', date, '메모:', mealMemo);
             onDateClick(date, mealMemo);
-          } else if (data && data.activeLabel) {
+          } else if (chartData && chartData.activeLabel) {
             // activePayload가 없어도 activeLabel로 날짜 찾기
-            const date = data.activeLabel;
+            const date = chartData.activeLabel;
             const mealMemo = getMealMemo(date);
             console.log('🎯 날짜 선택 (label):', date, '메모:', mealMemo);
             onDateClick(date, mealMemo);
