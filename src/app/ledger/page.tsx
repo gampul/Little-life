@@ -59,46 +59,50 @@ export default function LedgerPage() {
     if (!supabase || !userId) return;
     
     try {
-      const { data, error } = await supabase.rpc('get_ledger_summary', {
-        p_user_id: userId,
-      });
+      // 먼저 직접 테이블에서 계산 시도
+      const { data: txData, error: txError } = await supabase
+        .from('ledger_transactions')
+        .select('amount, type')
+        .eq('user_id', userId);
       
-      if (error) {
-        console.error('요약 로드 오류:', error);
-        // RPC가 없으면 직접 계산
-        const { data: txData } = await supabase
-          .from('ledger_transactions')
-          .select('amount, type')
-          .eq('user_id', userId);
-        
-        if (txData) {
-          const total_income = txData
-            .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + t.amount, 0);
-          const total_expense = txData
-            .filter(t => t.type === 'expense')
-            .reduce((sum, t) => sum + t.amount, 0);
-          const total_transfer = txData
-            .filter(t => t.type === 'transfer')
-            .reduce((sum, t) => sum + t.amount, 0);
-          
-          setSummary({
-            total_income,
-            total_expense,
-            total_transfer,
-            net_cash_position: total_income - total_expense - total_transfer,
-          });
-        }
-      } else if (data && data.length > 0) {
+      if (txError) {
+        // 테이블이 없는 경우 (최초 사용)
+        console.log('ledger_transactions 테이블이 없습니다. Supabase에서 마이그레이션을 실행해주세요.');
         setSummary({
-          total_income: data[0].total_income || 0,
-          total_expense: data[0].total_expense || 0,
-          total_transfer: data[0].total_transfer || 0,
-          net_cash_position: data[0].net_cash_position || 0,
+          total_income: 0,
+          total_expense: 0,
+          total_transfer: 0,
+          net_cash_position: 0,
+        });
+        return;
+      }
+      
+      if (txData) {
+        const total_income = txData
+          .filter(t => t.type === 'income')
+          .reduce((sum, t) => sum + t.amount, 0);
+        const total_expense = txData
+          .filter(t => t.type === 'expense')
+          .reduce((sum, t) => sum + t.amount, 0);
+        const total_transfer = txData
+          .filter(t => t.type === 'transfer')
+          .reduce((sum, t) => sum + t.amount, 0);
+        
+        setSummary({
+          total_income,
+          total_expense,
+          total_transfer,
+          net_cash_position: total_income - total_expense - total_transfer,
         });
       }
     } catch (err) {
-      console.error('요약 로드 오류:', err);
+      console.log('요약 로드:', err);
+      setSummary({
+        total_income: 0,
+        total_expense: 0,
+        total_transfer: 0,
+        net_cash_position: 0,
+      });
     }
   }, [supabase, userId]);
 
@@ -147,12 +151,15 @@ export default function LedgerPage() {
       const { data, error } = await query;
       
       if (error) {
-        console.error('거래 로드 오류:', error);
+        // 테이블이 없는 경우
+        console.log('거래 로드: 테이블이 없거나 오류 발생');
+        setTransactions([]);
       } else {
         setTransactions(data || []);
       }
     } catch (err) {
-      console.error('거래 로드 오류:', err);
+      console.log('거래 로드:', err);
+      setTransactions([]);
     } finally {
       setIsLoading(false);
     }
