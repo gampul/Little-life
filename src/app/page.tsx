@@ -130,6 +130,7 @@ export default function Home() {
   const [chartPopupImages, setChartPopupImages] = useState<string[]>([]);
   const [chartPopupSaving, setChartPopupSaving] = useState(false);
   const [chartPopupEditMode, setChartPopupEditMode] = useState(false);
+  const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
   const chartPopupFileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<DailyRecord>({
@@ -1796,29 +1797,42 @@ export default function Home() {
 
               </div>
               
+              {/* 원본 이미지 모달 */}
+              {fullImageUrl && (
+                <div 
+                  className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+                  onClick={() => setFullImageUrl(null)}
+                >
+                  <button
+                    onClick={() => setFullImageUrl(null)}
+                    className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-xl transition-colors"
+                  >
+                    ✕
+                  </button>
+                  <img
+                    src={fullImageUrl}
+                    alt="원본 이미지"
+                    className="max-w-full max-h-full object-contain rounded-lg"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              )}
+
               {/* 선택된 날짜 상세보기/편집 팝업 */}
               {selectedChartDate && (
                 <div 
                   id="chart-edit-popup"
-                  className="mt-4 p-5 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-xl"
+                  className="mt-3 p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg"
                 >
                   {/* 헤더 */}
-                  <div className="flex items-center justify-between mb-5">
-                    <div>
-                      <p style={{ fontSize: '16px' }} className="font-bold text-gray-900 dark:text-white">
-                        {(() => {
-                          const date = new Date(selectedChartDate);
-                          return `${date.getMonth() + 1}월 ${date.getDate()}일`;
-                        })()}
-                      </p>
-                      <p style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400">
-                        {(() => {
-                          const date = new Date(selectedChartDate);
-                          const days = ['일', '월', '화', '수', '목', '금', '토'];
-                          return `${date.getFullYear()}년 ${days[date.getDay()]}요일`;
-                        })()}
-                      </p>
-                    </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p style={{ fontSize: '16px' }} className="font-bold text-gray-900 dark:text-white">
+                      {(() => {
+                        const date = new Date(selectedChartDate);
+                        const days = ['일', '월', '화', '수', '목', '금', '토'];
+                        return `${date.getMonth() + 1}월 ${date.getDate()}일 (${days[date.getDay()]})`;
+                      })()}
+                    </p>
                     <button
                       onClick={() => {
                         setSelectedChartDate(null);
@@ -1828,7 +1842,7 @@ export default function Home() {
                         setChartPopupImages([]);
                         setChartPopupEditMode(false);
                       }}
-                      className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                      className="w-7 h-7 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
                       aria-label="닫기"
                     >
                       ✕
@@ -1838,21 +1852,25 @@ export default function Home() {
                   {/* 보기 모드 */}
                   {!chartPopupEditMode ? (
                     <div>
-                      {/* 몸무게 카드 */}
-                      <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl p-4 mb-4">
-                        <p style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400 mb-1">몸무게</p>
-                        <p style={{ fontSize: '16px' }} className="font-bold text-gray-900 dark:text-white">
-                          {chartPopupWeight ? `${chartPopupWeight} kg` : '기록 없음'}
-                        </p>
+                      {/* 몸무게 */}
+                      <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                        <span style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400">몸무게</span>
+                        <span style={{ fontSize: '16px' }} className="font-bold text-gray-900 dark:text-white">
+                          {chartPopupWeight ? `${chartPopupWeight} kg` : '-'}
+                        </span>
                       </div>
 
                       {/* 사진 */}
                       {chartPopupImages.length > 0 && (
-                        <div className="mb-4">
-                          <p style={{ fontSize: '16px' }} className="font-medium text-gray-500 dark:text-gray-400 mb-2">사진</p>
+                        <div className="py-2 border-b border-gray-100 dark:border-gray-700">
+                          <p style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400 mb-1">사진</p>
                           <div className="grid grid-cols-3 gap-2">
                             {chartPopupImages.map((url, idx) => (
-                              <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                              <div 
+                                key={idx} 
+                                className="aspect-square rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-80 transition-opacity"
+                                onClick={() => setFullImageUrl(url)}
+                              >
                                 <img
                                   src={url}
                                   alt={`사진 ${idx + 1}`}
@@ -1866,29 +1884,27 @@ export default function Home() {
 
                       {/* 메모 */}
                       {chartPopupMemo && chartPopupMemo.trim() !== '' && (
-                        <div className="mb-4">
-                          <p style={{ fontSize: '16px' }} className="font-medium text-gray-500 dark:text-gray-400 mb-2">메모</p>
-                          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4">
-                            <p style={{ fontSize: '16px' }} className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
-                              {chartPopupMemo}
-                            </p>
-                          </div>
+                        <div className="py-2 border-b border-gray-100 dark:border-gray-700">
+                          <p style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400 mb-1">메모</p>
+                          <p style={{ fontSize: '16px' }} className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                            {chartPopupMemo}
+                          </p>
                         </div>
                       )}
 
                       {/* 데이터 없음 표시 */}
                       {!chartPopupWeight && chartPopupImages.length === 0 && (!chartPopupMemo || chartPopupMemo.trim() === '') && (
-                        <div className="text-center py-6 text-gray-400 dark:text-gray-500">
+                        <div className="text-center py-4 text-gray-400 dark:text-gray-500">
                           <p style={{ fontSize: '16px' }}>기록된 데이터가 없습니다</p>
                         </div>
                       )}
 
                       {/* 수정 버튼 */}
-                      <div className="flex gap-3 mt-5">
+                      <div className="flex gap-2 mt-3">
                         <button
                           onClick={() => setChartPopupEditMode(true)}
                           style={{ fontSize: '16px' }}
-                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
+                          className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
                         >
                           수정
                         </button>
@@ -1902,7 +1918,7 @@ export default function Home() {
                             setChartPopupEditMode(false);
                           }}
                           style={{ fontSize: '16px' }}
-                          className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
+                          className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-colors"
                         >
                           닫기
                         </button>
@@ -1912,8 +1928,8 @@ export default function Home() {
                     /* 수정 모드 */
                     <div>
                       {/* 몸무게 수정 */}
-                      <div className="mb-4">
-                        <label style={{ fontSize: '16px' }} className="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">몸무게</label>
+                      <div className="mb-2">
+                        <label style={{ fontSize: '16px' }} className="font-medium text-gray-700 dark:text-gray-300 mb-1 block">몸무게</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
@@ -1922,28 +1938,28 @@ export default function Home() {
                             onChange={(e) => setChartPopupWeight(e.target.value)}
                             placeholder="예: 75.5"
                             style={{ fontSize: '16px' }}
-                            className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                            className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                           />
-                          <span style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400 font-medium">kg</span>
+                          <span style={{ fontSize: '16px' }} className="text-gray-500 dark:text-gray-400">kg</span>
                         </div>
                       </div>
                       
                       {/* 메모 수정 */}
-                      <div className="mb-4">
-                        <label style={{ fontSize: '16px' }} className="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">메모</label>
+                      <div className="mb-2">
+                        <label style={{ fontSize: '16px' }} className="font-medium text-gray-700 dark:text-gray-300 mb-1 block">메모</label>
                         <textarea
                           value={chartPopupMemo}
                           onChange={(e) => setChartPopupMemo(e.target.value)}
                           placeholder="메모를 입력하세요..."
-                          rows={3}
+                          rows={2}
                           style={{ fontSize: '16px' }}
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all"
+                          className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all"
                         />
                       </div>
                       
                       {/* 사진 업로드 */}
-                      <div className="mb-5">
-                        <label style={{ fontSize: '16px' }} className="font-semibold text-gray-700 dark:text-gray-300 mb-2 block">사진</label>
+                      <div className="mb-3">
+                        <label style={{ fontSize: '16px' }} className="font-medium text-gray-700 dark:text-gray-300 mb-1 block">사진</label>
                         <input
                           ref={chartPopupFileInputRef}
                           type="file"
@@ -2020,24 +2036,28 @@ export default function Home() {
                         <button
                           onClick={() => chartPopupFileInputRef.current?.click()}
                           style={{ fontSize: '16px' }}
-                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-blue-400 dark:hover:border-blue-500 transition-all flex items-center justify-center gap-2"
+                          className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 hover:border-blue-400 transition-all text-gray-600 dark:text-gray-400"
                         >
-                          <span className="text-gray-600 dark:text-gray-400">사진 추가</span>
+                          + 사진 추가
                         </button>
                         
                         {/* 업로드된 이미지 미리보기 */}
                         {chartPopupImages.length > 0 && (
-                          <div className="grid grid-cols-4 gap-2 mt-3">
+                          <div className="grid grid-cols-3 gap-2 mt-2">
                             {chartPopupImages.map((url, idx) => (
                               <div key={idx} className="relative aspect-square">
                                 <img
                                   src={url}
                                   alt={`사진 ${idx + 1}`}
-                                  className="w-full h-full object-cover rounded-lg border border-gray-200 dark:border-gray-600"
+                                  className="w-full h-full object-cover rounded-lg border border-gray-200 dark:border-gray-600 cursor-pointer hover:opacity-80"
+                                  onClick={() => setFullImageUrl(url)}
                                 />
                                 <button
-                                  onClick={() => setChartPopupImages(prev => prev.filter((_, i) => i !== idx))}
-                                  className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 shadow-md"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setChartPopupImages(prev => prev.filter((_, i) => i !== idx));
+                                  }}
+                                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center hover:bg-red-600 shadow"
                                 >
                                   ✕
                                 </button>
@@ -2048,7 +2068,7 @@ export default function Home() {
                       </div>
                       
                       {/* 저장/취소 버튼 */}
-                      <div className="flex gap-3">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => {
                             // 원래 데이터로 복원
@@ -2059,7 +2079,7 @@ export default function Home() {
                             setChartPopupEditMode(false);
                           }}
                           style={{ fontSize: '16px' }}
-                          className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
+                          className="flex-1 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-colors"
                         >
                           취소
                         </button>
@@ -2143,7 +2163,7 @@ export default function Home() {
                           }}
                           disabled={chartPopupSaving}
                           style={{ fontSize: '16px' }}
-                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-xl transition-colors"
+                          className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
                         >
                           {chartPopupSaving ? '저장 중...' : '저장'}
                         </button>
