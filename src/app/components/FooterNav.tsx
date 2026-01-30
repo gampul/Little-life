@@ -12,7 +12,7 @@ export function FooterNav(props: FooterNavProps) {
     { href: '/daily', label: 'Daily', emoji: '📅' },
     { href: '/memo', label: 'Diary', emoji: '📝' },
     { href: '/ledger', label: 'Exp-trx', emoji: '💳' },
-    { href: '/account', label: 'Property', emoji: '💰' },
+    { href: '/assets', label: 'Assets', emoji: '💰' },
     { href: '/ai', label: 'AI', emoji: '🤖' },
   ];
 
@@ -24,7 +24,8 @@ export function FooterNav(props: FooterNavProps) {
             const isActive =
               pathname === item.href ||
               (item.href === '/daily' && pathname === '/') ||
-              (item.href === '/ledger' && (pathname.startsWith('/ledger') || pathname.startsWith('/transaction')));
+              (item.href === '/ledger' && (pathname.startsWith('/ledger') || pathname.startsWith('/transaction'))) ||
+              (item.href === '/assets' && pathname.startsWith('/assets'));
             
             return (
               <Link
