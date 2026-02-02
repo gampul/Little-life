@@ -85,12 +85,6 @@ export function Dashboard({
         </div>
       </div>
 
-      {/* 계산 검증 메시지 */}
-      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg px-4 py-3">
-        <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-          {formatAmount(totalIncome)} - {formatAmount(totalExpense)} = {formatAmount(netAsset)}
-        </p>
-      </div>
     </div>
   );
 }

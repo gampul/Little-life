@@ -5,6 +5,7 @@ import { useTheme } from 'next-themes';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
+import { CategoryManager } from '../assets/components/CategoryManager';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
@@ -260,6 +261,8 @@ export default function SettingsPage() {
   const [dirtyById, setDirtyById] = useState<Record<string, boolean>>({});
   const [savingById, setSavingById] = useState<Record<string, boolean>>({});
   const [isRoutineSectionExpanded, setIsRoutineSectionExpanded] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [assetNames, setAssetNames] = useState<string[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -325,6 +328,27 @@ export default function SettingsPage() {
   useEffect(() => {
     loadRoutineTemplates();
   }, [loadRoutineTemplates]);
+
+  // 자산 이름 목록 로드 (카테고리 관리용)
+  const loadAssetNames = useCallback(async () => {
+    if (!supabase || !userId) return;
+    try {
+      const { data, error } = await supabase.rpc('get_asset_balances', {
+        p_user_id: userId,
+      });
+      if (!error && data) {
+        setAssetNames(data.map((item: { asset_name: string }) => item.asset_name));
+      }
+    } catch (err) {
+      console.log('자산 이름 로드 오류:', err);
+    }
+  }, [supabase, userId]);
+
+  useEffect(() => {
+    if (userId) {
+      loadAssetNames();
+    }
+  }, [userId, loadAssetNames]);
 
   // 현재 월의 루틴 달성률 계산
   const loadRoutineProgress = useCallback(async () => {
@@ -754,6 +778,22 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* 자산 카테고리 설정 */}
+          <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">자산 카테고리</h3>
+              <button
+                onClick={() => setShowCategoryManager(true)}
+                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                관리
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              자산과 부채를 카테고리별로 그룹화하여 관리할 수 있습니다.
+            </p>
+          </div>
+
           {/* 루틴 설정 */}
           <div className="mb-4 sm:mb-6">
             <div className="flex items-center justify-between mb-2 sm:mb-2.5">
@@ -847,6 +887,17 @@ export default function SettingsPage() {
       </div>
       
       <FooterNav />
+
+      {/* 카테고리 관리 모달 */}
+      {userId && (
+        <CategoryManager
+          isOpen={showCategoryManager}
+          onClose={() => setShowCategoryManager(false)}
+          userId={userId}
+          assetNames={assetNames}
+          onUpdate={loadAssetNames}
+        />
+      )}
     </div>
   );
 }

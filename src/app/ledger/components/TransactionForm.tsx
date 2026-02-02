@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getSupabase } from '../../../lib/supabase';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -20,24 +21,21 @@ export interface TransactionData {
   memo?: string;
 }
 
-const ASSET_OPTIONS = [
-  '현금',
-  '우리은행',
-  '신한은행',
-  '국민은행',
-  '카카오뱅크',
-  '토스뱅크',
-  '신용카드',
-  '체크카드',
-  'CMA',
-  '증권계좌',
-];
+interface Category {
+  id: string;
+  type: string;
+  category: string;
+  subcategory: string | null;
+  is_system: boolean;
+  sort_order: number;
+  is_active: boolean;
+}
 
-const CATEGORY_OPTIONS: Record<string, string[]> = {
-  '수입': ['근로소득', '사업소득', '금융소득', '기타소득'],
-  '지출': ['식비', '교통', '쇼핑', '생활', '의료', '문화', '교육', '주거', '통신', '기타지출'],
-  '자산이체': ['자산이체'],
-};
+interface AssetItem {
+  asset_name: string;
+  balance: number;
+  is_debt: boolean;
+}
 
 export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormProps) {
   const [formData, setFormData] = useState<TransactionData>({
@@ -45,22 +43,137 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
     amount: 0,
     transaction_type: '지출',
     is_transfer: false,
-    asset: '현금',
-    category: '식비',
+    asset: '',
+    category: '',
     sub_category: '',
     memo: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // 카테고리 관련 상태
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  
+  // 자산 관련 상태
+  const [assets, setAssets] = useState<AssetItem[]>([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+
+  // 카테고리 및 자산 로드
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoadingCategories(true);
+      setIsLoadingAssets(true);
+      try {
+        const supabase = getSupabase();
+        if (!supabase) {
+          console.error('Supabase 클라이언트 초기화 실패');
+          return;
+        }
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
+          // 카테고리 로드
+          const { data: categoryData, error: categoryError } = await supabase.rpc('get_active_categories', {
+            p_user_id: user.id,
+            p_type: null
+          });
+          
+          if (categoryError) {
+            console.error('카테고리 로드 실패:', categoryError);
+          } else {
+            setCategories(categoryData || []);
+            
+            // 초기 카테고리 설정 (지출의 첫 번째 대분류)
+            const expenseCategories = (categoryData || []).filter(
+              (c: Category) => c.type === 'expense' && c.subcategory === null
+            );
+            if (expenseCategories.length > 0 && !formData.category) {
+              setFormData(prev => ({ ...prev, category: expenseCategories[0].category }));
+            }
+          }
+          
+          // 자산 목록 로드
+          const { data: assetData, error: assetError } = await supabase.rpc('get_asset_balances', {
+            p_user_id: user.id
+          });
+          
+          if (assetError) {
+            console.error('자산 로드 실패:', assetError);
+          } else {
+            setAssets(assetData || []);
+            
+            // 초기 자산 설정 (첫 번째 자산)
+            if (assetData && assetData.length > 0 && !formData.asset) {
+              setFormData(prev => ({ ...prev, asset: assetData[0].asset_name }));
+            }
+          }
+        }
+      } catch (err) {
+        console.error('데이터 로드 실패:', err);
+      } finally {
+        setIsLoadingCategories(false);
+        setIsLoadingAssets(false);
+      }
+    };
+    
+    if (isOpen) {
+      loadData();
+    }
+  }, [isOpen]);
+
+  // 현재 타입에 맞는 대분류 목록
+  const getMainCategories = () => {
+    const typeMap: Record<string, string> = {
+      '수입': 'income',
+      '지출': 'expense',
+      '자산이체': 'transfer'
+    };
+    const dbType = typeMap[formData.transaction_type];
+    return categories.filter(c => c.type === dbType && c.subcategory === null);
+  };
+
+  // 선택된 대분류에 맞는 소분류 목록
+  const getSubcategories = () => {
+    const typeMap: Record<string, string> = {
+      '수입': 'income',
+      '지출': 'expense',
+      '자산이체': 'transfer'
+    };
+    const dbType = typeMap[formData.transaction_type];
+    return categories.filter(
+      c => c.type === dbType && c.category === formData.category && c.subcategory !== null
+    );
+  };
 
   const handleTypeChange = (type: '수입' | '지출' | '자산이체') => {
     const isTransfer = type === '자산이체';
+    const typeMap: Record<string, string> = {
+      '수입': 'income',
+      '지출': 'expense',
+      '자산이체': 'transfer'
+    };
+    const dbType = typeMap[type];
+    
+    // 해당 타입의 첫 번째 대분류 가져오기
+    const mainCats = categories.filter(c => c.type === dbType && c.subcategory === null);
+    const firstCategory = mainCats.length > 0 ? mainCats[0].category : '';
+    
     setFormData({
       ...formData,
       transaction_type: type,
       is_transfer: isTransfer,
-      category: isTransfer ? '자산이체' : CATEGORY_OPTIONS[type][0],
+      category: isTransfer ? '자산이체' : firstCategory,
+      sub_category: '',
       transfer_asset: isTransfer ? formData.transfer_asset : undefined,
+    });
+  };
+
+  const handleCategoryChange = (category: string) => {
+    setFormData({
+      ...formData,
+      category,
+      sub_category: '', // 대분류 변경 시 소분류 초기화
     });
   };
 
@@ -87,8 +200,8 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
         amount: 0,
         transaction_type: '지출',
         is_transfer: false,
-        asset: '현금',
-        category: '식비',
+        asset: assets.length > 0 ? assets[0].asset_name : '',
+        category: '',
         sub_category: '',
         memo: '',
       });
@@ -181,15 +294,23 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
             <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
               {isTransfer ? '출금 자산' : '자산'}
             </label>
-            <select
-              value={formData.asset}
-              onChange={(e) => setFormData({ ...formData, asset: e.target.value })}
-              className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {ASSET_OPTIONS.map((asset) => (
-                <option key={asset} value={asset}>{asset}</option>
-              ))}
-            </select>
+            {isLoadingAssets ? (
+              <div className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-400">
+                로딩 중...
+              </div>
+            ) : (
+              <select
+                value={formData.asset}
+                onChange={(e) => setFormData({ ...formData, asset: e.target.value })}
+                className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {assets.map((item) => (
+                  <option key={item.asset_name} value={item.asset_name}>
+                    {item.asset_name} {item.is_debt ? '(부채)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* 이체 대상 자산 (자산이체일 때만) */}
@@ -204,8 +325,10 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
                 className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">선택하세요</option>
-                {ASSET_OPTIONS.filter(a => a !== formData.asset).map((asset) => (
-                  <option key={asset} value={asset}>{asset}</option>
+                {assets.filter(a => a.asset_name !== formData.asset).map((item) => (
+                  <option key={item.asset_name} value={item.asset_name}>
+                    {item.asset_name} {item.is_debt ? '(부채)' : ''}
+                  </option>
                 ))}
               </select>
             </div>
@@ -213,20 +336,48 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
 
           {/* 분류 (자산이체가 아닐 때만) */}
           {!isTransfer && (
-            <div className="mb-3">
-              <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
-                분류
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {CATEGORY_OPTIONS[formData.transaction_type].map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              {/* 대분류 */}
+              <div className="mb-3">
+                <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
+                  분류
+                </label>
+                {isLoadingCategories ? (
+                  <div className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-400">
+                    로딩 중...
+                  </div>
+                ) : (
+                  <select
+                    value={formData.category}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {getMainCategories().map((cat) => (
+                      <option key={cat.id} value={cat.category}>{cat.category}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* 소분류 (있는 경우만) */}
+              {getSubcategories().length > 0 && (
+                <div className="mb-3">
+                  <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
+                    세부 분류 <span className="text-gray-400">(선택)</span>
+                  </label>
+                  <select
+                    value={formData.sub_category || ''}
+                    onChange={(e) => setFormData({ ...formData, sub_category: e.target.value || undefined })}
+                    className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">선택 안함</option>
+                    {getSubcategories().map((cat) => (
+                      <option key={cat.id} value={cat.subcategory || ''}>{cat.subcategory}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
           )}
 
           {/* 메모 */}

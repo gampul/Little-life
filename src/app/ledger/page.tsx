@@ -44,6 +44,9 @@ export default function LedgerPage() {
     period: 'all',
     type: 'all',
   });
+  
+  // 자산 필터
+  const [assetFilter, setAssetFilter] = useState<string | null>(null);
 
   // 사용자 인증 확인
   useEffect(() => {
@@ -216,6 +219,42 @@ export default function LedgerPage() {
     }
   }, [supabase, userId, getFilterConditions, transactions.length, totalCount, isLoadingMore]);
 
+  // 자산 필터링 - 특정 자산의 모든 거래 로드
+  const handleAssetFilter = useCallback(async (asset: string | null) => {
+    setAssetFilter(asset);
+    
+    if (!asset) {
+      // 필터 해제 시 원래 목록으로 복원
+      loadTransactions();
+      return;
+    }
+    
+    if (!supabase || !userId) return;
+    
+    setIsLoading(true);
+    try {
+      // 해당 자산의 모든 거래 조회 (asset 또는 transfer_asset이 일치)
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .or(`asset.eq.${asset},transfer_asset.eq.${asset}`)
+        .order('date', { ascending: false });
+      
+      if (error) {
+        console.error('자산 필터 오류:', error);
+      } else {
+        setTransactions(data || []);
+        setTotalCount(data?.length || 0);
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('자산 필터:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [supabase, userId, loadTransactions]);
+
   // 데이터 로드
   useEffect(() => {
     if (userId) {
@@ -284,12 +323,89 @@ export default function LedgerPage() {
     setShowUpload(false);
   };
 
+  // 엑셀 다운로드 (전체 거래내역)
+  const handleExcelDownload = async () => {
+    if (!supabase || !userId) return;
+    
+    try {
+      // 전체 거래 데이터 로드 (페이지네이션)
+      let allData: Transaction[] = [];
+      let hasMoreData = true;
+      let page = 0;
+      const BATCH_SIZE = 1000;
+      
+      while (hasMoreData) {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('date', { ascending: true })
+          .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+        
+        if (error) {
+          console.error('다운로드 오류:', error);
+          hasMoreData = false;
+        } else if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          hasMoreData = data.length === BATCH_SIZE;
+          page++;
+        } else {
+          hasMoreData = false;
+        }
+      }
+      
+      if (allData.length === 0) {
+        alert('다운로드할 거래 데이터가 없습니다.');
+        return;
+      }
+      
+      // CSV 생성
+      const headers = ['날짜', '거래유형', '카테고리', '소분류', '금액', '자산', '이체자산', '메모'];
+      const csvRows = [
+        headers.join(','),
+        ...allData.map(tx => {
+          const date = new Date(tx.date).toISOString().split('T')[0];
+          const values = [
+            date,
+            tx.transaction_type || '',
+            tx.category || '',
+            tx.sub_category || '',
+            tx.amount || 0,
+            tx.asset || '',
+            tx.transfer_asset || '',
+            (tx.memo || '').replace(/,/g, ' ').replace(/"/g, "'"),
+          ];
+          return values.map(v => `"${v}"`).join(',');
+        })
+      ];
+      
+      const csvContent = '\uFEFF' + csvRows.join('\n'); // BOM for Korean encoding
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      // 다운로드 링크 생성
+      const today = new Date().toISOString().split('T')[0];
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `거래내역_${today}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      alert(`${allData.length}건의 거래내역을 다운로드했습니다.`);
+    } catch (err) {
+      console.error('다운로드 오류:', err);
+      alert('다운로드 중 오류가 발생했습니다.');
+    }
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         <GlobalNav />
         
-        <main className="max-w-[412px] mx-auto px-4 pt-20">
+        <main className="max-w-[412px] mx-auto px-4 pt-4">
           {/* 대시보드 (재무 요약) */}
           <Dashboard
             totalIncome={summary.total_income}
@@ -316,6 +432,13 @@ export default function LedgerPage() {
             >
               CSV
             </button>
+            <button
+              onClick={handleExcelDownload}
+              className="px-4 py-3 text-sm font-medium rounded-xl transition-colors bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+              title="전체 거래내역 다운로드"
+            >
+              📥
+            </button>
           </div>
 
           {/* CSV 업로드 영역 */}
@@ -339,16 +462,18 @@ export default function LedgerPage() {
           {/* 거래 리스트 */}
           <div className="mb-4">
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-              거래 내역 ({transactions.length} / {totalCount}건)
+              거래 내역 {assetFilter ? `(${assetFilter})` : ''} ({transactions.length}건)
             </p>
             <TransactionList
               transactions={transactions}
               isLoading={isLoading}
               onDelete={handleDeleteTransaction}
+              onAssetFilter={handleAssetFilter}
+              filterAsset={assetFilter}
             />
             
             {/* 더 보기 버튼 */}
-            {hasMore && !isLoading && (
+            {hasMore && !isLoading && !assetFilter && (
               <button
                 onClick={loadMoreTransactions}
                 disabled={isLoadingMore}

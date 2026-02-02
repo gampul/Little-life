@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 export interface Transaction {
   id: string;
   date: string;
@@ -21,38 +23,71 @@ interface TransactionListProps {
   transactions: Transaction[];
   isLoading: boolean;
   onDelete?: (id: string) => void;
+  onAssetFilter?: (asset: string | null) => void;
+  filterAsset?: string | null;
 }
 
-export function TransactionList({ transactions, isLoading, onDelete }: TransactionListProps) {
+export function TransactionList({ transactions, isLoading, onDelete, onAssetFilter, filterAsset: externalFilterAsset }: TransactionListProps) {
+  const [internalFilterAsset, setInternalFilterAsset] = useState<string | null>(null);
+  
+  // 외부 필터가 있으면 외부 사용, 없으면 내부 사용
+  const filterAsset = onAssetFilter ? externalFilterAsset : internalFilterAsset;
+  
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('ko-KR').format(amount);
+  };
+  
+  // 외부 필터가 있으면 이미 필터된 데이터가 넘어옴
+  const filteredTransactions = onAssetFilter 
+    ? transactions 
+    : (filterAsset ? transactions.filter(tx => tx.asset === filterAsset || tx.transfer_asset === filterAsset) : transactions);
+  
+  const handleAssetClick = (asset: string) => {
+    const newFilter = filterAsset === asset ? null : asset;
+    
+    if (onAssetFilter) {
+      onAssetFilter(newFilter); // 외부로 전달 (서버 필터링)
+    } else {
+      setInternalFilterAsset(newFilter); // 내부 필터링
+    }
+  };
+  
+  const handleClearFilter = () => {
+    if (onAssetFilter) {
+      onAssetFilter(null);
+    } else {
+      setInternalFilterAsset(null);
+    }
   };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return `${date.getMonth() + 1}/${date.getDate()}`;
+    const year = date.getFullYear().toString().slice(2);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}/${month}/${day}`;
   };
 
   const getTypeStyle = (type: string, isTransfer: boolean) => {
     if (isTransfer || type === '자산이체') {
       return {
-        color: 'text-blue-600 dark:text-blue-400',
-        bg: 'bg-blue-50 dark:bg-blue-900/20',
-        prefix: '↔',
+        color: 'text-emerald-700 dark:text-emerald-400',
+        bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+        prefix: '',
       };
     }
     switch (type) {
       case '수입':
         return {
-          color: 'text-green-600 dark:text-green-400',
-          bg: 'bg-green-50 dark:bg-green-900/20',
-          prefix: '+',
+          color: 'text-blue-600 dark:text-blue-400',
+          bg: 'bg-blue-50 dark:bg-blue-900/20',
+          prefix: '',
         };
       case '지출':
         return {
           color: 'text-red-600 dark:text-red-400',
           bg: 'bg-red-50 dark:bg-red-900/20',
-          prefix: '-',
+          prefix: '',
         };
       default:
         return {
@@ -78,7 +113,7 @@ export function TransactionList({ transactions, isLoading, onDelete }: Transacti
     );
   }
 
-  if (transactions.length === 0) {
+  if (filteredTransactions.length === 0 && !filterAsset) {
     return (
       <div className="text-center py-8 text-gray-400 dark:text-gray-500">
         <p className="text-base">거래 내역이 없습니다</p>
@@ -89,15 +124,28 @@ export function TransactionList({ transactions, isLoading, onDelete }: Transacti
 
   return (
     <div className="space-y-2">
-      {transactions.map((tx) => {
+      {/* 필터 표시 */}
+      {filterAsset && (
+        <div className="flex items-center justify-between px-3 py-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg mb-2">
+          <span className="text-sm text-blue-700 dark:text-blue-300">
+            🔍 <strong>{filterAsset}</strong> 거래 ({filteredTransactions.length}건)
+          </span>
+          <button
+            onClick={handleClearFilter}
+            className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-700"
+          >
+            필터 해제
+          </button>
+        </div>
+      )}
+      
+      {filteredTransactions.map((tx) => {
         const style = getTypeStyle(tx.transaction_type, tx.is_transfer);
         
         return (
           <div
             key={tx.id}
-            className={`bg-white dark:bg-gray-800 rounded-xl p-3 border border-gray-100 dark:border-gray-700 ${
-              tx.is_transfer ? 'border-l-4 border-l-blue-400' : ''
-            }`}
+            className="p-3 border-b border-white dark:border-gray-600"
           >
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">
@@ -105,22 +153,9 @@ export function TransactionList({ transactions, isLoading, onDelete }: Transacti
                   <span className="text-sm text-gray-500 dark:text-gray-400">
                     {formatDate(tx.date)}
                   </span>
-                  <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  <span className="font-medium text-gray-900 dark:text-white truncate" style={{ fontSize: '12px' }}>
                     {tx.category}
                   </span>
-                  {tx.memo && (
-                    <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[80px]">
-                      {tx.memo}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    {tx.asset}
-                    {tx.is_transfer && tx.transfer_asset && (
-                      <span> → {tx.transfer_asset}</span>
-                    )}
-                  </p>
                   {tx.source === 'csv' && (
                     <span className="text-[10px] px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded">
                       CSV
@@ -131,10 +166,36 @@ export function TransactionList({ transactions, isLoading, onDelete }: Transacti
                       이체
                     </span>
                   )}
+                  {tx.memo && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[80px]">
+                      {tx.memo}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    <span 
+                      onClick={() => handleAssetClick(tx.asset)}
+                      className={`cursor-pointer hover:underline ${filterAsset === tx.asset ? 'text-blue-500 font-medium' : ''}`}
+                    >
+                      {tx.asset}
+                    </span>
+                    {tx.is_transfer && tx.transfer_asset && (
+                      <span style={{ fontSize: '10px' }}>
+                        {' → '}
+                        <span 
+                          onClick={() => handleAssetClick(tx.transfer_asset!)}
+                          className={`cursor-pointer hover:underline ${filterAsset === tx.transfer_asset ? 'text-blue-500 font-medium' : ''}`}
+                        >
+                          {tx.transfer_asset}
+                        </span>
+                      </span>
+                    )}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`text-base font-bold ${style.color}`}>
+                <span className={`font-bold ${style.color}`} style={{ fontSize: '13px' }}>
                   {style.prefix}{formatAmount(tx.amount)}
                 </span>
                 {onDelete && (
