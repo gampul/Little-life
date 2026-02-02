@@ -5,17 +5,16 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { getSupabase } from '../../lib/supabase';
-import { LedgerSummary } from './components/LedgerSummary';
+import { Dashboard } from './components/Dashboard';
 import { TransactionForm, TransactionData } from './components/TransactionForm';
 import { TransactionList, Transaction } from './components/TransactionList';
 import { TransactionFilters, FilterState } from './components/TransactionFilters';
 import { ExcelUpload } from './components/ExcelUpload';
 
-interface LedgerSummaryData {
+interface FinancialSummary {
   total_income: number;
   total_expense: number;
-  total_transfer: number;
-  net_cash_position: number;
+  net_asset: number;
 }
 
 export default function LedgerPage() {
@@ -26,12 +25,11 @@ export default function LedgerPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   
-  // 요약 데이터
-  const [summary, setSummary] = useState<LedgerSummaryData>({
+  // 재무 요약 데이터
+  const [summary, setSummary] = useState<FinancialSummary>({
     total_income: 0,
     total_expense: 0,
-    total_transfer: 0,
-    net_cash_position: 0,
+    net_asset: 0,
   });
   
   // 거래 목록
@@ -63,56 +61,27 @@ export default function LedgerPage() {
     });
   }, [supabase]);
 
-  // 요약 데이터 로드 (서버 사이드 계산 사용)
+  // 재무 요약 로드
   const loadSummary = useCallback(async () => {
     if (!supabase || !userId) return;
     
     try {
-      // RPC 함수 호출 시도
-      const { data, error } = await supabase.rpc('get_user_ledger_summary', {
+      const { data, error } = await supabase.rpc('get_financial_summary', {
         p_user_id: userId,
       });
       
       if (error) {
-        // RPC가 없으면 직접 계산
-        const { data: txData, error: txError } = await supabase
-          .from('ledger_transactions')
-          .select('amount, type')
-          .eq('user_id', userId);
-        
-        if (txError) {
-          console.log('테이블이 없습니다. Supabase에서 마이그레이션을 실행해주세요.');
-          return;
-        }
-        
-        if (txData) {
-          const total_income = txData
-            .filter(t => t.type === 'income')
-            .reduce((sum, t) => sum + t.amount, 0);
-          const total_expense = txData
-            .filter(t => t.type === 'expense')
-            .reduce((sum, t) => sum + t.amount, 0);
-          const total_transfer = txData
-            .filter(t => t.type === 'transfer')
-            .reduce((sum, t) => sum + t.amount, 0);
-          
-          setSummary({
-            total_income,
-            total_expense,
-            total_transfer,
-            net_cash_position: total_income - total_expense - total_transfer,
-          });
-        }
+        console.log('재무 요약 로드 오류:', error.message);
+        console.log('Supabase에서 마이그레이션을 실행해주세요.');
       } else if (data && data.length > 0) {
         setSummary({
           total_income: data[0].total_income || 0,
           total_expense: data[0].total_expense || 0,
-          total_transfer: data[0].total_transfer || 0,
-          net_cash_position: data[0].net_cash_position || 0,
+          net_asset: data[0].net_asset || 0,
         });
       }
     } catch (err) {
-      console.log('요약 로드:', err);
+      console.log('요약 로드 오류:', err);
     }
   }, [supabase, userId]);
 
@@ -138,7 +107,18 @@ export default function LedgerPage() {
       }
     }
     
-    return { startDate, type: filters.type };
+    // 타입 매핑
+    let typeFilter: string | null = null;
+    if (filters.type !== 'all') {
+      const typeMap: Record<string, string> = {
+        'income': '수입',
+        'expense': '지출',
+        'transfer': '자산이체',
+      };
+      typeFilter = typeMap[filters.type] || null;
+    }
+    
+    return { startDate, type: typeFilter };
   }, [filters]);
 
   // 거래 목록 로드 (초기 로드)
@@ -150,15 +130,15 @@ export default function LedgerPage() {
       
       // 먼저 총 개수 조회
       let countQuery = supabase
-        .from('ledger_transactions')
+        .from('transactions')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
       
       if (startDate) {
         countQuery = countQuery.gte('date', startDate.toISOString());
       }
-      if (type !== 'all') {
-        countQuery = countQuery.eq('type', type);
+      if (type) {
+        countQuery = countQuery.eq('transaction_type', type);
       }
       
       const { count } = await countQuery;
@@ -166,7 +146,7 @@ export default function LedgerPage() {
       
       // 첫 페이지 데이터 조회
       let dataQuery = supabase
-        .from('ledger_transactions')
+        .from('transactions')
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false })
@@ -175,8 +155,8 @@ export default function LedgerPage() {
       if (startDate) {
         dataQuery = dataQuery.gte('date', startDate.toISOString());
       }
-      if (type !== 'all') {
-        dataQuery = dataQuery.eq('type', type);
+      if (type) {
+        dataQuery = dataQuery.eq('transaction_type', type);
       }
       
       const { data, error } = await dataQuery;
@@ -208,7 +188,7 @@ export default function LedgerPage() {
       const offset = transactions.length;
       
       let query = supabase
-        .from('ledger_transactions')
+        .from('transactions')
         .select('*')
         .eq('user_id', userId)
         .order('date', { ascending: false })
@@ -217,8 +197,8 @@ export default function LedgerPage() {
       if (startDate) {
         query = query.gte('date', startDate.toISOString());
       }
-      if (type !== 'all') {
-        query = query.eq('type', type);
+      if (type) {
+        query = query.eq('transaction_type', type);
       }
       
       const { data, error } = await query;
@@ -250,14 +230,17 @@ export default function LedgerPage() {
       throw new Error('로그인이 필요합니다');
     }
     
-    const { error } = await supabase.from('ledger_transactions').insert({
+    const { error } = await supabase.from('transactions').insert({
       user_id: userId,
       date: new Date(data.date).toISOString(),
       amount: data.amount,
-      type: data.type,
+      transaction_type: data.transaction_type,
+      is_transfer: data.is_transfer,
       asset: data.asset,
+      transfer_asset: data.transfer_asset || null,
       category: data.category,
-      description: data.description || null,
+      sub_category: data.sub_category || null,
+      memo: data.memo || null,
       currency: 'KRW',
       source: 'app',
     });
@@ -280,7 +263,7 @@ export default function LedgerPage() {
     if (!confirmed) return;
     
     const { error } = await supabase
-      .from('ledger_transactions')
+      .from('transactions')
       .delete()
       .eq('id', id)
       .eq('user_id', userId);
@@ -307,12 +290,11 @@ export default function LedgerPage() {
         <GlobalNav />
         
         <main className="max-w-[412px] mx-auto px-4 pt-20">
-          {/* 요약 카드 */}
-          <LedgerSummary
-            netCashPosition={summary.net_cash_position}
+          {/* 대시보드 (재무 요약) */}
+          <Dashboard
             totalIncome={summary.total_income}
             totalExpense={summary.total_expense}
-            totalTransfer={summary.total_transfer}
+            netAsset={summary.net_asset}
             isLoading={isLoading}
           />
           
@@ -320,25 +302,23 @@ export default function LedgerPage() {
           <div className="my-4 flex gap-2">
             <button
               onClick={() => setIsFormOpen(true)}
-              style={{ fontSize: '16px' }}
-              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
+              className="flex-1 py-3 text-base bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
             >
               + 거래 추가
             </button>
             <button
               onClick={() => setShowUpload(!showUpload)}
-              style={{ fontSize: '14px' }}
-              className={`px-4 py-3 font-medium rounded-xl transition-colors ${
+              className={`px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
                 showUpload 
                   ? 'bg-green-600 text-white' 
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
               }`}
             >
-              Excel
+              CSV
             </button>
           </div>
 
-          {/* Excel 업로드 영역 */}
+          {/* CSV 업로드 영역 */}
           {showUpload && (
             <div className="mb-4">
               <ExcelUpload 
@@ -355,10 +335,10 @@ export default function LedgerPage() {
               onChange={setFilters}
             />
           </div>
-          
+
           {/* 거래 리스트 */}
           <div className="mb-4">
-            <p style={{ fontSize: '14px' }} className="text-gray-500 dark:text-gray-400 mb-2">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
               거래 내역 ({transactions.length} / {totalCount}건)
             </p>
             <TransactionList
@@ -372,8 +352,7 @@ export default function LedgerPage() {
               <button
                 onClick={loadMoreTransactions}
                 disabled={isLoadingMore}
-                style={{ fontSize: '14px' }}
-                className="w-full mt-3 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="w-full mt-3 py-3 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors disabled:opacity-50"
               >
                 {isLoadingMore ? '불러오는 중...' : `더 보기 (${totalCount - transactions.length}건 남음)`}
               </button>
@@ -381,7 +360,7 @@ export default function LedgerPage() {
             
             {/* 전체 로드 완료 메시지 */}
             {!hasMore && transactions.length > 0 && transactions.length === totalCount && (
-              <p style={{ fontSize: '12px' }} className="text-center text-gray-400 dark:text-gray-500 mt-3">
+              <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-3">
                 전체 {totalCount}건 로드 완료
               </p>
             )}

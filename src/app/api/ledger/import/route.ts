@@ -5,20 +5,23 @@ import * as XLSX from 'xlsx';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// 타입 매핑
-const TYPE_MAPPING: Record<string, string> = {
-  '수입': 'income',
-  '지출': 'expense',
-  '이체지출': 'transfer',
-  '이체': 'transfer',
+// 거래 유형 매핑 (CSV → DB)
+const TYPE_MAPPING: Record<string, { transaction_type: string; is_transfer: boolean }> = {
+  '수입': { transaction_type: '수입', is_transfer: false },
+  '지출': { transaction_type: '지출', is_transfer: false },
+  '이체': { transaction_type: '자산이체', is_transfer: true },
+  '이체지출': { transaction_type: '자산이체', is_transfer: true },
+  '이체입금': { transaction_type: '자산이체', is_transfer: true },
 };
 
 interface ExcelRow {
   날짜?: string | number | Date;
   자산?: string;
+  이체자산?: string;
   분류?: string;
   소분류?: string;
-  내용?: string;
+  메모?: string;
+  '금액(원)'?: number | string;
   금액?: number | string;
   '수입/지출'?: string;
 }
@@ -29,9 +32,11 @@ interface TransactionInsert {
   asset: string;
   category: string;
   sub_category: string | null;
-  description: string | null;
+  transaction_type: string;
+  is_transfer: boolean;
+  transfer_asset: string | null;
   amount: number;
-  type: string;
+  memo: string | null;
   currency: string;
   source: string;
   import_batch_id: string;
@@ -114,7 +119,12 @@ export async function POST(request: NextRequest) {
           // Excel 시리얼 날짜
           dateValue = new Date((row.날짜 - 25569) * 86400 * 1000);
         } else if (typeof row.날짜 === 'string') {
-          dateValue = new Date(row.날짜);
+          // "2026. 01. 30 20:10:58" 형식 파싱
+          const cleaned = row.날짜.replace(/\. /g, '-').replace(/ /, 'T');
+          dateValue = new Date(cleaned);
+          if (isNaN(dateValue.getTime())) {
+            dateValue = new Date(row.날짜);
+          }
         } else {
           errors.push(`Row ${rowNum}: 날짜가 없습니다`);
           continue;
@@ -125,12 +135,13 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // 금액 파싱
+        // 금액 파싱 (금액(원) 또는 금액 컬럼)
+        const rawAmount = row['금액(원)'] ?? row.금액;
         let amount: number;
-        if (typeof row.금액 === 'number') {
-          amount = Math.abs(row.금액);
-        } else if (typeof row.금액 === 'string') {
-          amount = Math.abs(parseInt(row.금액.replace(/[^0-9-]/g, '')) || 0);
+        if (typeof rawAmount === 'number') {
+          amount = Math.abs(rawAmount);
+        } else if (typeof rawAmount === 'string') {
+          amount = Math.abs(parseInt(rawAmount.replace(/[^0-9-]/g, '')) || 0);
         } else {
           errors.push(`Row ${rowNum}: 금액이 없습니다`);
           continue;
@@ -141,21 +152,26 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // 타입 매핑
+        // 거래 유형 매핑
         const typeText = row['수입/지출']?.trim() || '';
-        const type = TYPE_MAPPING[typeText];
-        if (!type) {
-          errors.push(`Row ${rowNum}: 알 수 없는 수입/지출 유형 "${typeText}"`);
+        const typeInfo = TYPE_MAPPING[typeText];
+        if (!typeInfo) {
+          errors.push(`Row ${rowNum}: 알 수 없는 거래 유형 "${typeText}"`);
           continue;
         }
 
         // 필수 필드 확인
         const asset = row.자산?.trim();
-        const category = row.분류?.trim();
         
         if (!asset) {
           errors.push(`Row ${rowNum}: 자산이 없습니다`);
           continue;
+        }
+
+        // 분류 처리 (이체인 경우 '자산이체'로 설정)
+        let category = row.분류?.trim() || '';
+        if (typeInfo.is_transfer) {
+          category = '자산이체';
         }
         if (!category) {
           errors.push(`Row ${rowNum}: 분류가 없습니다`);
@@ -168,11 +184,13 @@ export async function POST(request: NextRequest) {
           asset,
           category,
           sub_category: row.소분류?.trim() || null,
-          description: row.내용?.trim() || null,
+          transaction_type: typeInfo.transaction_type,
+          is_transfer: typeInfo.is_transfer,
+          transfer_asset: typeInfo.is_transfer ? (row.이체자산?.trim() || null) : null,
           amount,
-          type,
+          memo: row.메모?.trim() || null,
           currency: 'KRW',
-          source: 'excel',
+          source: 'csv',
           import_batch_id: importBatchId,
         });
       } catch (err) {
@@ -182,16 +200,17 @@ export async function POST(request: NextRequest) {
 
     if (transactions.length === 0) {
       return NextResponse.json({ 
+        success: false,
         error: '유효한 데이터가 없습니다',
-        details: errors.slice(0, 10),
+        errors: errors.slice(0, 20),
       }, { status: 400 });
     }
 
     // Supabase에 삽입 (중복 무시)
     const { data: insertedData, error: insertError } = await supabase
-      .from('ledger_transactions')
+      .from('transactions')
       .upsert(transactions, {
-        onConflict: 'user_id,date,amount,asset,type',
+        onConflict: 'user_id,date,amount,asset,transaction_type',
         ignoreDuplicates: true,
       })
       .select('id');
@@ -199,6 +218,7 @@ export async function POST(request: NextRequest) {
     if (insertError) {
       console.error('Insert error:', insertError);
       return NextResponse.json({ 
+        success: false,
         error: '데이터 저장 실패',
         details: insertError.message,
       }, { status: 500 });
@@ -215,7 +235,8 @@ export async function POST(request: NextRequest) {
 
   } catch (err) {
     console.error('Import error:', err);
-    return NextResponse.json({ 
+    return NextResponse.json({
+      success: false,
       error: '서버 오류',
       details: err instanceof Error ? err.message : 'Unknown error',
     }, { status: 500 });
