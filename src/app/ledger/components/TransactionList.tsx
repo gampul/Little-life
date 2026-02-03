@@ -145,7 +145,8 @@ export function TransactionList({ transactions, isLoading, onDelete, onAssetFilt
         return (
           <div
             key={tx.id}
-            className="p-3 border-b border-white dark:border-gray-600"
+            className="border-b border-white dark:border-gray-600"
+            style={{ padding: '8px' }}
           >
             <div className="flex items-center justify-between">
               <div className="flex-1 min-w-0">

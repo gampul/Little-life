@@ -689,14 +689,12 @@ export default function Home() {
   };
 
   const openWeightModal = () => {
-    const baseDateRaw = (formData?.date || selectedDate || '').toString();
-    const baseDate = baseDateRaw.includes('T')
-      ? baseDateRaw.split('T')[0]
-      : (baseDateRaw.includes(' ') ? baseDateRaw.split(' ')[0] : baseDateRaw);
+    // 항상 현재 날짜(오늘)로 설정
+    const today = new Date().toISOString().split('T')[0];
     const current = typeof formData?.weight === 'number' ? formData.weight : null;
     setWeightInputModal({
       open: true,
-      dateStr: baseDate,
+      dateStr: today,
       weightText: current != null ? current.toFixed(1) : '',
     });
   };
@@ -3276,7 +3274,7 @@ function RoutineItem({
                     >
                       <span 
                         className={`font-bold ${dayValue !== null && dayValue !== 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} 
-                        style={{ fontSize: '11px' }}
+                        style={{ fontSize: '14px' }}
                       >
                         {dayValue !== null ? Math.round(dayValue) : '0'}
                       </span>
