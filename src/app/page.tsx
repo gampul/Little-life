@@ -3155,10 +3155,12 @@ function RoutineItem({
                 type="number"
                 inputMode="decimal"
                 step="0.1"
+                autoFocus
                 value={numberInputModal.valueText}
                 onChange={(e) =>
                   setNumberInputModal((prev) => ({ ...prev, valueText: e.target.value }))
                 }
+                onFocus={(e) => e.target.select()}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
                     setNumberInputModal({ open: false, dateStr: '', valueText: '' });
@@ -3222,15 +3224,7 @@ function RoutineItem({
           {/* 스트릭 (체크박스 타입일 때만) */}
           {routineType === 'checkbox' && consecutiveDays > 0 && (
             <div
-              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
-                isHexColor 
-                  ? '' 
-                  : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
-              }`}
-              style={isHexColor ? {
-                backgroundColor: colorClasses.bgLight,
-                color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-              } : {}}
+              className="px-2 py-1 text-[9px] font-medium rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
             >
               {consecutiveDays}일 연속
             </div>
@@ -3239,16 +3233,7 @@ function RoutineItem({
           {/* 연간 누적 (숫자 타입일 때) */}
           {routineType === 'number' && yearlyTotal > 0 && (
             <div
-              className={`px-2 py-1 text-[9px] font-medium rounded-full ${
-                isHexColor 
-                  ? '' 
-                  : `${colorClasses.bgLight} dark:${colorClasses.bgDark} ${colorClasses.text} dark:${colorClasses.textDark}`
-              }`}
-              style={isHexColor ? {
-                backgroundColor: colorClasses.bgLight,
-                color: getBrightness(routineColor) > 128 ? '#1E3A8A' : '#60A5FA',
-              } : {}}
-              title=""
+              className="px-2 py-1 text-[9px] font-medium rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
             >
               {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}
               {(unit || '').toLowerCase()}
@@ -3289,8 +3274,11 @@ function RoutineItem({
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
-                      <span className="font-bold text-gray-900 dark:text-white" style={{ fontSize: '10px' }}>
-                        {dayValue !== null ? dayValue.toFixed(1) : '0.0'}
+                      <span 
+                        className={`font-bold ${dayValue !== null && dayValue !== 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} 
+                        style={{ fontSize: '11px' }}
+                      >
+                        {dayValue !== null ? Math.round(dayValue) : '0'}
                       </span>
                       <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
                     </button>
