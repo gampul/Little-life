@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabase } from '../../../lib/supabase';
 import { GlobalNav } from '../../components/GlobalNav';
 import { FooterNav } from '../../components/FooterNav';
+import { APP_HORIZONTAL_CONTAINER } from '../../components/layout';
 
 interface Memo {
   id?: string;
@@ -122,7 +123,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <GlobalNav />
-        <div className="max-w-[412px] mx-auto px-4 py-8">
+        <div className={`${APP_HORIZONTAL_CONTAINER} py-8`}>
           <div className="flex items-center justify-center py-20">
             <div className="text-gray-400">로딩 중...</div>
           </div>
@@ -136,7 +137,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <GlobalNav />
-        <div className="max-w-[412px] mx-auto px-4 py-8">
+        <div className={`${APP_HORIZONTAL_CONTAINER} py-8`}>
           <div className="text-center py-20">
             <div className="text-4xl mb-4">📭</div>
             <p className="text-gray-500 dark:text-gray-400">글을 찾을 수 없습니다</p>
@@ -159,7 +160,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* 상단 네비게이션 */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-[412px] mx-auto px-4 py-3 flex items-center justify-between">
+        <div className={`${APP_HORIZONTAL_CONTAINER} py-3 flex items-center justify-between`}>
           <button
             onClick={() => router.back()}
             className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
@@ -195,7 +196,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* 본문 */}
-      <div className="max-w-[412px] mx-auto px-4 py-6">
+      <div className={`${APP_HORIZONTAL_CONTAINER} py-6`}>
         {/* 제목 */}
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">
           {memo.title || '제목 없음'}
@@ -211,7 +212,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* 본문 내용 */}
         <div 
-          className="prose prose-sm sm:prose dark:prose-invert max-w-none mb-8"
+          className="memo-content prose dark:prose-invert max-w-none mb-8 text-[14px]"
           dangerouslySetInnerHTML={{ __html: memo.content }}
           style={{
             lineHeight: 1.8,
@@ -266,18 +267,21 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
       <FooterNav />
 
       <style jsx global>{`
-        .prose img {
+        .memo-content.prose {
+          font-size: 14px;
+        }
+        .memo-content.prose img {
           border-radius: 0.5rem;
           margin: 1rem 0;
         }
-        .prose p {
+        .memo-content.prose p {
           margin-bottom: 1rem;
         }
-        .prose ul, .prose ol {
+        .memo-content.prose ul, .memo-content.prose ol {
           padding-left: 1.5rem;
           margin-bottom: 1rem;
         }
-        .prose li {
+        .memo-content.prose li {
           margin-bottom: 0.25rem;
         }
       `}</style>

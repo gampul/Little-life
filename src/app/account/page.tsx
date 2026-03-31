@@ -6,6 +6,7 @@ import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
 import InvestmentDiary from '../components/InvestmentDiary';
+import { APP_CONTENT_CONTAINER } from '../components/layout';
 import { getSupabase } from '../../lib/supabase';
 import {
   LineChart,
@@ -766,7 +767,7 @@ export default function AccountPage() {
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
-        <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <div className={APP_CONTENT_CONTAINER}>
         <div className="space-y-2">
           {/* 투자일기 */}
           <InvestmentDiary />

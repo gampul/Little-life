@@ -8,6 +8,7 @@ import { getSupabase } from '../../lib/supabase';
 import { AssetSummary } from './components/AssetSummary';
 import { AssetList, AssetItem, Transaction, Category, CategoryMapping } from './components/AssetList';
 import { DebtList } from './components/DebtList';
+import { APP_HORIZONTAL_CONTAINER } from '../components/layout';
 
 interface AssetSummaryData {
   total_assets: number;
@@ -165,7 +166,7 @@ export default function AssetsPage() {
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         <GlobalNav />
         
-        <main className="max-w-[412px] mx-auto px-4 pt-4">
+        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6`}>
           {/* 헤더 */}
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">

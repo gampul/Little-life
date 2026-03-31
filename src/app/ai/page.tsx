@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { SwipeNav } from '../components/SwipeNav';
+import { APP_HORIZONTAL_CONTAINER } from '../components/layout';
 
 interface Message {
   id: string;
@@ -162,7 +163,7 @@ export default function AIPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
       <GlobalNav />
 
-      <div className="max-w-[412px] mx-auto">
+      <div className={APP_HORIZONTAL_CONTAINER}>
         {/* 탭 네비게이션 */}
         <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div className="flex">

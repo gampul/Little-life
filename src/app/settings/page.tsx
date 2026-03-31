@@ -6,6 +6,7 @@ import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { CategoryManager } from '../assets/components/CategoryManager';
+import { APP_CONTENT_CONTAINER } from '../components/layout';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
@@ -738,7 +739,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
-      <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      <div className={APP_CONTENT_CONTAINER}>
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-5">
           <div className="flex items-center justify-between mb-4 sm:mb-6">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">⚙️ 설정</h2>

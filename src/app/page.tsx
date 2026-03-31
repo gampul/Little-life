@@ -7,6 +7,7 @@ import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
+import { APP_CONTENT_CONTAINER } from './components/layout';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -1276,7 +1277,7 @@ export default function Home() {
         )}
 
         <GlobalNav />
-        <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+        <div className={APP_CONTENT_CONTAINER}>
 
         {/* 루틴 설정 모달 */}
         {isRoutineSettingOpen && (

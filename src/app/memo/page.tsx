@@ -7,9 +7,25 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
+import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/layout';
 
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+/** 줄 시작 `컬러` + 스페이스 → 대표 색상 선택 */
+const INLINE_COLOR_TRIGGER = '컬러';
+
+/** 글자색 툴바 프리셋 */
+const TEXT_COLOR_PRESETS: { hex: string; label: string }[] = [
+  { hex: '#111827', label: '검정' },
+  { hex: '#6b7280', label: '회색' },
+  { hex: '#dc2626', label: '빨강' },
+  { hex: '#ea580c', label: '주황' },
+  { hex: '#ca8a04', label: '황토' },
+  { hex: '#16a34a', label: '초록' },
+  { hex: '#2563eb', label: '파랑' },
+  { hex: '#7c3aed', label: '보라' },
+];
 
 interface Memo {
   id?: string;
@@ -56,6 +72,7 @@ function MemoPageContent() {
   const [message, setMessage] = useState('');
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textColorInputRef = useRef<HTMLInputElement>(null);
   
   // 뷰 모드 상태
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -76,6 +93,8 @@ function MemoPageContent() {
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [inlineColorPickerPos, setInlineColorPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const inlineColorPickerRef = useRef<HTMLDivElement>(null);
 
   // 에디터 내용 업데이트
   const handleEditorInput = () => {
@@ -87,12 +106,208 @@ function MemoPageContent() {
     }
   };
 
+  /** 라인 시작 `#` / `##` / `###` + 스페이스 → 헤딩 (GitHub 스타일 마크다운 쇼트컷) */
+  const headingStyles: Record<1 | 2 | 3, string> = {
+    1: 'font-size: 2em; font-weight: bold; margin: 0.67em 0;',
+    2: 'font-size: 1.5em; font-weight: bold; margin: 0.75em 0;',
+    3: 'font-size: 1.17em; font-weight: bold; margin: 0.83em 0;',
+  };
+
+  const getBlockElementForCaret = (root: HTMLElement, sel: Selection): HTMLElement | null => {
+    let n: Node | null = sel.anchorNode;
+    if (!n || !root.contains(n)) return null;
+    while (n && n !== root) {
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const tag = (n as HTMLElement).tagName;
+        if (tag === 'DIV' || tag === 'P' || tag === 'LI') {
+          return n as HTMLElement;
+        }
+      }
+      n = n.parentNode;
+    }
+    return root;
+  };
+
+  const textFromBlockStartToCaret = (block: HTMLElement, sel: Selection): string => {
+    const r = document.createRange();
+    try {
+      r.setStart(block, 0);
+      r.setEnd(sel.anchorNode!, sel.anchorOffset);
+      return r.toString();
+    } catch {
+      return '';
+    }
+  };
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.nativeEvent.isComposing) return;
+    if (inlineColorPickerPos && e.key === 'Escape') {
+      e.preventDefault();
+      setInlineColorPickerPos(null);
+      return;
+    }
+    if (e.key !== ' ' || !editorRef.current) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+
+    const root = editorRef.current;
+    const block = getBlockElementForCaret(root, sel);
+    if (!block) return;
+    if (/^H[1-6]$/i.test(block.tagName)) return;
+
+    const before = textFromBlockStartToCaret(block, sel);
+
+    if (before === INLINE_COLOR_TRIGGER) {
+      e.preventDefault();
+      setInlineColorPickerPos(null);
+
+      const del = document.createRange();
+      try {
+        del.setStart(block, 0);
+        del.setEnd(sel.anchorNode, sel.anchorOffset);
+        del.deleteContents();
+      } catch {
+        return;
+      }
+
+      const caret = document.createRange();
+      try {
+        caret.setStart(block, 0);
+        caret.collapse(true);
+      } catch {
+        editorRef.current.focus();
+        handleEditorInput();
+        return;
+      }
+      if (block.childNodes.length === 0) {
+        block.appendChild(document.createElement('br'));
+        caret.setStart(block, 0);
+        caret.collapse(true);
+      }
+      sel.removeAllRanges();
+      sel.addRange(caret);
+
+      const rect = caret.getBoundingClientRect();
+      const pad = 4;
+      let left = rect.left;
+      const top = rect.bottom + pad;
+      const panelW = 216;
+      if (left + panelW > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - panelW - 8);
+      }
+
+      setInlineColorPickerPos({ top, left });
+      handleEditorInput();
+      return;
+    }
+
+    const hm = before.match(/^(#{1,3})$/);
+    if (hm) {
+      e.preventDefault();
+
+      const level = hm[1].length as 1 | 2 | 3;
+      const h = document.createElement(`h${level}`);
+      h.setAttribute('style', headingStyles[level]);
+
+      const parent = block.parentNode;
+      if (parent) {
+        parent.replaceChild(h, block);
+      } else {
+        root.appendChild(h);
+      }
+
+      h.appendChild(document.createElement('br'));
+
+      const newRange = document.createRange();
+      newRange.setStart(h, 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+
+      handleEditorInput();
+      return;
+    }
+
+    // 라인 시작 `-` 또는 `*` + 스페이스 → 글머리(점) 목록
+    if (
+      (before === '-' || before === '*') &&
+      (block.tagName === 'DIV' || block.tagName === 'P')
+    ) {
+      e.preventDefault();
+
+      const ul = document.createElement('ul');
+      ul.setAttribute('style', 'margin: 0.5em 0; padding-left: 1.25em; list-style-type: disc;');
+      const li = document.createElement('li');
+      li.appendChild(document.createElement('br'));
+      ul.appendChild(li);
+
+      const parent = block.parentNode;
+      if (parent) {
+        parent.replaceChild(ul, block);
+      } else {
+        root.appendChild(ul);
+      }
+
+      const newRange = document.createRange();
+      newRange.setStart(li, 0);
+      newRange.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+
+      handleEditorInput();
+    }
+  };
+
   // 에디터 포맷 버튼 핸들러
   const formatText = (command: string, value?: string) => {
     document.execCommand(command, false, value);
     editorRef.current?.focus();
     handleEditorInput();
   };
+
+  const applyTextColor = (color: string) => {
+    if (!editorRef.current) return;
+    document.execCommand('foreColor', false, color);
+    editorRef.current.focus();
+    handleEditorInput();
+  };
+
+  /** 라이트/다크에 맞는 에디터 기본 글자색으로 맞춤 */
+  const applyDefaultTextColor = () => {
+    if (!editorRef.current) return;
+    const inherited = getComputedStyle(editorRef.current).color;
+    document.execCommand('foreColor', false, inherited);
+    editorRef.current.focus();
+    handleEditorInput();
+  };
+
+  const pickInlineColor = (hex: string) => {
+    if (!editorRef.current) return;
+    document.execCommand('foreColor', false, hex);
+    editorRef.current.focus();
+    setInlineColorPickerPos(null);
+    handleEditorInput();
+  };
+
+  const pickInlineDefaultColor = () => {
+    if (!editorRef.current) return;
+    const inherited = getComputedStyle(editorRef.current).color;
+    document.execCommand('foreColor', false, inherited);
+    editorRef.current.focus();
+    setInlineColorPickerPos(null);
+    handleEditorInput();
+  };
+
+  useEffect(() => {
+    if (!inlineColorPickerPos) return;
+    const handlePointerDown = (ev: PointerEvent) => {
+      const pop = inlineColorPickerRef.current;
+      if (pop && ev.target instanceof Node && pop.contains(ev.target)) return;
+      setInlineColorPickerPos(null);
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [inlineColorPickerPos]);
 
   // 마크다운 삽입 핸들러
   const insertMarkdown = (type: string) => {
@@ -381,6 +596,7 @@ function MemoPageContent() {
       }
 
       setShowEditor(false);
+      setInlineColorPickerPos(null);
       setFormData({ title: '', content: '' });
       setEditingId(null);
       
@@ -403,6 +619,7 @@ function MemoPageContent() {
   };
 
   const handleWrite = () => {
+    setInlineColorPickerPos(null);
     setShowEditor(true);
     setEditingId(null);
     setFormData({ title: '', content: '' });
@@ -415,6 +632,7 @@ function MemoPageContent() {
   };
 
   const handleEdit = (memo: Memo) => {
+    setInlineColorPickerPos(null);
     setShowEditor(true);
     setEditingId(memo.id || null);
     setFormData({
@@ -616,7 +834,7 @@ function MemoPageContent() {
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
       <GlobalNav />
       
-      <div className="max-w-[412px] mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      <div className={APP_CONTENT_CONTAINER}>
         
         {/* 헤더: 필터 + 뷰모드 + 글쓰기 */}
         {!showEditor && (
@@ -671,97 +889,131 @@ function MemoPageContent() {
 
         {/* 에디터 */}
         {showEditor && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-4">
-            <div className="mb-3">
-              <input
-                type="text"
-                value={formData.title || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="제목을 입력하세요"
-                className="w-full px-3 py-2 text-base sm:text-lg font-semibold bg-transparent text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 focus:border-blue-500 outline-none"
-              />
+          <>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-5 mb-4">
+            <div className="-mx-4 sm:-mx-5">
+              <div className="mb-3 px-2">
+                <input
+                  type="text"
+                  value={formData.title || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="제목을 입력하세요"
+                  className="w-full px-0 py-2 text-base sm:text-lg font-semibold bg-transparent text-gray-900 dark:text-white border-0 border-b border-transparent focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              {/* 포맷 툴바 */}
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-t-lg px-2 py-2 flex flex-wrap gap-1 items-center">
+                <button type="button" onClick={() => formatText('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
+                  <strong>B</strong>
+                </button>
+                <button type="button" onClick={() => formatText('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
+                  <em>I</em>
+                </button>
+                <button type="button" onClick={() => formatText('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
+                  <u>U</u>
+                </button>
+                <button
+                  type="button"
+                  onClick={applyDefaultTextColor}
+                  className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 font-semibold text-gray-800 dark:text-gray-100"
+                  title="기본 글자색 (테마)"
+                >
+                  A
+                </button>
+                {TEXT_COLOR_PRESETS.map(({ hex, label }) => (
+                  <button
+                    key={hex}
+                    type="button"
+                    onClick={() => applyTextColor(hex)}
+                    title={label}
+                    className="w-6 h-6 min-w-[1.5rem] rounded border border-gray-300 dark:border-gray-500 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+                <input
+                  ref={textColorInputRef}
+                  type="color"
+                  defaultValue="#2563eb"
+                  className="sr-only"
+                  aria-label="글자 색 직접 선택"
+                  onChange={(e) => {
+                    applyTextColor(e.target.value);
+                    setInlineColorPickerPos(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => textColorInputRef.current?.click()}
+                  className="px-2 py-1.5 text-xs rounded border border-dashed border-gray-400 dark:border-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  title="색 직접 선택"
+                >
+                  🎨
+                </button>
+                {/* 마크다운 헤딩 */}
+                <button type="button" onClick={() => insertMarkdown('heading1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                  H1
+                </button>
+                <button type="button" onClick={() => insertMarkdown('heading2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                  H2
+                </button>
+                <button type="button" onClick={() => insertMarkdown('heading3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                  H3
+                </button>
+                <button type="button" onClick={() => formatText('insertUnorderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="글머리">
+                  • 목록
+                </button>
+                <button type="button" onClick={() => formatText('insertOrderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="번호">
+                  1. 목록
+                </button>
+                <button type="button" onClick={() => insertMarkdown('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="체크박스">
+                  ☑ 할일
+                </button>
+                {/* 마크다운 추가 기능 */}
+                <button type="button" onClick={() => insertMarkdown('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                  " 인용
+                </button>
+                <button type="button" onClick={() => insertMarkdown('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                  {'<>'} 코드
+                </button>
+                <button type="button" onClick={() => insertMarkdown('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                  🔗 링크
+                </button>
+                {/* 이미지 업로드 버튼 */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="image-upload"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"
+                  title="이미지 추가"
+                >
+                  {isUploading ? '⏳' : '📷'} 이미지
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-b-lg overflow-hidden px-2">
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  onKeyDown={handleEditorKeyDown}
+                  onInput={handleEditorInput}
+                  className="min-h-[200px] py-3 text-[14px] text-gray-900 dark:text-white focus:outline-none"
+                  style={{ whiteSpace: 'pre-wrap' }}
+                  suppressContentEditableWarning
+                  data-placeholder="오늘 하루를 기록해보세요..."
+                />
+              </div>
             </div>
 
-            {/* 포맷 툴바 */}
-            <div className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-t-lg p-2 flex flex-wrap gap-1 items-center">
-              <button type="button" onClick={() => formatText('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
-                <strong>B</strong>
-              </button>
-              <button type="button" onClick={() => formatText('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
-                <em>I</em>
-              </button>
-              <button type="button" onClick={() => formatText('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
-                <u>U</u>
-              </button>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
-              
-              {/* 마크다운 헤딩 */}
-              <button type="button" onClick={() => insertMarkdown('heading1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
-                H1
-              </button>
-              <button type="button" onClick={() => insertMarkdown('heading2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
-                H2
-              </button>
-              <button type="button" onClick={() => insertMarkdown('heading3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
-                H3
-              </button>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
-              
-              <button type="button" onClick={() => formatText('insertUnorderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="글머리">
-                • 목록
-              </button>
-              <button type="button" onClick={() => formatText('insertOrderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="번호">
-                1. 목록
-              </button>
-              <button type="button" onClick={() => insertMarkdown('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="체크박스">
-                ☑ 할일
-              </button>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
-              
-              {/* 마크다운 추가 기능 */}
-              <button type="button" onClick={() => insertMarkdown('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
-                " 인용
-              </button>
-              <button type="button" onClick={() => insertMarkdown('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
-                {'<>'} 코드
-              </button>
-              <button type="button" onClick={() => insertMarkdown('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
-                🔗 링크
-              </button>
-              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1 self-center" />
-              {/* 이미지 업로드 버튼 */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-                id="image-upload"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"
-                title="이미지 추가"
-              >
-                {isUploading ? '⏳' : '📷'} 이미지
-              </button>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 border-x border-b border-gray-200 dark:border-gray-600 rounded-b-lg overflow-hidden">
-              <div
-                ref={editorRef}
-                contentEditable
-                onInput={handleEditorInput}
-                className="min-h-[200px] p-3 text-sm sm:text-base text-gray-900 dark:text-white focus:outline-none"
-                style={{ whiteSpace: 'pre-wrap' }}
-                suppressContentEditableWarning
-                data-placeholder="오늘 하루를 기록해보세요..."
-              />
-            </div>
-
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 -mx-4 sm:-mx-5 px-2 flex gap-2">
               <button
                 onClick={handleSave}
                 disabled={isSaving}
@@ -771,6 +1023,7 @@ function MemoPageContent() {
               </button>
               <button
                 onClick={() => {
+                  setInlineColorPickerPos(null);
                   setShowEditor(false);
                   setFormData({ title: '', content: '' });
                   setEditingId(null);
@@ -787,6 +1040,48 @@ function MemoPageContent() {
               </div>
             )}
           </div>
+
+          {inlineColorPickerPos && (
+            <div
+              ref={inlineColorPickerRef}
+              role="dialog"
+              aria-label="글자 색 선택"
+              className="fixed z-[200] rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-xl p-2.5 w-[200px]"
+              style={{ top: inlineColorPickerPos.top, left: inlineColorPickerPos.left }}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">대표 색상</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  title="기본 글자색"
+                  onClick={() => pickInlineDefaultColor()}
+                  className="px-2 py-1 text-[11px] rounded-md border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100"
+                >
+                  기본
+                </button>
+                {TEXT_COLOR_PRESETS.map(({ hex, label }) => (
+                  <button
+                    key={`inline-${hex}`}
+                    type="button"
+                    title={label}
+                    onClick={() => pickInlineColor(hex)}
+                    className="w-7 h-7 min-w-[1.75rem] rounded-md border border-gray-300 dark:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+                <button
+                  type="button"
+                  title="색 직접 선택"
+                  onClick={() => textColorInputRef.current?.click()}
+                  className="px-2 py-1 text-[11px] rounded-md border border-dashed border-gray-400 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  🎨 직접
+                </button>
+              </div>
+            </div>
+          )}
+          </>
         )}
 
         {/* 메모 목록 */}
@@ -865,7 +1160,7 @@ export default function MemoPage() {
         <Suspense fallback={
           <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
             <GlobalNav />
-            <div className="max-w-[412px] mx-auto px-4 py-8">
+            <div className={`${APP_HORIZONTAL_CONTAINER} py-8`}>
               <div className="flex items-center justify-center py-20">
                 <div className="text-gray-400">로딩 중...</div>
               </div>

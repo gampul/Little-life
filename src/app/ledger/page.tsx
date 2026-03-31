@@ -10,6 +10,7 @@ import { TransactionForm, TransactionData } from './components/TransactionForm';
 import { TransactionList, Transaction } from './components/TransactionList';
 import { TransactionFilters, FilterState } from './components/TransactionFilters';
 import { ExcelUpload } from './components/ExcelUpload';
+import { APP_HORIZONTAL_CONTAINER } from '../components/layout';
 
 interface FinancialSummary {
   total_income: number;
@@ -405,7 +406,7 @@ export default function LedgerPage() {
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         <GlobalNav />
         
-        <main className="max-w-[412px] mx-auto px-4 pt-4">
+        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6`}>
           {/* 대시보드 (재무 요약) */}
           <Dashboard
             totalIncome={summary.total_income}
