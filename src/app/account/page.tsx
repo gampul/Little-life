@@ -6,7 +6,7 @@ import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
 import InvestmentDiary from '../components/InvestmentDiary';
-import { APP_CONTENT_CONTAINER } from '../components/layout';
+import { APP_CONTENT_CONTAINER } from '../components/container';
 import { getSupabase } from '../../lib/supabase';
 import {
   LineChart,

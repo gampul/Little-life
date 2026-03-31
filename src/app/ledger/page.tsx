@@ -10,7 +10,7 @@ import { TransactionForm, TransactionData } from './components/TransactionForm';
 import { TransactionList, Transaction } from './components/TransactionList';
 import { TransactionFilters, FilterState } from './components/TransactionFilters';
 import { ExcelUpload } from './components/ExcelUpload';
-import { APP_HORIZONTAL_CONTAINER } from '../components/layout';
+import { APP_HORIZONTAL_CONTAINER } from '../components/container';
 
 interface FinancialSummary {
   total_income: number;

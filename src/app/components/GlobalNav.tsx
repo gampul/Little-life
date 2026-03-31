@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { getSupabase } from '../../lib/supabase';
 import { signOutAction } from '../actions/auth';
-import { APP_HORIZONTAL_CONTAINER } from './layout';
+import { APP_HORIZONTAL_CONTAINER } from './container';
 
 export interface GlobalNavProps {}
 

@@ -46,7 +46,7 @@ Next.js(App Router)와 Supabase 기반으로 동작하며, 모바일 우선(콘�
 
 ### 레이아웃
 - 상단 `GlobalNav`, 하단 `FooterNav`
-- 공통 가로 띠: `src/app/components/layout.ts` (`APP_HORIZONTAL_CONTAINER`, `APP_CONTENT_CONTAINER`)
+- 공통 가로 띠: `src/app/components/container.ts` (`APP_HORIZONTAL_CONTAINER`, `APP_CONTENT_CONTAINER`)
 
 ## 빠른 시작
 
@@ -121,7 +121,7 @@ little-life/
 │   │   ├── expense/page.tsx     # → /ledger 리다이렉트
 │   │   ├── api/ai/chat|report/
 │   │   ├── api/ledger/...
-│   │   ├── components/           # GlobalNav, FooterNav, AuthGuard, layout.ts, …
+│   │   ├── components/           # GlobalNav, FooterNav, AuthGuard, container.ts, …
 │   │   └── actions/auth.ts
 │   └── lib/
 │       ├── supabase.ts

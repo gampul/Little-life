@@ -8,7 +8,7 @@ import { getSupabase } from '../../lib/supabase';
 import { AssetSummary } from './components/AssetSummary';
 import { AssetList, AssetItem, Transaction, Category, CategoryMapping } from './components/AssetList';
 import { DebtList } from './components/DebtList';
-import { APP_HORIZONTAL_CONTAINER } from '../components/layout';
+import { APP_HORIZONTAL_CONTAINER } from '../components/container';
 
 interface AssetSummaryData {
   total_assets: number;

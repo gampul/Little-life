@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabase } from '../../../lib/supabase';
 import { GlobalNav } from '../../components/GlobalNav';
 import { FooterNav } from '../../components/FooterNav';
-import { APP_HORIZONTAL_CONTAINER } from '../../components/layout';
+import { APP_HORIZONTAL_CONTAINER } from '../../components/container';
 
 interface Memo {
   id?: string;

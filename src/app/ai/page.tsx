@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { SwipeNav } from '../components/SwipeNav';
-import { APP_HORIZONTAL_CONTAINER } from '../components/layout';
+import { APP_HORIZONTAL_CONTAINER } from '../components/container';
 
 interface Message {
   id: string;

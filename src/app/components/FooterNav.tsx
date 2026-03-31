@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { APP_HORIZONTAL_CONTAINER } from './layout';
+import { APP_HORIZONTAL_CONTAINER } from './container';
 
 export interface FooterNavProps {}
 

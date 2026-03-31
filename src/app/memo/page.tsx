@@ -7,7 +7,7 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
-import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/layout';
+import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/container';
 
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;

@@ -6,7 +6,7 @@ import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { CategoryManager } from '../assets/components/CategoryManager';
-import { APP_CONTENT_CONTAINER } from '../components/layout';
+import { APP_CONTENT_CONTAINER } from '../components/container';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 

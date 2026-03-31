@@ -7,7 +7,7 @@ import { GlobalNav } from './components/GlobalNav';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
-import { APP_CONTENT_CONTAINER } from './components/layout';
+import { APP_CONTENT_CONTAINER } from './components/container';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
