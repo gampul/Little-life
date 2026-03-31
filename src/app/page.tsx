@@ -1450,6 +1450,98 @@ export default function Home() {
               {message && (
                 <div className="mt-3 text-center text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{message}</div>
               )}
+              
+              {/* 체중 기록 (버튼을 아래 영역으로 이동) */}
+              <div className="mt-3">
+                <button
+                  onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
+                  className={`w-full flex items-center justify-center py-2 rounded-lg transition-colors mb-2 ${
+                    isWeightListExpanded 
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' 
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-900 dark:text-white'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">📅 체중 기록</div>
+                </button>
+                
+                {/* 체중 기록 드롭다운 */}
+                {isWeightListExpanded && (
+                  allRecords.filter(r => r.weight != null).length === 0 ? (
+                    <div className="text-xs text-gray-500 dark:text-gray-400 py-2">표시할 체중 기록이 없습니다.</div>
+                  ) : (
+                    <div className="max-h-80 overflow-auto space-y-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 border-b border-gray-200 dark:border-gray-700 mb-1">
+                        총 {allRecords.filter(r => r.weight != null).length}개 기록
+                      </div>
+                      {[...allRecords]
+                        .filter(r => r.weight != null)
+                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                        .map((r) => {
+                          const dateObj = new Date(r.date);
+                          const formattedDate = `${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`;
+                          const hasImages = r.meal_images && r.meal_images.length > 0;
+                          const hasMemo = r.meal_memo && r.meal_memo.trim() !== '';
+                          
+                          return (
+                            <div
+                              key={r.date}
+                              onClick={() => {
+                                // 클릭 시 편집 팝업 열기
+                                setSelectedChartDate(r.date);
+                                setChartPopupWeight(r.weight?.toString() || '');
+                                setChartPopupMemo(r.meal_memo || '');
+                                setChartPopupImages(r.meal_images || []);
+                                setTimeout(() => {
+                                  const popup = document.getElementById('chart-edit-popup');
+                                  if (popup) {
+                                    popup.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  }
+                                }, 100);
+                              }}
+                              className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
+                            >
+                              {/* 날짜 & 체중 */}
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white">{formattedDate}</span>
+                                <span className="text-sm font-bold text-red-500 dark:text-red-400">{r.weight}kg</span>
+                              </div>
+                              
+                              {/* 사진 썸네일 */}
+                              {hasImages && (
+                                <div className="flex gap-1 mb-2">
+                                  {r.meal_images!.slice(0, 4).map((url, idx) => (
+                                    <div key={idx} className="relative w-10 h-10 rounded overflow-hidden">
+                                      <img 
+                                        src={url} 
+                                        alt={`사진 ${idx + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      {idx === 3 && r.meal_images!.length > 4 && (
+                                        <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
+                                          <span className="text-white text-xs font-bold">+{r.meal_images!.length - 4}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              {/* 메모 */}
+                              {hasMemo && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{r.meal_memo}</p>
+                              )}
+                              
+                              {/* 편집 힌트 */}
+                              {!hasImages && !hasMemo && (
+                                <p className="text-xs text-gray-400 dark:text-gray-500 italic">클릭하여 메모/사진 추가</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )
+                )}
+              </div>
             </div>
 
             {/* 체중 변화 그래프 */}
@@ -1703,98 +1795,7 @@ export default function Home() {
                 )}
               </div>
 
-              {/* 체중 기록 & 식사 기록 버튼 (병렬 배치) */}
-              <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-3">
-                <button
-                  onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
-                  className={`w-full flex items-center justify-center py-2 rounded-lg transition-colors mb-2 ${
-                    isWeightListExpanded 
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' 
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-900 dark:text-white'
-                  }`}
-                >
-                  <div className="text-sm font-semibold">📅 체중 기록</div>
-                </button>
-                
-                {/* 체중 기록 드롭다운 */}
-                {isWeightListExpanded && (
-                  allRecords.filter(r => r.weight != null).length === 0 ? (
-                    <div className="text-xs text-gray-500 dark:text-gray-400 py-2">표시할 체중 기록이 없습니다.</div>
-                  ) : (
-                    <div className="max-h-80 overflow-auto space-y-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-2">
-                      <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1 border-b border-gray-200 dark:border-gray-700 mb-1">
-                        총 {allRecords.filter(r => r.weight != null).length}개 기록
-                      </div>
-                      {[...allRecords]
-                        .filter(r => r.weight != null)
-                        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                        .map((r) => {
-                          const dateObj = new Date(r.date);
-                          const formattedDate = `${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`;
-                          const hasImages = r.meal_images && r.meal_images.length > 0;
-                          const hasMemo = r.meal_memo && r.meal_memo.trim() !== '';
-                          
-                          return (
-                            <div
-                              key={r.date}
-                              onClick={() => {
-                                // 클릭 시 편집 팝업 열기
-                                setSelectedChartDate(r.date);
-                                setChartPopupWeight(r.weight?.toString() || '');
-                                setChartPopupMemo(r.meal_memo || '');
-                                setChartPopupImages(r.meal_images || []);
-                                setTimeout(() => {
-                                  const popup = document.getElementById('chart-edit-popup');
-                                  if (popup) {
-                                    popup.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  }
-                                }, 100);
-                              }}
-                              className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
-                            >
-                              {/* 날짜 & 체중 */}
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-900 dark:text-white">{formattedDate}</span>
-                                <span className="text-sm font-bold text-red-500 dark:text-red-400">{r.weight}kg</span>
-                              </div>
-                              
-                              {/* 사진 썸네일 */}
-                              {hasImages && (
-                                <div className="flex gap-1 mb-2">
-                                  {r.meal_images!.slice(0, 4).map((url, idx) => (
-                                    <div key={idx} className="relative w-10 h-10 rounded overflow-hidden">
-                                      <img 
-                                        src={url} 
-                                        alt={`사진 ${idx + 1}`}
-                                        className="w-full h-full object-cover"
-                                      />
-                                      {idx === 3 && r.meal_images!.length > 4 && (
-                                        <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
-                                          <span className="text-white text-xs font-bold">+{r.meal_images!.length - 4}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              
-                              {/* 메모 */}
-                              {hasMemo && (
-                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{r.meal_memo}</p>
-                              )}
-                              
-                              {/* 편집 힌트 */}
-                              {!hasImages && !hasMemo && (
-                                <p className="text-xs text-gray-400 dark:text-gray-500 italic">클릭하여 메모/사진 추가</p>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )
-                )}
-
-              </div>
+              {/* (체중 기록 버튼은 상단 입력 카드 아래 영역으로 이동됨) */}
               
               {/* 원본 이미지 모달 */}
               {fullImageUrl && (
@@ -2512,24 +2513,6 @@ export default function Home() {
                                     ))}
                                   </div>
                                 )}
-                                <button 
-                                  className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    console.log('✏️ 수정 아이콘 클릭:', record.date);
-                                    await loadDailyRecord(record.date);
-                                    await loadRoutineChecks(record.date);
-                                    setSelectedDate(record.date);
-                                    setIsEditMode(true);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  title="수정하기"
-                                  aria-label="수정하기"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
                               </div>
                             </div>
                             {record.meal_memo && (
@@ -2537,6 +2520,27 @@ export default function Home() {
                                 {record.meal_memo}
                               </p>
                             )}
+                            {/* 아래 오른쪽: 수정 아이콘 */}
+                            <div className="flex justify-end mt-2">
+                              <button
+                                className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  console.log('✏️ 수정 아이콘 클릭:', record.date);
+                                  await loadDailyRecord(record.date);
+                                  await loadRoutineChecks(record.date);
+                                  setSelectedDate(record.date);
+                                  setIsEditMode(true);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                title="수정하기"
+                                aria-label="수정하기"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                            </div>
                             {/* 이미지 미리보기 (최대 3개) */}
                             {record.meal_images && record.meal_images.length > 0 && (
                               <div className="flex gap-2 mt-2">

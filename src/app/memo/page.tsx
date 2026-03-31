@@ -106,11 +106,12 @@ function MemoPageContent() {
     }
   };
 
-  /** 라인 시작 `#` / `##` / `###` + 스페이스 → 헤딩 (GitHub 스타일 마크다운 쇼트컷) */
-  const headingStyles: Record<1 | 2 | 3, string> = {
+  /** 라인 시작 `#` / `##` / `###` / `####` + 스페이스 → 헤딩 (GitHub 스타일 마크다운 쇼트컷) */
+  const headingStyles: Record<1 | 2 | 3 | 4, string> = {
     1: 'font-size: 2em; font-weight: bold; margin: 0.67em 0;',
     2: 'font-size: 1.5em; font-weight: bold; margin: 0.75em 0;',
     3: 'font-size: 1.17em; font-weight: bold; margin: 0.83em 0;',
+    4: 'font-size: 1em; font-weight: bold; margin: 1em 0;',
   };
 
   const getBlockElementForCaret = (root: HTMLElement, sel: Selection): HTMLElement | null => {
@@ -139,8 +140,43 @@ function MemoPageContent() {
     }
   };
 
+  const getHeadingElementForCaret = (root: HTMLElement, sel: Selection): HTMLElement | null => {
+    let n: Node | null = sel.anchorNode;
+    if (!n || !root.contains(n)) return null;
+    while (n && n !== root) {
+      if (n.nodeType === Node.ELEMENT_NODE) {
+        const tag = (n as HTMLElement).tagName;
+        if (/^H[1-6]$/i.test(tag)) {
+          return n as HTMLElement;
+        }
+      }
+      n = n.parentNode;
+    }
+    return null;
+  };
+
   const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.nativeEvent.isComposing) return;
+    if (e.key === 'Enter' && editorRef.current) {
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+
+      const headingEl = getHeadingElementForCaret(editorRef.current, sel);
+      if (!headingEl) return;
+
+      e.preventDefault();
+      const paragraph = document.createElement('div');
+      paragraph.appendChild(document.createElement('br'));
+      headingEl.insertAdjacentElement('afterend', paragraph);
+
+      const range = document.createRange();
+      range.setStart(paragraph, 0);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      handleEditorInput();
+      return;
+    }
     if (inlineColorPickerPos && e.key === 'Escape') {
       e.preventDefault();
       setInlineColorPickerPos(null);
@@ -201,11 +237,11 @@ function MemoPageContent() {
       return;
     }
 
-    const hm = before.match(/^(#{1,3})$/);
+    const hm = before.match(/^(#{1,4})$/);
     if (hm) {
       e.preventDefault();
 
-      const level = hm[1].length as 1 | 2 | 3;
+      const level = hm[1].length as 1 | 2 | 3 | 4;
       const h = document.createElement(`h${level}`);
       h.setAttribute('style', headingStyles[level]);
 
