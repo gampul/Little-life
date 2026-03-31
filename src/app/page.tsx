@@ -54,6 +54,9 @@ interface WeatherData {
   city: string;
 }
 
+const getKstDateString = (): string =>
+  new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+
 export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -88,7 +91,7 @@ export default function Home() {
   }, [supabase]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    getKstDateString()
   );
   const [isEditMode, setIsEditMode] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -149,6 +152,7 @@ export default function Home() {
 
   // 날씨 관련 상태
   const [weatherData, setWeatherData] = useState<WeatherData | null>(null);
+  const [weatherSummary, setWeatherSummary] = useState<string | null>(null);
   const [isLoadingWeather, setIsLoadingWeather] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [dailyRecordsError, setDailyRecordsError] = useState<string | null>(null);
@@ -168,32 +172,77 @@ export default function Home() {
       // 사용자의 위치를 가져오거나 기본값으로 서울 사용
       // 실제로는 geolocation API를 사용하거나 사용자가 설정한 위치를 사용할 수 있습니다
       const city = 'Seoul'; // 기본값: 서울
-      const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric&lang=kr`;
+      const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric&lang=kr`;
+      const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${apiKey}&units=metric&lang=kr`;
       
-      const response = await fetch(url);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 401) {
+      const [weatherRes, forecastRes] = await Promise.all([fetch(weatherUrl), fetch(forecastUrl)]);
+
+      if (!weatherRes.ok) {
+        const errorData = await weatherRes.json().catch(() => ({}));
+        if (weatherRes.status === 401) {
           throw new Error('API 키가 유효하지 않습니다. OpenWeatherMap에서 발급한 키를 확인해주세요.');
-        } else if (response.status === 404) {
+        } else if (weatherRes.status === 404) {
           throw new Error('도시를 찾을 수 없습니다.');
         } else {
           throw new Error(errorData.message || '날씨 데이터를 가져오는데 실패했습니다.');
         }
       }
 
-      const data = await response.json();
+      const weather = await weatherRes.json();
       setWeatherData({
-        temperature: Math.round(data.main.temp),
-        description: data.weather[0].description,
-        icon: data.weather[0].icon,
-        city: data.name,
+        temperature: Math.round(weather.main.temp),
+        description: weather.weather[0].description,
+        icon: weather.weather[0].icon,
+        city: weather.name,
       });
+
+      // 5일/3시간 예보 기반 "오늘 요약" 텍스트 생성
+      if (forecastRes.ok) {
+        const forecast = await forecastRes.json();
+        const todayKst = getKstDateString();
+        const todaySlots = (forecast.list || []).filter((item: any) =>
+          String(item.dt_txt || '').startsWith(todayKst)
+        );
+
+        if (todaySlots.length > 0) {
+          const afternoonSlots = todaySlots.filter((item: any) => {
+            const hh = Number(String(item.dt_txt || '').slice(11, 13));
+            return hh >= 12 && hh < 18;
+          });
+          const targetSlots = afternoonSlots.length > 0 ? afternoonSlots : todaySlots;
+
+          const hasRain = targetSlots.some((item: any) => {
+            const main = String(item.weather?.[0]?.main || '').toLowerCase();
+            const id = Number(item.weather?.[0]?.id || 0);
+            const pop = Number(item.pop || 0);
+            return main.includes('rain') || (id >= 500 && id < 600) || pop >= 0.4;
+          });
+
+          const maxTemp = Math.round(Math.max(...todaySlots.map((i: any) => Number(i.main?.temp_max ?? i.main?.temp ?? 0))));
+          const minTemp = Math.round(Math.min(...todaySlots.map((i: any) => Number(i.main?.temp_min ?? i.main?.temp ?? 0))));
+          const maxPop = Math.max(...todaySlots.map((i: any) => Number(i.pop || 0)));
+
+          let summary = `오늘 예상 기온은 최저 ${minTemp}°C, 최고 ${maxTemp}°C입니다.`;
+          if (hasRain) {
+            summary = `오늘은 오후부터 비가 예상됩니다. (강수확률 최대 ${Math.round(maxPop * 100)}%) ${summary}`;
+          } else if (maxPop >= 0.2) {
+            summary = `오늘은 대체로 흐리며 간헐적 약한 비 가능성이 있습니다. (강수확률 최대 ${Math.round(maxPop * 100)}%) ${summary}`;
+          } else {
+            summary = `오늘은 큰 비 예보 없이 ${weather.weather?.[0]?.description || '대체로 무난한'} 날씨입니다. ${summary}`;
+          }
+          setWeatherSummary(summary);
+        } else {
+          setWeatherSummary(null);
+        }
+      } else {
+        setWeatherSummary(null);
+      }
       setWeatherError(null);
     } catch (error: any) {
       // 네트워크/광고차단/회사망 등으로 fetch가 실패할 수 있음. (앱 기능과 무관하므로 조용히 실패 처리)
       console.warn('날씨 데이터 가져오기 실패:', error?.message || error);
       setWeatherError(error?.message || '날씨 정보를 불러올 수 없습니다.');
+      setWeatherSummary(null);
     } finally {
       setIsLoadingWeather(false);
     }
@@ -691,7 +740,7 @@ export default function Home() {
 
   const openWeightModal = () => {
     // 항상 현재 날짜(오늘)로 설정
-    const today = new Date().toISOString().split('T')[0];
+    const today = getKstDateString();
     const current = typeof formData?.weight === 'number' ? formData.weight : null;
     setWeightInputModal({
       open: true,
@@ -1297,10 +1346,10 @@ export default function Home() {
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <div className="flex gap-2 sm:gap-3">
+              <div className="flex gap-1 sm:gap-1.5">
                 {/* 날짜 입력 */}
                 <div 
-                  className="relative cursor-pointer overflow-hidden flex-1"
+                  className="relative cursor-pointer flex-1 min-w-0"
                   onClick={(e) => {
                     e.preventDefault();
                     const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
@@ -1330,7 +1379,7 @@ export default function Home() {
                       // formData.date도 함께 업데이트
                       setFormData(prev => ({ ...prev, date: newDate }));
                     }}
-                    className="w-full px-4 py-3 text-base bg-transparent text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
+                    className="w-[150px] px-1.5 sm:px-3 py-3 text-base bg-transparent text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                     style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1344,13 +1393,10 @@ export default function Home() {
                     }}
                   />
                   {/* 날짜 포맷 표시 (오버레이) - 한 줄로 정렬, 전체 텍스트 표시 */}
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-sm text-gray-900 dark:text-white font-medium whitespace-nowrap" style={{ lineHeight: '22px' }}>
+                  <div className="absolute left-1.5 sm:left-3 top-1/2 -translate-y-1/2 pointer-events-none text-[14px] text-gray-900 dark:text-white font-medium whitespace-nowrap" style={{ lineHeight: '22px' }}>
                     {(() => {
-                      const date = new Date(selectedDate);
-                      const year = date.getFullYear();
-                      const month = date.getMonth() + 1;
-                      const day = date.getDate();
-                      return `${year}년 ${month}월 ${day}일`;
+                      const [year, month = '01', day = '01'] = selectedDate.split('-');
+                      return `${year}-${month}-${day}`;
                     })()}
                   </div>
                 </div>
@@ -1367,7 +1413,7 @@ export default function Home() {
               onClick={() => {
                 if (!isEditMode) openWeightModal();
               }}
-              className={`w-20 px-3 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] ${
+              className={`w-10 sm:w-14 px-1 sm:px-1.5 py-3 text-[14px] bg-transparent text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] ${
                 !isEditMode ? 'cursor-pointer' : ''
               }`}
             />
@@ -1375,7 +1421,7 @@ export default function Home() {
                 {!isEditMode ? (
                   <button
                     onClick={handleEdit}
-                className="w-12 px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
+                className="w-10 sm:w-12 px-1.5 sm:px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
                 aria-label="수정하기"
                   >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1386,7 +1432,7 @@ export default function Home() {
                   <button
                     onClick={handleSave}
                     disabled={isSaving}
-                className="w-12 px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                className="w-10 sm:w-12 px-1.5 sm:px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 aria-label={isSaving ? '저장 중' : '저장'}
                   >
                 {isSaving ? (
@@ -1401,25 +1447,46 @@ export default function Home() {
                 )}
                   </button>
                 )}
+                
+                {/* 체중 기록 버튼: 상단(오늘) 입력 줄 오른쪽 */}
+                <button
+                  onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
+                  className={`w-auto flex items-center justify-center py-3 px-0.5 sm:px-1 rounded-lg transition-colors min-h-[44px] flex-shrink-0 ${
+                    isWeightListExpanded
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-900 dark:text-white'
+                  }`}
+                  title="체중 기록"
+                  aria-label="체중 기록"
+                >
+                  <div className="text-[10px] sm:text-[11px] font-semibold whitespace-nowrap">기록</div>
+                </button>
               </div>
               {/* 날씨 정보 표시 */}
               {weatherData && (
-                <div className="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                  <span className="text-lg">
-                    {weatherData.icon && (
-                      <img 
-                        src={`https://openweathermap.org/img/wn/${weatherData.icon}@2x.png`} 
-                        alt={weatherData.description}
-                        className="w-8 h-8"
-                      />
-                    )}
-                  </span>
-                  <span className="font-medium">{weatherData.temperature}°C</span>
-                  <span className="text-gray-500 dark:text-gray-400">•</span>
-                  <span>{weatherData.description}</span>
-                  <span className="text-gray-500 dark:text-gray-400">•</span>
-                  <span className="text-gray-600 dark:text-gray-400">{weatherData.city}</span>
-                </div>
+                <>
+                  <div className="mt-3 flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <span className="text-lg">
+                      {weatherData.icon && (
+                        <img 
+                          src={`https://openweathermap.org/img/wn/${weatherData.icon}@2x.png`} 
+                          alt={weatherData.description}
+                          className="w-8 h-8"
+                        />
+                      )}
+                    </span>
+                    <span className="font-medium">{weatherData.temperature}°C</span>
+                    <span className="text-gray-500 dark:text-gray-400">•</span>
+                    <span>{weatherData.description}</span>
+                    <span className="text-gray-500 dark:text-gray-400">•</span>
+                    <span className="text-gray-600 dark:text-gray-400">{weatherData.city}</span>
+                  </div>
+                  {weatherSummary && (
+                    <div className="mt-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300 px-1 py-1">
+                      {weatherSummary}
+                    </div>
+                  )}
+                </>
               )}
               {isLoadingWeather && (
                 <div className="mt-3 text-sm text-gray-500 dark:text-gray-400">
@@ -1451,20 +1518,8 @@ export default function Home() {
                 <div className="mt-3 text-center text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">{message}</div>
               )}
               
-              {/* 체중 기록 (버튼을 아래 영역으로 이동) */}
+              {/* 체중 기록 드롭다운 */}
               <div className="mt-3">
-                <button
-                  onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
-                  className={`w-full flex items-center justify-center py-2 rounded-lg transition-colors mb-2 ${
-                    isWeightListExpanded 
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' 
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-900 dark:text-white'
-                  }`}
-                >
-                  <div className="text-sm font-semibold">📅 체중 기록</div>
-                </button>
-                
-                {/* 체중 기록 드롭다운 */}
                 {isWeightListExpanded && (
                   allRecords.filter(r => r.weight != null).length === 0 ? (
                     <div className="text-xs text-gray-500 dark:text-gray-400 py-2">표시할 체중 기록이 없습니다.</div>
@@ -1682,7 +1737,7 @@ export default function Home() {
                 <div className="flex gap-1.5 sm:gap-2">
                   <button
                     onClick={() => setWeightPeriod('7days')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
                       weightPeriod === '7days'
                         ? 'bg-blue-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -1692,7 +1747,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('1month')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
                       weightPeriod === '1month'
                         ? 'bg-blue-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -1702,7 +1757,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('1year')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
                       weightPeriod === '1year'
                         ? 'bg-blue-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -1712,7 +1767,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('ytd')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
                       weightPeriod === 'ytd'
                         ? 'bg-blue-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -1722,7 +1777,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setWeightPeriod('all')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                    className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
                       weightPeriod === 'all'
                         ? 'bg-blue-600 text-white'
                         : 'bg-[rgb(254,252,247)] dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
