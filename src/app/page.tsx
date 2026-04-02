@@ -2324,6 +2324,10 @@ export default function Home() {
                         setEditModeRoutine={setEditModeRoutine}
                         syncTick={routineSyncTick}
                         onSync={bumpRoutineSync}
+                        isReadingRoutine={
+                          routine.field_key === 'routine_1768014190583' ||
+                          routine.label.includes('독서')
+                        }
                       />
                     </div>
                   )}
@@ -3697,6 +3701,7 @@ function RoutineCalendar({
   setEditModeRoutine,
   syncTick,
   onSync,
+  isReadingRoutine = false,
 }: {
   userId: string;
   routineId: string;
@@ -3708,9 +3713,14 @@ function RoutineCalendar({
   setEditModeRoutine: (routineId: string | null) => void;
   syncTick: number;
   onSync: () => void;
+  isReadingRoutine?: boolean;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [dateValues, setDateValues] = useState<Record<string, number>>({});
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [uploadingDate, setUploadingDate] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadDateRef = useRef<string | null>(null);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -3720,12 +3730,16 @@ function RoutineCalendar({
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<string>(String(currentMonth));
 
-  // 아코디언이 펼쳐질 때 전체 뷰로 자동 전환
+  // 아코디언이 펼쳐질 때 독서 루틴은 현재 월, 일반 루틴은 전체 뷰로 자동 전환
   useEffect(() => {
     if (isExpanded) {
-      setSelectedMonth('all');
+      if (isReadingRoutine) {
+        setSelectedMonth(String(currentMonth));
+      } else {
+        setSelectedMonth('all');
+      }
     }
-  }, [isExpanded]);
+  }, [isExpanded, isReadingRoutine, currentMonth]);
 
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -3768,7 +3782,7 @@ function RoutineCalendar({
 
         const { data: checks, error } = await supabase
           .from('daily_routine_checks')
-          .select('date, routine_id, checked, value')
+          .select('date, routine_id, checked, value, image_url')
           .in('date', allDates)
           .eq('user_id', userId)
           .eq('routine_id', routineId)
@@ -3782,22 +3796,28 @@ function RoutineCalendar({
         // 데이터를 Record<string, Set<string>> 형태로 변환
         const data: Record<string, Set<string>> = {};
         const values: Record<string, number> = {};
+        const imgs: Record<string, string> = {};
         if (checks && checks.length > 0) {
           checks.forEach((check: any) => {
             if (!data[check.date]) {
               data[check.date] = new Set();
             }
             data[check.date].add(check.routine_id);
-            
+
             // value가 있으면 저장
             if (check.value != null) {
               values[check.date] = check.value;
             }
+            // image_url이 있으면 저장
+            if (check.image_url) {
+              imgs[check.date] = check.image_url;
+            }
           });
         }
-        
+
         setCheckedDates(data);
         setDateValues(values);
+        setImageUrls(imgs);
       } catch (err) {
         console.error('데이터 로드 오류:', err);
       }
@@ -4105,6 +4125,59 @@ function RoutineCalendar({
     }
   };
 
+  // 독서 루틴 이미지 업로드 핸들러
+  const handleImageUpload = async (date: string, file: File) => {
+    if (!supabase) return;
+    setUploadingDate(date);
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const filePath = `${userId}/${routineId}/${date}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('routine-images')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        console.error('이미지 업로드 오류:', uploadError);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('routine-images')
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+
+      const { error: dbError } = await supabase
+        .from('daily_routine_checks')
+        .upsert({
+          user_id: userId,
+          date: date,
+          routine_id: routineId,
+          checked: true,
+          image_url: publicUrl
+        }, { onConflict: 'user_id,date,routine_id' });
+
+      if (dbError) {
+        console.error('이미지 URL DB 저장 오류:', dbError);
+        return;
+      }
+
+      setImageUrls(prev => ({ ...prev, [date]: publicUrl }));
+      setCheckedDates(prev => {
+        const newDates = { ...prev };
+        if (!newDates[date]) newDates[date] = new Set();
+        newDates[date].add(routineId);
+        return newDates;
+      });
+      onSync();
+    } catch (err) {
+      console.error('이미지 업로드 실패:', err);
+    } finally {
+      setUploadingDate(null);
+    }
+  };
+
   // 월별 체크 비율 계산 (0~100%)
   const getMonthProgress = (year: number, month: number, routineId: string) => {
     const days = getMonthDays(year, month);
@@ -4274,8 +4347,182 @@ function RoutineCalendar({
         </div>
       </div>
       
+      {/* 숨겨진 파일 인풋 (독서 루틴 이미지 업로드용) */}
+      {isReadingRoutine && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            const date = pendingUploadDateRef.current;
+            if (file && date) {
+              await handleImageUpload(date, file);
+            }
+            e.target.value = '';
+          }}
+        />
+      )}
+
       {/* 캘린더 컨테이너 */}
-      {selectedMonth === 'all' ? (
+      {isReadingRoutine && selectedMonth !== 'all' ? (
+        // 독서 루틴 전용: 전통적인 월 캘린더 그리드 (이미지 + 분 표시)
+        (() => {
+          const monthNum = parseInt(selectedMonth);
+          const firstDay = new Date(selectedYear, monthNum - 1, 1);
+          const lastDay = new Date(selectedYear, monthNum, 0);
+          const firstDayWeekday = (firstDay.getDay() + 6) % 7;
+          const totalDays = lastDay.getDate() + firstDayWeekday;
+          const numWeeks = Math.ceil(totalDays / 7);
+          const weeks = getWeekBasedDateGrid(selectedYear, selectedMonth, numWeeks);
+          const getKoreaToday = (): string => {
+            const now = new Date();
+            const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+            return `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, '0')}-${String(kst.getUTCDate()).padStart(2, '0')}`;
+          };
+          const todayStr = getKoreaToday();
+
+          return (
+            <div className="w-full">
+              {/* 요일 헤더 */}
+              <div className="grid grid-cols-7 gap-1 mb-1">
+                {['월', '화', '수', '목', '금', '토', '일'].map((d, i) => (
+                  <div
+                    key={d}
+                    className="text-center text-xs font-bold py-1"
+                    style={{
+                      color: i === 5 ? '#3B82F6' : i === 6 ? '#EF4444' : '#6B7280'
+                    }}
+                  >
+                    {d}
+                  </div>
+                ))}
+              </div>
+              {/* 주별 행 */}
+              {weeks.map((week, weekIdx) => (
+                <div key={weekIdx} className="grid grid-cols-7 gap-1 mb-1">
+                  {week.map((cell, dayIdx) => {
+                    const { day, date, month: cellMonth, year: cellYear } = cell;
+                    const isCurrentMonth = cellMonth === monthNum && cellYear === selectedYear;
+                    const isToday = date === todayStr;
+                    const isChecked = isDateChecked(date, routineId);
+                    const imgUrl = imageUrls[date];
+                    const minutes = dateValues[date];
+                    const isUploading = uploadingDate === date;
+                    const inEditMode = editModeRoutine === routineId;
+                    const isSat = dayIdx === 5;
+                    const isSun = dayIdx === 6;
+
+                    return (
+                      <div
+                        key={`${weekIdx}-${dayIdx}`}
+                        className="relative flex flex-col rounded-lg overflow-hidden"
+                        style={{
+                          minHeight: '72px',
+                          border: isToday ? '2px solid #60A5FA' : '1px solid',
+                          borderColor: isToday ? '#60A5FA' : isChecked ? 'rgba(59,130,246,0.3)' : 'rgba(107,114,128,0.2)',
+                          backgroundColor: isChecked
+                            ? 'rgba(59,130,246,0.06)'
+                            : 'rgba(249,250,251,0.8)',
+                          opacity: isCurrentMonth ? 1 : 0.25,
+                          cursor: inEditMode && isCurrentMonth ? 'pointer' : 'default'
+                        }}
+                        onClick={() => {
+                          if (!inEditMode || !isCurrentMonth) return;
+                          if (!imgUrl) {
+                            // 이미지 없으면 업로드 다이얼로그
+                            pendingUploadDateRef.current = date;
+                            fileInputRef.current?.click();
+                          }
+                        }}
+                      >
+                        {/* 날짜 숫자 */}
+                        <div
+                          className="absolute top-1 left-1.5 text-xs font-semibold leading-none z-10"
+                          style={{
+                            color: isSat ? '#3B82F6' : isSun ? '#EF4444' : isChecked ? '#1D4ED8' : '#9CA3AF',
+                            fontSize: '10px'
+                          }}
+                        >
+                          {day}
+                        </div>
+
+                        {/* 이미지 영역 */}
+                        {isUploading ? (
+                          <div className="flex-1 flex items-center justify-center mt-3">
+                            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        ) : imgUrl ? (
+                          <div
+                            className="flex-1 mt-3 relative group"
+                            onClick={(e) => {
+                              if (!inEditMode || !isCurrentMonth) return;
+                              e.stopPropagation();
+                              pendingUploadDateRef.current = date;
+                              fileInputRef.current?.click();
+                            }}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imgUrl}
+                              alt={`${date} 독서`}
+                              className="w-full h-full object-cover"
+                              style={{ maxHeight: '52px' }}
+                            />
+                            {inEditMode && isCurrentMonth && (
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex items-center justify-center mt-3">
+                            {inEditMode && isCurrentMonth ? (
+                              <svg className="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                            ) : null}
+                          </div>
+                        )}
+
+                        {/* 분 기록 */}
+                        {isCurrentMonth && (
+                          <div
+                            className="text-center pb-1 px-0.5"
+                            style={{ minHeight: '16px' }}
+                            onClick={(e) => {
+                              if (!inEditMode || !isCurrentMonth) return;
+                              e.stopPropagation();
+                              const current = minutes ?? '';
+                              const input = prompt(`${date} 독서 시간(분):`, String(current));
+                              if (input === null) return;
+                              handleDateToggle(date, routineId);
+                            }}
+                          >
+                            {minutes != null ? (
+                              <span
+                                className="text-blue-600 dark:text-blue-400 font-bold"
+                                style={{ fontSize: '10px' }}
+                              >
+                                {minutes}분
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          );
+        })()
+      ) : selectedMonth === 'all' ? (
         // 연간 뷰: 쿼터별로 12개월 표시
         <div className="space-y-2">
           {/* Q1, Q2, Q3, Q4 */}
