@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 export interface Transaction {
   id: string;
@@ -68,6 +68,18 @@ export function TransactionList({ transactions, isLoading, onDelete, onAssetFilt
     return `${year}/${month}/${day}`;
   };
 
+  const getMonthKey = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const y = d.getFullYear();
+    const m = (d.getMonth() + 1).toString().padStart(2, '0');
+    return `${y}-${m}`;
+  };
+
+  const getMonthLabel = (monthKey: string) => {
+    const [y, m] = monthKey.split('-');
+    return `${y}/${m}`;
+  };
+
   const getTypeStyle = (type: string, isTransfer: boolean) => {
     if (isTransfer || type === '자산이체') {
       return {
@@ -96,6 +108,33 @@ export function TransactionList({ transactions, isLoading, onDelete, onAssetFilt
           prefix: '',
         };
     }
+  };
+
+  const groupedByMonth = useMemo(() => {
+    const order: string[] = [];
+    const items: Record<string, Transaction[]> = {};
+
+    for (const tx of filteredTransactions) {
+      const monthKey = getMonthKey(tx.date);
+      if (!items[monthKey]) {
+        items[monthKey] = [];
+        order.push(monthKey);
+      }
+      items[monthKey].push(tx);
+    }
+
+    return { order, items };
+  }, [filteredTransactions]);
+
+  const monthSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const setMonthSectionRef = (monthKey: string) => (el: HTMLDivElement | null) => {
+    monthSectionRefs.current[monthKey] = el;
+  };
+
+  const scrollToMonth = (monthKey: string) => {
+    const el = monthSectionRefs.current[monthKey];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   if (isLoading) {
@@ -138,76 +177,130 @@ export function TransactionList({ transactions, isLoading, onDelete, onAssetFilt
           </button>
         </div>
       )}
-      
-      {filteredTransactions.map((tx) => {
-        const style = getTypeStyle(tx.transaction_type, tx.is_transfer);
-        
+
+      {groupedByMonth.order.map((monthKey, monthIndex) => {
+        const monthTxs = groupedByMonth.items[monthKey] ?? [];
+
         return (
-          <div
-            key={tx.id}
-            className="border-b border-white dark:border-gray-600"
-            style={{ padding: '8px' }}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    {formatDate(tx.date)}
-                  </span>
-                  <span className="font-medium text-gray-900 dark:text-white truncate" style={{ fontSize: '12px' }}>
-                    {tx.category}
-                  </span>
-                  {tx.source === 'csv' && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded">
-                      CSV
-                    </span>
-                  )}
-                  {tx.is_transfer && (
-                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded">
-                      이체
-                    </span>
-                  )}
-                  {tx.memo && (
-                    <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[80px]">
-                      {tx.memo}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    <span 
-                      onClick={() => handleAssetClick(tx.asset)}
-                      className={`cursor-pointer hover:underline ${filterAsset === tx.asset ? 'text-blue-500 font-medium' : ''}`}
-                    >
-                      {tx.asset}
-                    </span>
-                    {tx.is_transfer && tx.transfer_asset && (
-                      <span style={{ fontSize: '10px' }}>
-                        {' → '}
-                        <span 
-                          onClick={() => handleAssetClick(tx.transfer_asset!)}
-                          className={`cursor-pointer hover:underline ${filterAsset === tx.transfer_asset ? 'text-blue-500 font-medium' : ''}`}
-                        >
-                          {tx.transfer_asset}
-                        </span>
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`font-bold ${style.color}`} style={{ fontSize: '13px' }}>
-                  {style.prefix}{formatAmount(tx.amount)}
+          <div key={monthKey} className="space-y-0">
+            <div
+              ref={setMonthSectionRef(monthKey)}
+              id={`month-${monthKey}`}
+              className="flex items-center justify-between px-3 py-2 bg-gray-100 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-medium text-gray-800 dark:text-gray-100 truncate">
+                  {getMonthLabel(monthKey)}
                 </span>
-                {onDelete && (
-                  <button
-                    onClick={() => onDelete(tx.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                  >
-                    ✕
-                  </button>
-                )}
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  ({monthTxs.length}건)
+                </span>
               </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const prevKey = groupedByMonth.order[monthIndex - 1];
+                    if (!prevKey) return;
+                    scrollToMonth(prevKey);
+                  }}
+                  disabled={monthIndex === 0}
+                  className="w-8 h-7 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="이전 월"
+                >
+                  ←
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextKey = groupedByMonth.order[monthIndex + 1];
+                    if (!nextKey) return;
+                    scrollToMonth(nextKey);
+                  }}
+                  disabled={monthIndex === groupedByMonth.order.length - 1}
+                  className="w-8 h-7 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 bg-white/70 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="다음 월"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+
+            <div>
+              {monthTxs.map((tx) => {
+                const style = getTypeStyle(tx.transaction_type, tx.is_transfer);
+
+                return (
+                  <div
+                    key={tx.id}
+                    className="border-b border-white dark:border-gray-600"
+                    style={{ padding: '8px' }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-500 dark:text-gray-400">
+                            {formatDate(tx.date)}
+                          </span>
+                          <span className="font-medium text-gray-900 dark:text-white truncate" style={{ fontSize: '12px' }}>
+                            {tx.category}
+                          </span>
+                          {tx.source === 'csv' && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded">
+                              CSV
+                            </span>
+                          )}
+                          {tx.is_transfer && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded">
+                              이체
+                            </span>
+                          )}
+                          {tx.memo && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[80px]">
+                              {tx.memo}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            <span
+                              onClick={() => handleAssetClick(tx.asset)}
+                              className={`cursor-pointer hover:underline ${filterAsset === tx.asset ? 'text-blue-500 font-medium' : ''}`}
+                            >
+                              {tx.asset}
+                            </span>
+                            {tx.is_transfer && tx.transfer_asset && (
+                              <span style={{ fontSize: '10px' }}>
+                                {' → '}
+                                <span
+                                  onClick={() => handleAssetClick(tx.transfer_asset!)}
+                                  className={`cursor-pointer hover:underline ${filterAsset === tx.transfer_asset ? 'text-blue-500 font-medium' : ''}`}
+                                >
+                                  {tx.transfer_asset}
+                                </span>
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-bold ${style.color}`} style={{ fontSize: '13px' }}>
+                          {style.prefix}{formatAmount(tx.amount)}
+                        </span>
+                        {onDelete && (
+                          <button
+                            onClick={() => onDelete(tx.id)}
+                            className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
