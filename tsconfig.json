@@ -32,6 +32,7 @@
   ],
   "exclude": [
     "node_modules",
-    "loadMoreRecords_fixed.ts"
+    "loadMoreRecords_fixed.ts",
+    "supabase/functions/**/*.ts"
   ]
 }
