@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
+import { PendingSmsPopup } from './components/PendingSmsPopup';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
@@ -1220,6 +1221,7 @@ export default function Home() {
     <AuthGuard>
       <SwipeNav>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+        <PendingSmsPopup />
         {/* 체중 입력 모달 */}
         {weightInputModal.open && (
           <div
