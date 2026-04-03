@@ -1,215 +1,157 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getSupabase } from '../../lib/supabase';
-
-type PendingTx = {
-  id: string;
-  user_id: string;
-  raw_sms: string;
-  sender: string | null;
-  amount: number | null;
-  amount_before_tax: number | null;
-  transaction_date: string | null;
-  account_number: string | null;
-  item_name: string | null;
-  transaction_type: 'income' | 'expense' | 'transfer' | null;
-  category: string | null;
-  status: 'pending' | 'confirmed' | 'dismissed';
-  parsed_data: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
-};
+import type { PendingTransaction, TransactionType } from '../../types/pending_transaction';
 
 interface PendingSmsPopupProps {
-  className?: string;
+  item: PendingTransaction;
+  onConfirm: (id: string, updates: {
+    transaction_type: TransactionType;
+    category: string;
+    memo: string;
+    amount: number;
+  }) => Promise<void>;
+  onDismiss: (id: string) => Promise<void>;
 }
 
-export function PendingSmsPopup({ className }: PendingSmsPopupProps) {
-  const supabase = getSupabase();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingTx | null>(null);
+const CATEGORY_OPTIONS = ['배당금', '급여', '식비', '교통', '쇼핑', '의료', '이체', '기타'];
+
+export function PendingSmsPopup({ item, onConfirm, onDismiss }: PendingSmsPopupProps) {
+  const [type, setType] = useState<TransactionType | null>(item.transaction_type ?? null);
+  const [category, setCategory] = useState<string>(item.category ?? '');
+  const [memo, setMemo] = useState<string>(item.item_name ?? '');
+  const [amount, setAmount] = useState<number>(() => (item.amount ?? 0));
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!supabase) return;
-    let isMounted = true;
+    setType(item.transaction_type ?? null);
+    setCategory(item.category ?? '');
+    setMemo(item.item_name ?? '');
+    setAmount(item.amount ?? 0);
+  }, [item]);
 
-    supabase.auth.getUser().then(({ data }) => {
-      if (!isMounted) return;
-      setUserId(data.user?.id ?? null);
-    });
+  const headerSender = item.sender ?? '알 수 없음';
+  const headerDate = item.transaction_date ?? '';
+  const amountText = useMemo(() => {
+    const aft = item.amount !== null ? new Intl.NumberFormat('ko-KR').format(item.amount) + '원 (세후)' : null;
+    const bef = item.amount_before_tax !== null ? new Intl.NumberFormat('ko-KR').format(item.amount_before_tax) + '원 (세전)' : null;
+    return [aft, bef].filter(Boolean).join(' / ');
+  }, [item.amount, item.amount_before_tax]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [supabase]);
-
-  useEffect(() => {
-    if (!supabase || !userId) return;
-    let isMounted = true;
-
-    const fetchLatest = async () => {
-      const { data } = await supabase
-        .from('pending_transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (isMounted) setPending((data as PendingTx) ?? null);
-    };
-
-    fetchLatest();
-
-    const channel = supabase
-      .channel('pending_tx_popup')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'pending_transactions', filter: `user_id=eq.${userId}` },
-        (payload) => {
-          const row = payload.new as PendingTx;
-          if (row.status === 'pending') {
-            setPending(row);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      isMounted = false;
-    };
-  }, [supabase, userId]);
-
-  const messagePreview = useMemo(() => {
-    if (!pending?.raw_sms) return '';
-    const s = pending.raw_sms.replace(/\s+/g, ' ').trim();
-    return s.length > 120 ? s.slice(0, 120) + '…' : s;
-  }, [pending?.raw_sms]);
+  const handleSubmit = async () => {
+    if (!type) return;
+    setLoading(true);
+    try {
+      await onConfirm(item.id, {
+        transaction_type: type,
+        category: category || '기타',
+        memo,
+        amount: Number.isFinite(amount) ? amount : 0,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDismiss = async () => {
-    if (!supabase || !pending) return;
     setLoading(true);
     try {
-      await supabase
-        .from('pending_transactions')
-        .update({ status: 'dismissed' })
-        .eq('id', pending.id)
-        .eq('user_id', pending.user_id);
-      setPending(null);
+      await onDismiss(item.id);
     } finally {
       setLoading(false);
     }
   };
-
-  const confirmWithType = async (type: 'income' | 'expense' | 'transfer') => {
-    if (!supabase || !pending || !userId) return;
-    setLoading(true);
-    try {
-      // Prepare transaction payload (map to app schema)
-      const isTransfer = type === 'transfer';
-      const transactionTypeKo = type === 'income' ? '수입' : type === 'expense' ? '지출' : '자산이체';
-      const amount = pending.amount && pending.amount > 0 ? pending.amount : 0;
-
-      if (amount > 0) {
-        const dateIso = pending.transaction_date
-          ? new Date(pending.transaction_date + 'T00:00:00Z').toISOString()
-          : new Date().toISOString();
-
-        const asset = pending.account_number || pending.sender || 'SMS';
-        const memo = pending.item_name || pending.sender || null;
-        const category = pending.category || (type === 'income' ? '수입' : type === 'expense' ? '지출' : '자산이체');
-
-        const insertRes = await supabase.from('transactions').insert({
-          user_id: userId,
-          date: dateIso,
-          asset,
-          category,
-          sub_category: null,
-          transaction_type: transactionTypeKo,
-          is_transfer: isTransfer,
-          transfer_asset: isTransfer ? null : null,
-          amount,
-          memo,
-          currency: 'KRW',
-          source: 'app',
-        });
-        if (insertRes.error) {
-          // fallback: proceed to mark confirmed anyway so user isn't blocked
-          // but surface could be improved with UI notice
-        }
-      }
-
-      await supabase
-        .from('pending_transactions')
-        .update({ status: 'confirmed', transaction_type: type })
-        .eq('id', pending.id)
-        .eq('user_id', pending.user_id);
-
-      setPending(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (!pending) return null;
 
   return (
-    <div
-      className={`fixed inset-x-0 bottom-16 z-[60] mx-auto max-w-[412px] px-4 ${className || ''}`}
-      role="dialog"
-      aria-label="SMS 거래 확인"
-    >
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-              새 SMS 감지됨 — 확인 후 저장하세요
+    <div className="fixed inset-0 z-[70]">
+      <div className="absolute inset-0 bg-black/50" />
+      <div className="absolute inset-x-0 bottom-0 mx-auto max-w-[412px] w-full px-4 pb-6">
+        <div className="rounded-t-2xl border border-b-0 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl p-4">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-gray-900 dark:text-white">
+              {headerSender}
             </div>
-            <div className="text-sm text-gray-900 dark:text-white break-words">
-              {messagePreview}
-            </div>
-            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 flex gap-2">
-              {pending.sender && <span>발신: {pending.sender}</span>}
-              {pending.amount !== null && <span>금액(세후): {new Intl.NumberFormat('ko-KR').format(pending.amount)}</span>}
-            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">{headerDate}</div>
           </div>
-          <button
-            onClick={handleDismiss}
-            disabled={loading}
-            className="shrink-0 w-7 h-7 rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-            aria-label="닫기"
-            title="닫기"
-          >
-            ✕
-          </button>
-        </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <button
-            onClick={() => confirmWithType('income')}
-            disabled={loading}
-            className="py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium"
-          >
-            수입
-          </button>
-          <button
-            onClick={() => confirmWithType('expense')}
-            disabled={loading}
-            className="py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium"
-          >
-            지출
-          </button>
-          <button
-            onClick={() => confirmWithType('transfer')}
-            disabled={loading}
-            className="py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-medium"
-          >
-            이체
-          </button>
+          {/* 금액 */}
+          <div className="mt-2 text-lg font-bold text-gray-900 dark:text-white">
+            {amountText || '금액 정보 없음'}
+          </div>
+
+          {/* 항목명 */}
+          <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+            {item.item_name || item.account_number || '항목 정보 없음'}
+          </div>
+
+          {/* 거래 유형 선택 */}
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {[
+              { key: 'income', label: '💰 수입' },
+              { key: 'expense', label: '💸 지출' },
+              { key: 'transfer', label: '🔄 이체' },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setType(key as TransactionType)}
+                className={`py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  type === key
+                    ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 text-blue-700 dark:text-blue-300 ring-2 ring-blue-300'
+                    : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 카테고리 + 금액 + 메모 */}
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="col-span-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 outline-none"
+            >
+              <option value="">카테고리</option>
+              {CATEGORY_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={Number.isFinite(amount) ? amount : 0}
+              onChange={(e) => setAmount(parseInt(e.target.value || '0', 10))}
+              className="col-span-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 outline-none"
+              placeholder="금액"
+            />
+            <input
+              type="text"
+              value={memo}
+              onChange={(e) => setMemo(e.target.value)}
+              className="col-span-1 px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300 outline-none"
+              placeholder="메모"
+            />
+          </div>
+
+          {/* 하단 버튼 */}
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <button
+              onClick={handleDismiss}
+              disabled={loading}
+              className="flex-1 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            >
+              무시
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!type || loading}
+              className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium transition-colors"
+            >
+              등록하기
+            </button>
+          </div>
         </div>
       </div>
     </div>

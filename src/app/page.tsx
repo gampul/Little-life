@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
 import { PendingSmsPopup } from './components/PendingSmsPopup';
+import type { PendingTransaction, TransactionType } from '../types/pending_transaction';
 import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
@@ -63,6 +64,10 @@ export default function Home() {
   const supabase = getSupabase();
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  // Pending SMS queue & badge
+  const [pendingQueue, setPendingQueue] = useState<PendingTransaction[]>([]);
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const currentPopup = pendingQueue[0] ?? null;
 
   useEffect(() => {
     if (!supabase) {
@@ -90,6 +95,111 @@ export default function Home() {
         setAuthLoading(false);
       });
   }, [supabase]);
+
+  // Load initial pending list and count
+  useEffect(() => {
+    if (!supabase || !userId) return;
+    let isMounted = true;
+    const load = async () => {
+      const { data } = await supabase
+        .from('pending_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      if (!isMounted) return;
+      setPendingQueue((data as PendingTransaction[]) ?? []);
+      setPendingCount((data?.length as number) ?? 0);
+    };
+    load();
+    return () => { isMounted = false; };
+  }, [supabase, userId]);
+
+  // Realtime subscription
+  useEffect(() => {
+    if (!supabase || !userId) return;
+    const channel = supabase
+      .channel('pending-sms')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'pending_transactions',
+        filter: `user_id=eq.${userId}`
+      }, (payload) => {
+        const row = payload.new as PendingTransaction;
+        if (row.status === 'pending') {
+          setPendingQueue((q) => [row, ...q]);
+          setPendingCount((c) => c + 1);
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [supabase, userId]);
+
+  const handleConfirmPending = useCallback(async (id: string, updates: {
+    transaction_type: TransactionType;
+    category: string;
+    memo: string;
+    amount: number;
+  }) => {
+    if (!supabase || !userId) return;
+
+    // Find item for date/account mapping
+    const item = pendingQueue.find((p) => p.id === id);
+    const dateIso = item?.transaction_date
+      ? new Date(item.transaction_date + 'T00:00:00Z').toISOString()
+      : new Date().toISOString();
+    const asset = item?.account_number || item?.sender || 'SMS';
+
+    // 1) mark confirmed + set chosen fields
+    await supabase
+      .from('pending_transactions')
+      .update({
+        status: 'confirmed',
+        transaction_type: updates.transaction_type,
+        category: updates.category,
+        memo: updates.memo,
+        amount: updates.amount,
+      })
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    // 2) insert into transactions (map type to Korean labels)
+    const typeKo =
+      updates.transaction_type === 'income' ? '수입' :
+      updates.transaction_type === 'expense' ? '지출' : '자산이체';
+    await supabase
+      .from('transactions')
+      .insert({
+        user_id: userId,
+        date: dateIso,
+        asset,
+        category: updates.category || typeKo,
+        sub_category: null,
+        transaction_type: typeKo,
+        is_transfer: updates.transaction_type === 'transfer',
+        transfer_asset: null,
+        amount: Math.max(0, updates.amount || 0),
+        memo: updates.memo || null,
+        currency: 'KRW',
+        source: 'app',
+      });
+
+    // 3) dequeue
+    setPendingQueue((q) => q.filter((p) => p.id !== id));
+    setPendingCount((c) => Math.max(0, c - 1));
+  }, [supabase, userId, pendingQueue]);
+
+  const handleDismissPending = useCallback(async (id: string) => {
+    if (!supabase || !userId) return;
+    await supabase
+      .from('pending_transactions')
+      .update({ status: 'dismissed' })
+      .eq('id', id)
+      .eq('user_id', userId);
+    setPendingQueue((q) => q.filter((p) => p.id !== id));
+    setPendingCount((c) => Math.max(0, c - 1));
+  }, [supabase, userId]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
     getKstDateString()
@@ -1221,7 +1331,27 @@ export default function Home() {
     <AuthGuard>
       <SwipeNav>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-        <PendingSmsPopup />
+        {/* 가계부 미처리 건수 배지 (상단 고정 간단 표시) */}
+        {pendingCount > 0 && (
+          <div className="sticky top-0 z-40">
+            <div className="max-w-[412px] mx-auto px-4 pt-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white text-xs font-semibold shadow">
+                <span>가계부</span>
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-red-600 font-bold text-[11px]">
+                  {pendingCount}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* SMS Pending Popup (modal) */}
+        {currentPopup && (
+          <PendingSmsPopup
+            item={currentPopup}
+            onConfirm={handleConfirmPending}
+            onDismiss={handleDismissPending}
+          />
+        )}
         {/* 체중 입력 모달 */}
         {weightInputModal.open && (
           <div
