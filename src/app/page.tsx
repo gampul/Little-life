@@ -136,69 +136,185 @@ export default function Home() {
     return () => { supabase.removeChannel(channel); };
   }, [supabase, userId]);
 
+  // ── 등록하기: pending → confirmed + transactions 삽입 ──
   const handleConfirmPending = useCallback(async (id: string, updates: {
     transaction_type: TransactionType;
     category: string;
+    asset: string;
     memo: string;
     amount: number;
   }) => {
-    if (!supabase || !userId) return;
+    if (!supabase || !userId) {
+      console.error('❌ [등록] supabase 또는 userId 없음');
+      alert('로그인 정보가 없습니다. 새로고침 후 다시 시도해주세요.');
+      return;
+    }
 
-    // Find item for date/account mapping
-    const item = pendingQueue.find((p) => p.id === id);
-    const dateIso = item?.transaction_date
-      ? new Date(item.transaction_date + 'T00:00:00Z').toISOString()
-      : new Date().toISOString();
-    const asset = item?.account_number || item?.sender || 'SMS';
+    try {
+      // Find item for date/account mapping
+      const item = pendingQueue.find((p) => p.id === id);
+      const dateIso = item?.transaction_date
+        ? new Date(item.transaction_date + 'T00:00:00Z').toISOString()
+        : new Date().toISOString();
+      const asset = updates.asset || item?.sender || 'SMS';
 
-    // 1) mark confirmed + set chosen fields
-    await supabase
-      .from('pending_transactions')
-      .update({
-        status: 'confirmed',
-        transaction_type: updates.transaction_type,
-        category: updates.category,
-        memo: updates.memo,
-        amount: updates.amount,
-      })
-      .eq('id', id)
-      .eq('user_id', userId);
+      // 금액: transactions 테이블은 amount INTEGER > 0 필수
+      const safeAmount = Math.max(1, Math.round(updates.amount || 0));
 
-    // 2) insert into transactions (map type to Korean labels)
-    const typeKo =
-      updates.transaction_type === 'income' ? '수입' :
-      updates.transaction_type === 'expense' ? '지출' : '자산이체';
-    await supabase
-      .from('transactions')
-      .insert({
-        user_id: userId,
-        date: dateIso,
-        asset,
-        category: updates.category || typeKo,
-        sub_category: null,
-        transaction_type: typeKo,
-        is_transfer: updates.transaction_type === 'transfer',
-        transfer_asset: null,
-        amount: Math.max(0, updates.amount || 0),
-        memo: updates.memo || null,
-        currency: 'KRW',
-        source: 'app',
-      });
+      // 1) pending_transactions → confirmed
+      const { error: updateErr } = await supabase
+        .from('pending_transactions')
+        .update({
+          status: 'confirmed',
+          transaction_type: updates.transaction_type,
+          category: updates.category,
+          memo: updates.memo,
+          amount: updates.amount,
+        })
+        .eq('id', id)
+        .eq('user_id', userId);
 
-    // 3) dequeue
-    setPendingQueue((q) => q.filter((p) => p.id !== id));
-    setPendingCount((c) => Math.max(0, c - 1));
+      if (updateErr) {
+        console.error('❌ [등록] pending 업데이트 실패:', updateErr);
+        alert(`등록 실패: ${updateErr.message}`);
+        return;
+      }
+
+      // 2) transactions 테이블에 삽입
+      const typeKo =
+        updates.transaction_type === 'income' ? '수입' :
+        updates.transaction_type === 'expense' ? '지출' : '자산이체';
+
+      const { error: insertErr } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: userId,
+          date: dateIso,
+          asset,
+          category: updates.category || typeKo,
+          sub_category: null,
+          transaction_type: typeKo,
+          is_transfer: updates.transaction_type === 'transfer',
+          transfer_asset: null,
+          amount: safeAmount,
+          memo: updates.memo || null,
+          currency: 'KRW',
+          source: 'app',
+        });
+
+      if (insertErr) {
+        console.error('❌ [등록] transactions 삽입 실패:', insertErr);
+        alert(`거래 등록 실패: ${insertErr.message}`);
+        return;
+      }
+
+      console.log('✅ [등록] 성공:', id);
+      // 3) dequeue
+      setPendingQueue((q) => q.filter((p) => p.id !== id));
+      setPendingCount((c) => Math.max(0, c - 1));
+    } catch (err) {
+      console.error('❌ [등록] 예외:', err);
+      alert('등록 중 오류가 발생했습니다.');
+    }
   }, [supabase, userId, pendingQueue]);
 
+  // ── 나중에: 팝업 닫기 (큐 뒤로 이동 또는 임시 숨김) ──
+  const handleSkipPending = useCallback((id: string) => {
+    setPendingQueue((q) => {
+      if (q.length <= 1) {
+        // 1개뿐이면 빈 배열로 → 팝업 닫힘 (큐에서 완전 제거는 아님, 새로고침 시 다시 로드)
+        return [];
+      }
+      const idx = q.findIndex((p) => p.id === id);
+      if (idx < 0) return q;
+      const item = q[idx];
+      return [...q.slice(0, idx), ...q.slice(idx + 1), item];
+    });
+    console.log('⏭️ [나중에] 스킵:', id);
+  }, []);
+
+  // ── 임시저장: DB에 현재 편집 내용 저장 + 큐 뒤로 이동 ──
+  const handleTempSavePending = useCallback(async (id: string, updates: {
+    transaction_type: TransactionType | null;
+    asset: string;
+    memo: string;
+    amount: number;
+  }) => {
+    if (!supabase || !userId) {
+      console.error('❌ [임시저장] supabase 또는 userId 없음');
+      alert('로그인 정보가 없습니다. 새로고침 후 다시 시도해주세요.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pending_transactions')
+        .update({
+          transaction_type: updates.transaction_type,
+          memo: updates.memo,
+          amount: updates.amount,
+        })
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('❌ [임시저장] DB 업데이트 실패:', error);
+        alert(`임시저장 실패: ${error.message}`);
+        return;
+      }
+
+      console.log('💾 [임시저장] 성공:', id);
+
+      // 큐에서 해당 아이템 업데이트 + 뒤로 이동 (또는 1개면 팝업 닫기)
+      setPendingQueue((q) => {
+        const idx = q.findIndex((p) => p.id === id);
+        if (idx < 0) return q;
+        const updatedItem: PendingTransaction = {
+          ...q[idx],
+          transaction_type: updates.transaction_type,
+          memo: updates.memo,
+          amount: updates.amount,
+        };
+        if (q.length <= 1) {
+          // 1개뿐이면 팝업 닫기 (다음 로드 시 복원됨)
+          return [];
+        }
+        return [...q.slice(0, idx), ...q.slice(idx + 1), updatedItem];
+      });
+    } catch (err) {
+      console.error('❌ [임시저장] 예외:', err);
+      alert('임시저장 중 오류가 발생했습니다.');
+    }
+  }, [supabase, userId]);
+
+  // ── 삭제: DB에서 dismissed 처리 → 큐에서 제거 ──
   const handleDismissPending = useCallback(async (id: string) => {
-    if (!supabase || !userId) return;
-    await supabase
-      .from('pending_transactions')
-      .update({ status: 'dismissed' })
-      .eq('id', id)
-      .eq('user_id', userId);
-    setPendingQueue((q) => q.filter((p) => p.id !== id));
-    setPendingCount((c) => Math.max(0, c - 1));
+    if (!supabase || !userId) {
+      console.error('❌ [삭제] supabase 또는 userId 없음');
+      alert('로그인 정보가 없습니다. 새로고침 후 다시 시도해주세요.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pending_transactions')
+        .update({ status: 'dismissed' })
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('❌ [삭제] DB 업데이트 실패:', error);
+        alert(`삭제 실패: ${error.message}`);
+        return;
+      }
+
+      console.log('🗑️ [삭제] 성공:', id);
+      setPendingQueue((q) => q.filter((p) => p.id !== id));
+      setPendingCount((c) => Math.max(0, c - 1));
+    } catch (err) {
+      console.error('❌ [삭제] 예외:', err);
+      alert('삭제 중 오류가 발생했습니다.');
+    }
   }, [supabase, userId]);
 
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -1344,11 +1460,14 @@ export default function Home() {
             </div>
           </div>
         )}
-        {/* SMS Pending Popup (modal) */}
+        {/* SMS Pending Popup (modal) — key로 아이템 전환 시 컴포넌트 리셋 */}
         {currentPopup && (
           <PendingSmsPopup
+            key={currentPopup.id}
             item={currentPopup}
             onConfirm={handleConfirmPending}
+            onTempSave={handleTempSavePending}
+            onSkip={handleSkipPending}
             onDismiss={handleDismissPending}
           />
         )}

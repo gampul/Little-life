@@ -18,11 +18,25 @@ interface FinancialSummary {
   net_asset: number;
 }
 
+interface AssetSummaryRpcRow {
+  total_assets: number;
+  total_liabilities: number;
+  net_worth: number;
+  asset_count: number;
+  liability_count: number;
+}
+
+function toSafeNumber(value: unknown): number {
+  const n = typeof value === 'string' ? Number(value) : (value as number);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export default function LedgerPage() {
   const supabase = getSupabase();
   const [userId, setUserId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   
@@ -52,40 +66,140 @@ export default function LedgerPage() {
   // 사용자 인증 확인
   useEffect(() => {
     if (!supabase) return;
-    
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('세션 오류:', error);
+
+    let mounted = true;
+
+    const loadAuth = async () => {
+      // 1) 세션 기반 시도
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (!mounted) return;
+      if (sessionError) {
+        console.error('세션 오류:', sessionError);
+      }
+
+      const session = sessionData.session;
+      if (session?.user?.id) {
+        setUserId(session.user.id);
+        setAccessToken(session.access_token ?? null);
+        return;
+      }
+
+      // 2) 세션이 비어있을 때 getUser로 한 번 더 확인
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!mounted) return;
+      if (userError) {
+        console.error('사용자 확인 오류:', userError);
         setUserId(null);
         setAccessToken(null);
-      } else if (session) {
-        setUserId(session.user?.id ?? null);
-        setAccessToken(session.access_token ?? null);
+        return;
       }
+
+      setUserId(userData.user?.id ?? null);
+    };
+
+    loadAuth();
+
+    // 3) 인증 상태 변화 반영
+    const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setUserId(session?.user?.id ?? null);
+      setAccessToken(session?.access_token ?? null);
     });
+
+    return () => {
+      mounted = false;
+      authSub.subscription.unsubscribe();
+    };
   }, [supabase]);
 
   // 재무 요약 로드
   const loadSummary = useCallback(async () => {
-    if (!supabase || !userId) return;
+    if (!supabase || !userId) {
+      setIsSummaryLoading(false);
+      return;
+    }
     
     try {
       const { data, error } = await supabase.rpc('get_financial_summary', {
         p_user_id: userId,
       });
-      
-      if (error) {
-        console.log('재무 요약 로드 오류:', error.message);
-        console.log('Supabase에서 마이그레이션을 실행해주세요.');
-      } else if (data && data.length > 0) {
-        setSummary({
-          total_income: data[0].total_income || 0,
-          total_expense: data[0].total_expense || 0,
-          net_asset: data[0].net_asset || 0,
-        });
+
+      const { data: assetSummaryData, error: assetSummaryError } = await supabase.rpc('get_asset_summary', {
+        p_user_id: userId,
+      });
+
+      // rpc 응답이 배열/객체 어느 형태든 안전하게 처리
+      const financialRow = Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
+      const assetRow = Array.isArray(assetSummaryData)
+        ? ((assetSummaryData[0] as AssetSummaryRpcRow | undefined) ?? null)
+        : ((assetSummaryData as AssetSummaryRpcRow | null) ?? null);
+
+      let fallbackIncome = toSafeNumber((financialRow as { total_income?: unknown } | null)?.total_income);
+      let fallbackExpense = toSafeNumber((financialRow as { total_expense?: unknown } | null)?.total_expense);
+      let fallbackNet = toSafeNumber((financialRow as { net_asset?: unknown } | null)?.net_asset);
+
+      // get_financial_summary가 실패/빈값이면 transactions를 직접 집계해서 숫자 보장
+      if (error || financialRow === null) {
+        console.log('재무 요약 RPC 실패 또는 빈 응답, 직접 집계로 fallback:', error?.message);
+
+        let allRows: Array<{ transaction_type: string | null; amount: number | null; is_transfer: boolean | null }> = [];
+        let page = 0;
+        const BATCH_SIZE = 1000;
+        let hasMoreRows = true;
+
+        while (hasMoreRows) {
+          const { data: rows, error: txError } = await supabase
+            .from('transactions')
+            .select('transaction_type, amount, is_transfer')
+            .eq('user_id', userId)
+            .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
+
+          if (txError) {
+            console.error('직접 집계용 거래 로드 실패:', txError);
+            break;
+          }
+
+          const safeRows = rows ?? [];
+          allRows = [...allRows, ...safeRows];
+          hasMoreRows = safeRows.length === BATCH_SIZE;
+          page += 1;
+        }
+
+        fallbackIncome = allRows.reduce((sum, row) => {
+          if (row.transaction_type === '수입') {
+            return sum + toSafeNumber(row.amount);
+          }
+          return sum;
+        }, 0);
+
+        fallbackExpense = allRows.reduce((sum, row) => {
+          if (row.transaction_type === '지출' && !row.is_transfer) {
+            return sum + toSafeNumber(row.amount);
+          }
+          return sum;
+        }, 0);
+
+        fallbackNet = fallbackIncome - fallbackExpense;
       }
+
+      // "가계부 순자산"과 "자산 탭 순자산"을 동일 기준으로 고정
+      const alignedNetAsset = assetSummaryError
+        ? fallbackNet
+        : toSafeNumber(assetRow?.net_worth);
+
+      if (assetSummaryError) {
+        console.log('자산 요약 연동 실패로 재무 요약 값을 사용합니다:', assetSummaryError.message);
+      }
+
+      setSummary({
+        total_income: fallbackIncome,
+        total_expense: fallbackExpense,
+        net_asset: alignedNetAsset,
+      });
     } catch (err) {
       console.log('요약 로드 오류:', err);
+    } finally {
+      setIsSummaryLoading(false);
     }
   }, [supabase, userId]);
 
@@ -127,7 +241,10 @@ export default function LedgerPage() {
 
   // 거래 목록 로드 (초기 로드)
   const loadTransactions = useCallback(async () => {
-    if (!supabase || !userId) return;
+    if (!supabase || !userId) {
+      setIsLoading(false);
+      return;
+    }
     
     try {
       const { startDate, type } = getFilterConditions();
@@ -259,8 +376,13 @@ export default function LedgerPage() {
   // 데이터 로드
   useEffect(() => {
     if (userId) {
+      setIsSummaryLoading(true);
+      setIsLoading(true);
       loadSummary();
       loadTransactions();
+    } else {
+      // userId가 없을 때 요약 카드가 영구 스켈레톤으로 남지 않도록 보장
+      setIsSummaryLoading(false);
     }
   }, [userId, loadSummary, loadTransactions]);
 
@@ -409,10 +531,10 @@ export default function LedgerPage() {
         <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6`}>
           {/* 대시보드 (재무 요약) */}
           <Dashboard
-            totalIncome={summary.total_income}
-            totalExpense={summary.total_expense}
-            netAsset={summary.net_asset}
-            isLoading={isLoading}
+            totalIncome={toSafeNumber(summary.total_income)}
+            totalExpense={toSafeNumber(summary.total_expense)}
+            netAsset={toSafeNumber(summary.net_asset)}
+            isLoading={isSummaryLoading}
           />
           
           {/* 버튼 그룹 */}
