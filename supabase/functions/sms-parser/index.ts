@@ -124,13 +124,17 @@ function parseAccountNumber(message: string): string | null {
 }
 
 function parseItemName(message: string): string | null {
-  // 1) Labeled fields: "종목명: 삼성전자" — stop at digits or special markers
+  // 1) Labeled fields: "종목명: TIGER 미국초단기(3개월이하)국채"
+  // - 숫자/괄호 포함 이름도 허용
+  // - 줄바꿈 전까지 추출
   const labeled =
-    message.match(/종목명\s*[:\-]\s*([^\d\n\r,()]+)/) ||
-    message.match(/가맹점\s*[:\-]\s*([^\d\n\r,()]+)/) ||
-    message.match(/적요\s*[:\-]\s*([^\d\n\r,()]+)/);
+    message.match(/종목명\s*[:\-]\s*([^\n\r]+)/) ||
+    message.match(/가맹점\s*[:\-]\s*([^\n\r]+)/) ||
+    message.match(/적요\s*[:\-]\s*([^\n\r]+)/);
   if (labeled) {
-    const name = labeled[1].trim();
+    const name = labeled[1]
+      .replace(/^▶\s*/, '')
+      .trim();
     if (name.length > 0) return name;
   }
 
@@ -150,12 +154,25 @@ function parseItemName(message: string): string | null {
 }
 
 function parseSenderName(senderHeader: string | undefined, message: string): string | null {
-  // 1) MacroDroid sends actual sender in header
-  if (senderHeader && senderHeader.trim()) return senderHeader.trim();
-  // 2) Extract from [brackets] in message
+  const senderTrimmed = (senderHeader ?? '').trim();
+
+  // 1) Prefer explicit institution name in [brackets] for Kakao notifications.
+  //    Example:
+  //    senderHeader="카카오톡", message="[키움] ... " => sender="키움"
   const bracket = message.match(/\[([^\]]+)\]/);
-  if (bracket) return bracket[1].trim();
-  // 3) Extract from (parentheses) at start
+  const bracketSender = bracket?.[1]?.trim() ?? '';
+  if (senderTrimmed) {
+    if (/카카오|kakao|알림톡/i.test(senderTrimmed) && bracketSender) {
+      return bracketSender;
+    }
+    // 2) 일반 SMS면 기존 sender 헤더 우선
+    return senderTrimmed;
+  }
+
+  // 3) sender header가 없으면 [brackets] 사용
+  if (bracketSender) return bracketSender;
+
+  // 4) Extract from (parentheses) at start
   const paren = message.match(/^\(([^)]+)\)/);
   if (paren) return paren[1].trim();
   return null;
