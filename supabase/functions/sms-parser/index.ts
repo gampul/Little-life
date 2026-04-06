@@ -12,6 +12,13 @@ interface RequestBody {
   sender?: string;
   message?: string;
   received_at?: string;
+  // MacroDroid magic text aliases
+  notification?: string;
+  text?: string;
+  title?: string;
+  not_title?: string;
+  not_text?: string;
+  not_timestamp?: string;
 }
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL_INTERNAL') ?? '';
@@ -26,6 +33,39 @@ const corsHeaders = {
 
 function jsonResponse(status: number, body: Json) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+}
+
+function parseIncomingBody(raw: string): RequestBody {
+  // 1) JSON body (preferred)
+  try {
+    const parsed = JSON.parse(raw) as RequestBody;
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    // ignore and try next parser
+  }
+
+  // 2) form-url-encoded body fallback
+  const params = new URLSearchParams(raw);
+  if ([...params.keys()].length > 0) {
+    return {
+      sender: params.get('sender') ?? undefined,
+      message: params.get('message') ?? undefined,
+      received_at: params.get('received_at') ?? undefined,
+      notification: params.get('notification') ?? undefined,
+      text: params.get('text') ?? undefined,
+      title: params.get('title') ?? undefined,
+      not_title: params.get('not_title') ?? undefined,
+      not_text: params.get('not_text') ?? undefined,
+      not_timestamp: params.get('not_timestamp') ?? undefined,
+    };
+  }
+
+  // 3) Raw text fallback: treat whole body as message
+  if (raw.trim().length > 0) {
+    return { message: raw };
+  }
+
+  return {};
 }
 
 // ─── Amount Parsing ─────────────────────────────────────
@@ -228,10 +268,12 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const body: RequestBody = await req.json().catch(() => ({}));
-    const senderRaw = (body.sender ?? '').toString();
-    const message = (body.message ?? '').toString();
-    const receivedAt = (body.received_at ?? '').toString();
+    const rawBody = await req.text().catch(() => '');
+    const body: RequestBody = parseIncomingBody(rawBody);
+
+    const senderRaw = (body.sender ?? body.not_title ?? body.title ?? '').toString();
+    const message = (body.message ?? body.not_text ?? body.notification ?? body.text ?? '').toString();
+    const receivedAt = (body.received_at ?? body.not_timestamp ?? '').toString();
 
     if (!message) {
       return jsonResponse(400, { error: 'message is required' });
