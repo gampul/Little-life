@@ -43,13 +43,14 @@ async function collectDetailedData() {
     .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
     .order('date', { ascending: false });
 
-  // Property 자산 데이터 (최근 3개월)
-  const { data: propertyData } = await supabase
-    .from('finance_records')
-    .select('*')
-    .eq('user_id', userId)
-    .order('period', { ascending: false })
-    .limit(300);
+  // [투자현황 기능 초기화] finance_records 테이블 제거로 자산 데이터 조회 비활성화 - 재개발 시 복구
+  // const { data: propertyData } = await supabase
+  //   .from('finance_records')
+  //   .select('*')
+  //   .eq('user_id', userId)
+  //   .order('period', { ascending: false })
+  //   .limit(300);
+  const propertyData: any[] = [];
 
   return {
     daily: dailyData || [],
@@ -228,11 +229,7 @@ ${analysis.diary.map(d => `- ${d.title}: ${d.content.slice(0, 100)}...`).join('\
 - 일평균 지출: ${Math.round(analysis.expense.avgDailySpending).toLocaleString()}원
 - 카테고리별: ${analysis.expense.topCategories.map(([k, v]) => `${k}: ${v.toLocaleString()}원`).join(', ')}
 
-🏦 자산 현황 (${analysis.property.latestPeriod || '데이터 없음'}):
-- 총 자산: ${analysis.property.totalAsset.toLocaleString()}원
-- 배당금: ${analysis.property.totalDividend.toLocaleString()}원
-- 계좌 수: ${analysis.property.accountCount}개
-- 카테고리별: ${Object.entries(analysis.property.assetByCategory).map(([k, v]) => `${k}: ${(v as number).toLocaleString()}원`).join(', ')}
+🏦 자산 현황: 투자현황 기능 준비 중 (집계 데이터 없음)
 `;
 
     // OpenAI API 호출

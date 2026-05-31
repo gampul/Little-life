@@ -77,27 +77,28 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       }
     }
   },
-  {
-    type: 'function',
-    function: {
-      name: 'getPropertyData',
-      description: '사용자의 자산/투자 데이터를 조회합니다. 자산, 주식, 투자, 배당금, 수익률, 포트폴리오 관련 질문에 사용하세요.',
-      parameters: {
-        type: 'object',
-        properties: {
-          stockName: {
-            type: 'string',
-            description: '조회할 종목명 (예: 삼성전자)'
-          },
-          owner: {
-            type: 'string',
-            description: '조회할 소유자명'
-          }
-        },
-        required: []
-      }
-    }
-  },
+  // [투자현황 기능 초기화] finance_records 기반 getPropertyData 도구 제거 - 재개발 시 복구
+  // {
+  //   type: 'function',
+  //   function: {
+  //     name: 'getPropertyData',
+  //     description: '사용자의 자산/투자 데이터를 조회합니다. 자산, 주식, 투자, 배당금, 수익률, 포트폴리오 관련 질문에 사용하세요.',
+  //     parameters: {
+  //       type: 'object',
+  //       properties: {
+  //         stockName: {
+  //           type: 'string',
+  //           description: '조회할 종목명 (예: 삼성전자)'
+  //         },
+  //         owner: {
+  //           type: 'string',
+  //           description: '조회할 소유자명'
+  //         }
+  //       },
+  //       required: []
+  //     }
+  //   }
+  // },
   {
     type: 'function',
     function: {
@@ -267,89 +268,88 @@ async function getExpenseData(days: number = 30, category?: string) {
   };
 }
 
-// Property 데이터 조회
-async function getPropertyData(stockName?: string, owner?: string) {
-  const { supabase, userId } = await getSupabaseWithUserId();
-  if (!userId) return { message: '로그인이 필요합니다.' };
-
-  const { data, error } = await supabase
-    .from('finance_records')
-    .select('*')
-    .eq('user_id', userId)
-    .order('period', { ascending: false })
-    .limit(100);
-
-  if (error) {
-    console.error('Property data fetch error:', error);
-    return { error: error.message };
-  }
-
-  if (!data || data.length === 0) {
-    return { message: '자산 기록이 없습니다.' };
-  }
-
-  // 최신 기간 데이터만 필터
-  const latestPeriod = data[0]?.period;
-  let latestRecords = data.filter(p => p.period === latestPeriod);
-
-  // 종목명 필터
-  if (stockName) {
-    latestRecords = latestRecords.filter(p => p.stock?.includes(stockName));
-  }
-
-  // 소유자 필터
-  if (owner) {
-    latestRecords = latestRecords.filter(p => p.owner?.includes(owner));
-  }
-
-  let totalAsset = 0;
-  let totalDividend = 0;
-  let totalInOut = 0;
-
-  latestRecords.forEach(p => {
-    totalAsset += Number(p.value) || 0;
-    totalDividend += Number(p.dividend) || 0;
-    totalInOut += Number(p.in_out) || 0;
-  });
-
-  const stocks = latestRecords.slice(0, 20).map(p => ({
-    owner: p.owner,
-    division: p.division,
-    category: p.category,
-    stock: p.stock,
-    qty: p.qty,
-    value: `${Number(p.value || 0).toLocaleString()}원`,
-    dividend: `${Number(p.dividend || 0).toLocaleString()}원`,
-    inOut: `${Number(p.in_out || 0) >= 0 ? '+' : ''}${Number(p.in_out || 0).toLocaleString()}원`,
-    growthRate: p.growth_rate ? `${p.growth_rate}%` : null
-  }));
-
-  return {
-    period: latestPeriod,
-    filterStock: stockName || '전체',
-    filterOwner: owner || '전체',
-    totalAsset: `${totalAsset.toLocaleString()}원`,
-    totalDividend: `${totalDividend.toLocaleString()}원`,
-    totalInOut: `${totalInOut >= 0 ? '+' : ''}${totalInOut.toLocaleString()}원`,
-    stockCount: latestRecords.length,
-    stocks
-  };
-}
+// [투자현황 기능 초기화] finance_records 테이블 제거로 getPropertyData 비활성화 - 재개발 시 복구
+// async function getPropertyData(stockName?: string, owner?: string) {
+//   const { supabase, userId } = await getSupabaseWithUserId();
+//   if (!userId) return { message: '로그인이 필요합니다.' };
+//
+//   const { data, error } = await supabase
+//     .from('finance_records')
+//     .select('*')
+//     .eq('user_id', userId)
+//     .order('period', { ascending: false })
+//     .limit(100);
+//
+//   if (error) {
+//     console.error('Property data fetch error:', error);
+//     return { error: error.message };
+//   }
+//
+//   if (!data || data.length === 0) {
+//     return { message: '자산 기록이 없습니다.' };
+//   }
+//
+//   // 최신 기간 데이터만 필터
+//   const latestPeriod = data[0]?.period;
+//   let latestRecords = data.filter(p => p.period === latestPeriod);
+//
+//   // 종목명 필터
+//   if (stockName) {
+//     latestRecords = latestRecords.filter(p => p.stock?.includes(stockName));
+//   }
+//
+//   // 소유자 필터
+//   if (owner) {
+//     latestRecords = latestRecords.filter(p => p.owner?.includes(owner));
+//   }
+//
+//   let totalAsset = 0;
+//   let totalDividend = 0;
+//   let totalInOut = 0;
+//
+//   latestRecords.forEach(p => {
+//     totalAsset += Number(p.value) || 0;
+//     totalDividend += Number(p.dividend) || 0;
+//     totalInOut += Number(p.in_out) || 0;
+//   });
+//
+//   const stocks = latestRecords.slice(0, 20).map(p => ({
+//     owner: p.owner,
+//     division: p.division,
+//     category: p.category,
+//     stock: p.stock,
+//     qty: p.qty,
+//     value: `${Number(p.value || 0).toLocaleString()}원`,
+//     dividend: `${Number(p.dividend || 0).toLocaleString()}원`,
+//     inOut: `${Number(p.in_out || 0) >= 0 ? '+' : ''}${Number(p.in_out || 0).toLocaleString()}원`,
+//     growthRate: p.growth_rate ? `${p.growth_rate}%` : null
+//   }));
+//
+//   return {
+//     period: latestPeriod,
+//     filterStock: stockName || '전체',
+//     filterOwner: owner || '전체',
+//     totalAsset: `${totalAsset.toLocaleString()}원`,
+//     totalDividend: `${totalDividend.toLocaleString()}원`,
+//     totalInOut: `${totalInOut >= 0 ? '+' : ''}${totalInOut.toLocaleString()}원`,
+//     stockCount: latestRecords.length,
+//     stocks
+//   };
+// }
 
 // 전체 요약 조회
 async function getAllSummary() {
-  const [daily, diary, expense, property] = await Promise.all([
+  // [투자현황 기능 초기화] property(getPropertyData) 제외 - 재개발 시 복구
+  const [daily, diary, expense] = await Promise.all([
     getDailyData(7),
     getDiaryData(3),
-    getExpenseData(30),
-    getPropertyData()
+    getExpenseData(30)
   ]);
 
   return {
     daily,
     diary,
-    expense,
-    property
+    expense
   };
 }
 
@@ -362,8 +362,9 @@ async function executeFunction(name: string, args: any): Promise<any> {
       return await getDiaryData(args.limit, args.keyword);
     case 'getExpenseData':
       return await getExpenseData(args.days, args.category);
-    case 'getPropertyData':
-      return await getPropertyData(args.stockName, args.owner);
+    // [투자현황 기능 초기화] getPropertyData 제거 - 재개발 시 복구
+    // case 'getPropertyData':
+    //   return await getPropertyData(args.stockName, args.owner);
     case 'getAllSummary':
       return await getAllSummary();
     default:
@@ -400,7 +401,6 @@ export async function POST(request: NextRequest) {
 - 체중, 운동, 수면, 건강, 루틴, 일상 → getDailyData
 - 일기, 메모, 기록, 생각 → getDiaryData  
 - 지출, 수입, 돈, 가계부, 소비 → getExpenseData
-- 자산, 주식, 투자, 배당, 재산 → getPropertyData
 - 전체, 종합, 현황, 요약, 리포트 → getAllSummary
 - 잘 모르겠으면 → getAllSummary
 
@@ -507,7 +507,8 @@ export async function GET() {
     };
 
     // 각 테이블 데이터 개수 확인
-    const [daily, memos, expense, finance] = await Promise.all([
+    // [투자현황 기능 초기화] finance_records 카운트 제거 - 재개발 시 복구
+    const [daily, memos, expense] = await Promise.all([
       userId
         ? supabase.from('daily_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
         : supabase.from('daily_records').select('id', { count: 'exact', head: true }),
@@ -517,9 +518,6 @@ export async function GET() {
       userId
         ? supabase.from('expense_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
         : supabase.from('expense_records').select('id', { count: 'exact', head: true }),
-      userId
-        ? supabase.from('finance_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
-        : supabase.from('finance_records').select('id', { count: 'exact', head: true }),
     ]);
 
     return NextResponse.json({
@@ -528,7 +526,6 @@ export async function GET() {
         daily_records: daily.count ?? daily.error?.message,
         memos: memos.count ?? memos.error?.message,
         expense_records: expense.count ?? expense.error?.message,
-        finance_records: finance.count ?? finance.error?.message,
       }
     });
   } catch (error: any) {
