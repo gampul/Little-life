@@ -39,6 +39,7 @@ interface RoutineTemplate {
   sort_order: number;
   type: 'checkbox' | 'number';
   unit?: string;
+  image_upload_enabled?: boolean;
 }
 
 interface RoutineCheck {
@@ -342,7 +343,6 @@ export default function Home() {
   // 루틴 숫자/체크 즉시 연동을 위한 동기화 트리거
   const [routineSyncTick, setRoutineSyncTick] = useState(0);
   const bumpRoutineSync = useCallback(() => setRoutineSyncTick(t => t + 1), []);
-  const [isRoutineSettingOpen, setIsRoutineSettingOpen] = useState(false);
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
   
@@ -643,7 +643,7 @@ export default function Home() {
       // type, unit, deleted_at 컬럼 포함하여 조회 시도 (deleted_at은 soft delete 용)
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled')
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('sort_order', { ascending: true });
@@ -658,7 +658,7 @@ export default function Home() {
           .order('sort_order', { ascending: true });
         
         // type, unit 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null }));
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null, image_upload_enabled: false }));
         error = result.error;
       }
 
@@ -677,7 +677,8 @@ export default function Home() {
         .map(t => ({
         ...t,
         type: t.type || 'checkbox' as 'checkbox' | 'number',
-        unit: t.unit || undefined
+        unit: t.unit || undefined,
+        image_upload_enabled: t.image_upload_enabled ?? false
       }));
       setRoutineTemplates(templatesWithType);
     } catch (err) {
@@ -1578,19 +1579,6 @@ export default function Home() {
 
         <GlobalNav />
         <div className={APP_CONTENT_CONTAINER}>
-
-        {/* 루틴 설정 모달 */}
-        {isRoutineSettingOpen && (
-          <RoutineSettingModal
-            userId={userId}
-            routineTemplates={routineTemplates}
-            onClose={() => {
-              setIsRoutineSettingOpen(false);
-              loadRoutineTemplates();
-            }}
-          />
-        )}
-
 
         <div className="space-y-2">
           {/* 입력 섹션 */}
@@ -2575,10 +2563,7 @@ export default function Home() {
                         setEditModeRoutine={setEditModeRoutine}
                         syncTick={routineSyncTick}
                         onSync={bumpRoutineSync}
-                        isReadingRoutine={
-                          routine.field_key === 'routine_1768014190583' ||
-                          routine.label.includes('독서')
-                        }
+                        imageUploadEnabled={!!routine.image_upload_enabled}
                       />
                     </div>
                   )}
@@ -3732,214 +3717,6 @@ function MealCheckbox({
   );
 }
 
-// 루틴 설정 모달 컴포넌트
-function RoutineSettingModal({
-  userId,
-  routineTemplates,
-  onClose,
-}: {
-  userId: string;
-  routineTemplates: RoutineTemplate[];
-  onClose: () => void;
-}) {
-  const [templates, setTemplates] = useState<RoutineTemplate[]>([...routineTemplates]);
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Supabase 클라이언트 싱글톤 사용
-  const supabase = getSupabase();
-
-  const handleAdd = () => {
-    const newTemplate: RoutineTemplate = {
-      id: `temp_${Date.now()}`,
-      emoji: '✨',
-      label: '새로운 루틴',
-      field_key: `custom_${Date.now()}`,
-      sort_order: templates.length + 1,
-      type: 'checkbox',
-    };
-    setTemplates([...templates, newTemplate]);
-  };
-
-  const handleDelete = (id: string) => {
-    setTemplates(templates.filter(t => t.id !== id));
-  };
-
-  const handleUpdate = (id: string, field: 'emoji' | 'label', value: string) => {
-    setTemplates(templates.map(t => 
-      t.id === id ? { ...t, [field]: value } : t
-    ));
-  };
-
-  const handleSave = async () => {
-    if (!supabase) {
-      alert('❌ Supabase 연결이 설정되지 않았습니다.');
-      return;
-    }
-    setIsSaving(true);
-    try {
-      // 기존 템플릿 ID 조회
-      const { data: existingTemplates } = await supabase
-        .from('routine_templates')
-        .select('id, field_key')
-        .eq('user_id', userId);
-
-      const existingMap = new Map(
-        (existingTemplates || []).map(t => [t.field_key, t.id])
-      );
-
-      // 템플릿 데이터 준비 (기존 ID 유지)
-      const templatesToUpsert = templates.map((t, index) => {
-        const existingId = existingMap.get(t.field_key);
-        return {
-          ...(existingId && !t.id.startsWith('temp_') ? { id: existingId } : {}),
-          user_id: userId,
-          emoji: t.emoji,
-          label: t.label,
-          field_key: t.field_key,
-          sort_order: index + 1,
-        };
-      });
-
-      // UPSERT로 저장 (기존 데이터 보존)
-      const { error: upsertError } = await supabase
-        .from('routine_templates')
-        .upsert(templatesToUpsert, {
-          onConflict: 'id',
-          ignoreDuplicates: false
-        });
-
-      if (upsertError) {
-        console.error('=== 템플릿 저장 에러 상세 ===');
-        console.error('메시지:', upsertError.message);
-        console.error('코드:', upsertError.code);
-        console.error('상세:', upsertError.details);
-        console.error('힌트:', upsertError.hint);
-        console.error('전체:', JSON.stringify(upsertError, null, 2));
-        throw upsertError;
-      }
-
-      // 삭제된 템플릿 처리 (현재 templates에 없는 것들)
-      const currentFieldKeys = new Set(templates.map(t => t.field_key));
-      const deletedTemplates = (existingTemplates || []).filter(
-        t => !currentFieldKeys.has(t.field_key)
-      );
-
-      if (deletedTemplates.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('routine_templates')
-          .delete()
-          .in('id', deletedTemplates.map(t => t.id));
-
-        if (deleteError) {
-          console.error('삭제된 템플릿 제거 오류:', deleteError);
-          // 삭제 실패는 치명적이지 않으므로 계속 진행
-        }
-      }
-
-      alert('✅ 저장되었습니다!');
-      onClose();
-    } catch (err: any) {
-      console.error('=== 루틴 설정 저장 오류 ===');
-      console.error('타입:', typeof err);
-      console.error('전체 에러:', err);
-      if (err?.message) console.error('메시지:', err.message);
-      if (err?.code) console.error('코드:', err.code);
-      if (err?.details) console.error('상세:', err.details);
-      if (err?.hint) console.error('힌트:', err.hint);
-      console.error('전체 JSON:', JSON.stringify(err, null, 2));
-      
-      let errorMessage = '알 수 없는 오류가 발생했습니다.';
-      
-      if (err?.message) {
-        errorMessage = err.message;
-        
-        // 구체적인 에러 메시지 처리
-        if (err.message.includes('new row violates row-level security policy')) {
-          errorMessage = '데이터 저장 권한이 없습니다. Supabase RLS 정책을 확인해주세요.';
-        } else if (err.message.includes('duplicate key value')) {
-          errorMessage = '이미 존재하는 데이터입니다.';
-        } else if (err.message.includes('violates foreign key constraint')) {
-          errorMessage = '참조 데이터가 존재하지 않습니다.';
-        }
-      }
-      
-      alert(`❌ 저장 실패: ${errorMessage}`);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6 max-w-[412px] w-full max-h-[80vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">⚙️ 루틴 설정</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl w-10 h-10 flex items-center justify-center"
-            aria-label="닫기"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="space-y-6 mb-6">
-          {templates.map((template, index) => {
-            
-            return (
-            <div key={template.id} className="flex flex-col items-stretch gap-3 bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-4 sm:p-5">
-              <span className="text-gray-500 dark:text-gray-400 text-base">{index + 1}</span>
-              <input
-                type="text"
-                value={template.emoji}
-                onChange={(e) => handleUpdate(template.id, 'emoji', e.target.value)}
-                className="w-full px-3 py-2.5 text-center bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-                maxLength={2}
-              />
-              <input
-                type="text"
-                value={template.label}
-                onChange={(e) => handleUpdate(template.id, 'label', e.target.value)}
-                className="flex-1 px-4 py-2.5 bg-[rgb(254,252,247)] dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px]"
-              />
-              <button
-                onClick={() => handleDelete(template.id)}
-                className="w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded transition-colors min-h-[44px]"
-              >
-                삭제
-              </button>
-            </div>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={handleAdd}
-          className="w-full py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors mb-4 min-h-[44px] text-base"
-        >
-          + 루틴 추가
-        </button>
-
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white rounded-lg transition-colors min-h-[44px] text-base"
-          >
-            취소
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 min-h-[44px] text-base"
-          >
-            {isSaving ? '저장 중...' : '저장'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // 루틴별 캘린더 컴포넌트
 function RoutineCalendar({
   userId,
@@ -3952,7 +3729,7 @@ function RoutineCalendar({
   setEditModeRoutine,
   syncTick,
   onSync,
-  isReadingRoutine = false,
+  imageUploadEnabled = false,
 }: {
   userId: string;
   routineId: string;
@@ -3964,14 +3741,12 @@ function RoutineCalendar({
   setEditModeRoutine: (routineId: string | null) => void;
   syncTick: number;
   onSync: () => void;
-  isReadingRoutine?: boolean;
+  imageUploadEnabled?: boolean;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [dateValues, setDateValues] = useState<Record<string, number>>({});
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [uploadingDate, setUploadingDate] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingUploadDateRef = useRef<string | null>(null);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -3981,16 +3756,16 @@ function RoutineCalendar({
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
   const [selectedMonth, setSelectedMonth] = useState<string>(String(currentMonth));
 
-  // 아코디언이 펼쳐질 때 독서 루틴은 현재 월, 일반 루틴은 전체 뷰로 자동 전환
+  // 아코디언이 펼쳐질 때 이미지 업로드 루틴은 현재 월, 그 외는 전체 뷰로 자동 전환
   useEffect(() => {
     if (isExpanded) {
-      if (isReadingRoutine) {
+      if (imageUploadEnabled) {
         setSelectedMonth(String(currentMonth));
       } else {
         setSelectedMonth('all');
       }
     }
-  }, [isExpanded, isReadingRoutine, currentMonth]);
+  }, [isExpanded, imageUploadEnabled, currentMonth]);
 
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
@@ -4376,7 +4151,81 @@ function RoutineCalendar({
     }
   };
 
-  // 독서 루틴 이미지 업로드 핸들러
+  // 분(minutes) 입력 핸들러 (독서 루틴용)
+  const handleMinutesChange = async (date: string, routineId: string, value: number | null) => {
+    if (!supabase || !userId) return;
+    
+    try {
+      if (value === null || value === 0) {
+        // 값이 없으면 삭제
+        const { error } = await supabase
+          .from('daily_routine_checks')
+          .delete()
+          .eq('date', date)
+          .eq('routine_id', routineId)
+          .eq('user_id', userId);
+        
+        if (error) {
+          console.error('분 기록 삭제 오류:', error);
+          return;
+        }
+        
+        setDateValues(prev => {
+          const newValues = { ...prev };
+          delete newValues[date];
+          return newValues;
+        });
+        
+        setCheckedDates(prev => {
+          const newDates = { ...prev };
+          if (newDates[date]) {
+            newDates[date].delete(routineId);
+            if (newDates[date].size === 0) {
+              delete newDates[date];
+            }
+          }
+          return newDates;
+        });
+      } else {
+        // 값 저장
+        const { error } = await supabase
+          .from('daily_routine_checks')
+          .upsert({
+            user_id: userId,
+            date: date,
+            routine_id: routineId,
+            checked: true,
+            value: value
+          }, {
+            onConflict: 'user_id,date,routine_id'
+          });
+        
+        if (error) {
+          console.error('분 기록 저장 오류:', error);
+          return;
+        }
+        
+        setDateValues(prev => ({
+          ...prev,
+          [date]: value
+        }));
+        
+        setCheckedDates(prev => {
+          const newDates = { ...prev };
+          if (!newDates[date]) {
+            newDates[date] = new Set();
+          }
+          newDates[date].add(routineId);
+          return newDates;
+        });
+      }
+      onSync();
+    } catch (err) {
+      console.error('분 기록 처리 오류:', err);
+    }
+  };
+
+  // 루틴 이미지 업로드 핸들러
   const handleImageUpload = async (date: string, file: File) => {
     if (!supabase) return;
     setUploadingDate(date);
@@ -4598,27 +4447,10 @@ function RoutineCalendar({
         </div>
       </div>
       
-      {/* 숨겨진 파일 인풋 (독서 루틴 이미지 업로드용) */}
-      {isReadingRoutine && (
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            const date = pendingUploadDateRef.current;
-            if (file && date) {
-              await handleImageUpload(date, file);
-            }
-            e.target.value = '';
-          }}
-        />
-      )}
 
       {/* 캘린더 컨테이너 */}
-      {isReadingRoutine && selectedMonth !== 'all' ? (
-        // 독서 루틴 전용: 전통적인 월 캘린더 그리드 (이미지 + 분 표시)
+      {imageUploadEnabled && selectedMonth !== 'all' ? (
+        // 이미지 업로드 루틴: 월 캘린더 그리드 (이미지 + 분 표시)
         (() => {
           const monthNum = parseInt(selectedMonth);
           const firstDay = new Date(selectedYear, monthNum - 1, 1);
@@ -4670,22 +4502,13 @@ function RoutineCalendar({
                         key={`${weekIdx}-${dayIdx}`}
                         className="relative flex flex-col rounded-lg overflow-hidden"
                         style={{
-                          minHeight: '72px',
+                          height: '72px',
                           border: isToday ? '2px solid #60A5FA' : '1px solid',
                           borderColor: isToday ? '#60A5FA' : isChecked ? 'rgba(59,130,246,0.3)' : 'rgba(107,114,128,0.2)',
                           backgroundColor: isChecked
                             ? 'rgba(59,130,246,0.06)'
                             : 'rgba(249,250,251,0.8)',
-                          opacity: isCurrentMonth ? 1 : 0.25,
-                          cursor: inEditMode && isCurrentMonth ? 'pointer' : 'default'
-                        }}
-                        onClick={() => {
-                          if (!inEditMode || !isCurrentMonth) return;
-                          if (!imgUrl) {
-                            // 이미지 없으면 업로드 다이얼로그
-                            pendingUploadDateRef.current = date;
-                            fileInputRef.current?.click();
-                          }
+                          opacity: isCurrentMonth ? 1 : 0.25
                         }}
                       >
                         {/* 날짜 숫자 */}
@@ -4699,70 +4522,120 @@ function RoutineCalendar({
                           {day}
                         </div>
 
-                        {/* 이미지 영역 */}
-                        {isUploading ? (
-                          <div className="flex-1 flex items-center justify-center mt-3">
-                            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        ) : imgUrl ? (
-                          <div
-                            className="flex-1 mt-3 relative group"
-                            onClick={(e) => {
-                              if (!inEditMode || !isCurrentMonth) return;
-                              e.stopPropagation();
-                              pendingUploadDateRef.current = date;
-                              fileInputRef.current?.click();
-                            }}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={imgUrl}
-                              alt={`${date} 독서`}
-                              className="w-full h-full object-cover"
-                              style={{ maxHeight: '52px' }}
-                            />
-                            {inEditMode && isCurrentMonth && (
-                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                </svg>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex-1 flex items-center justify-center mt-3">
-                            {inEditMode && isCurrentMonth ? (
-                              <svg className="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                            ) : null}
-                          </div>
-                        )}
+                        {/* 이미지 영역 — 고정 높이 박스 */}
+                        <div
+                          className="absolute"
+                          style={{ top: '18px', left: 0, right: 0, height: '36px', overflow: 'hidden' }}
+                        >
+                          {isUploading ? (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : imgUrl ? (
+                            <>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imgUrl}
+                                alt={`${date} ${routineLabel}`}
+                                className="w-full h-full object-cover"
+                              />
+                              {inEditMode && isCurrentMonth && (
+                                <>
+                                  <label
+                                    htmlFor={`img-upload-${date}`}
+                                    className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 transition-all flex items-center justify-center opacity-0 hover:opacity-100 cursor-pointer"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                  </label>
+                                  <input
+                                    id={`img-upload-${date}`}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) await handleImageUpload(date, file);
+                                      e.target.value = '';
+                                    }}
+                                  />
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            inEditMode && isCurrentMonth && (
+                              <>
+                                <label
+                                  htmlFor={`img-upload-${date}`}
+                                  className="w-full h-full flex items-center justify-center cursor-pointer"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <svg className="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  </svg>
+                                </label>
+                                <input
+                                  id={`img-upload-${date}`}
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) await handleImageUpload(date, file);
+                                    e.target.value = '';
+                                  }}
+                                />
+                              </>
+                            )
+                          )}
+                        </div>
 
-                        {/* 분 기록 */}
+                        {/* 분 기록 — 하단 고정 */}
                         {isCurrentMonth && (
                           <div
-                            className="text-center pb-1 px-0.5"
-                            style={{ minHeight: '16px' }}
-                            onClick={(e) => {
-                              if (!inEditMode || !isCurrentMonth) return;
-                              e.stopPropagation();
-                              const current = minutes ?? '';
-                              const input = prompt(`${date} 독서 시간(분):`, String(current));
-                              if (input === null) return;
-                              handleDateToggle(date, routineId);
-                            }}
+                            className="absolute bottom-0 left-0 right-0 text-center pb-1 px-0.5"
+                            style={{ height: '18px' }}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            {minutes != null ? (
-                              <span
-                                className="text-blue-600 dark:text-blue-400 font-bold"
-                                style={{ fontSize: '10px' }}
-                              >
-                                {minutes}분
-                              </span>
-                            ) : null}
+                            {inEditMode ? (
+                              <input
+                                type="number"
+                                min="0"
+                                max="999"
+                                value={minutes ?? ''}
+                                placeholder="-"
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? null : Number(e.target.value);
+                                  handleMinutesChange(date, routineId, val);
+                                }}
+                                style={{
+                                  width: '100%',
+                                  fontSize: '10px',
+                                  textAlign: 'center',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  borderBottom: '1px solid rgba(59,130,246,0.4)',
+                                  outline: 'none',
+                                  color: '#2563EB',
+                                  fontWeight: 'bold',
+                                  padding: '0',
+                                }}
+                              />
+                            ) : (
+                              minutes != null ? (
+                                <span
+                                  className="text-blue-600 dark:text-blue-400 font-bold"
+                                  style={{ fontSize: '10px' }}
+                                >
+                                  {minutes}분
+                                </span>
+                              ) : null
+                            )}
                           </div>
                         )}
                       </div>

@@ -3,7 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
-const ROUTES = ['/daily', '/memo', '/ledger', '/assets', '/ai', '/deploy'] as const;
+// Daily → Diary → Ledger → Asset → Deploy → AI Agent
+const ROUTES = ['/daily', '/memo', '/ledger', '/assets', '/deploy', '/ai'] as const;
 
 function isInteractiveTarget(target: EventTarget | null) {
   const el = target as HTMLElement | null;

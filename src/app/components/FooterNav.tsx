@@ -2,6 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  IconCalendarCheck,
+  IconNotebook,
+  IconReceipt2,
+  IconBuildingBank,
+  IconChartLine,
+  IconWand,
+} from '@tabler/icons-react';
 import { APP_HORIZONTAL_CONTAINER } from './container';
 
 export interface FooterNavProps {}
@@ -10,12 +18,12 @@ export function FooterNav(props: FooterNavProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: '/daily', label: 'Daily', emoji: '📅' },
-    { href: '/memo', label: 'Diary', emoji: '📝' },
-    { href: '/ledger', label: 'Ledger', emoji: '💳' },
-    { href: '/assets', label: 'Asset', emoji: '💰' },
-    { href: '/ai', label: 'AI', emoji: '🤖' },
-    { href: '/deploy', label: 'Deploy', emoji: '📈' },
+    { href: '/daily', label: 'Daily', icon: IconCalendarCheck },
+    { href: '/memo', label: 'Diary', icon: IconNotebook },
+    { href: '/ledger', label: 'Ledger', icon: IconReceipt2 },
+    { href: '/assets', label: 'Asset', icon: IconBuildingBank },
+    { href: '/deploy', label: 'Deploy', icon: IconChartLine },
+    { href: '/ai', label: 'AI Agent', icon: IconWand },
   ];
 
   return (
@@ -30,6 +38,8 @@ export function FooterNav(props: FooterNavProps) {
               (item.href === '/assets' && pathname.startsWith('/assets')) ||
               (item.href === '/deploy' && pathname.startsWith('/deploy'));
             
+            const IconComponent = item.icon;
+            
             return (
               <Link
                 key={item.href}
@@ -40,8 +50,8 @@ export function FooterNav(props: FooterNavProps) {
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}
               >
-                <span className="text-xl leading-none">{item.emoji}</span>
-                <span className="text-[10px] font-medium mt-0.5 truncate max-w-full px-0.5">{item.label}</span>
+                <IconComponent size={22} stroke={1.5} />
+                <span className="text-[10px] font-medium mt-1 truncate max-w-full px-0.5">{item.label}</span>
               </Link>
             );
           })}
