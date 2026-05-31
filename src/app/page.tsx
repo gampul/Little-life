@@ -10,6 +10,19 @@ import { FooterNav } from './components/FooterNav';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from './components/container';
+import {
+  IconSparkles,
+  IconCode,
+  IconWallet,
+  IconHeart,
+  IconTarget,
+  IconBottleOff,
+  IconClock,
+  IconBook,
+  IconRun,
+  IconDeviceLaptop,
+  IconCheckbox,
+} from '@tabler/icons-react';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
 const WeightChart = dynamic(
@@ -59,6 +72,27 @@ interface WeatherData {
 
 const getKstDateString = (): string =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
+
+const getRoutineIcon = (label: string) => {
+  const map: Record<string, React.ReactNode> = {
+    '주변정리': <IconSparkles size={18} stroke={1.5} />,
+    '1Day class': <IconCode size={18} stroke={1.5} />,
+    'DevOps': <IconCode size={18} stroke={1.5} />,
+    '1Day': <IconDeviceLaptop size={18} stroke={1.5} />,
+    '가계부': <IconWallet size={18} stroke={1.5} />,
+    '기도': <IconHeart size={18} stroke={1.5} />,
+    'OKR': <IconTarget size={18} stroke={1.5} />,
+    '금주': <IconBottleOff size={18} stroke={1.5} />,
+    '사랑이': <IconClock size={18} stroke={1.5} />,
+    'brush': <IconSparkles size={18} stroke={1.5} />,
+    '독서': <IconBook size={18} stroke={1.5} />,
+    '500km': <IconRun size={18} stroke={1.5} />,
+    'Dev ops': <IconCode size={18} stroke={1.5} />,
+  };
+
+  const key = Object.keys(map).find((k) => label.includes(k));
+  return key ? map[key] : <IconCheckbox size={18} stroke={1.5} />;
+};
 
 export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
@@ -2471,7 +2505,7 @@ export default function Home() {
             {/* 데일리 루틴 - 동적으로 렌더링 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📋 데일리 루틴</h3>
+                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">데일리 루틴</h3>
                 {/* 최근 5일 날짜 표시 */}
                 <div className="flex items-center gap-1" style={{ marginTop: '8px' }}>
                   {(() => {
@@ -2913,16 +2947,9 @@ function CircularProgressChart({
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
   
-  // 달성률에 따른 색상 결정
-  const getColor = (progress: number) => {
-    if (progress >= 80) return '#10B981'; // green
-    if (progress >= 60) return '#3B82F6'; // blue
-    if (progress >= 40) return '#F59E0B'; // amber
-    if (progress >= 20) return '#EF4444'; // red
-    return '#9CA3AF'; // gray
-  };
-
-  const color = getColor(progress);
+  // 파란색 단일 계열로 통일
+  const gaugeColor = '#178CF2';
+  const gaugeTrackColor = '#E5E7EB';
 
   return (
     <div 
@@ -2949,7 +2976,7 @@ function CircularProgressChart({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={color}
+          stroke={gaugeColor}
           strokeWidth="4"
           fill="none"
           strokeDasharray={circumference}
@@ -2960,8 +2987,7 @@ function CircularProgressChart({
       </svg>
       {/* 달성률 텍스트 (중앙) */}
       <div 
-        className="absolute inset-0 flex items-center justify-center text-xs font-medium pointer-events-none"
-        style={{ color }}
+        className="absolute inset-0 flex items-center justify-center text-xs font-medium text-blue-500 dark:text-blue-400 pointer-events-none"
       >
         {Math.round(progress)}%
       </div>
@@ -3504,7 +3530,7 @@ function RoutineItem({
         className="flex items-center gap-3 py-2 min-h-[44px] cursor-pointer"
           onClick={onExpandToggle}
       >
-        {/* 원형 그래프 + 텍스트 영역 */}
+        {/* 원형 그래프 + 아이콘 + 텍스트 영역 */}
         <div className="flex items-center gap-3 flex-1">
           <div className="flex-shrink-0">
             <CircularProgressChart 
@@ -3512,6 +3538,9 @@ function RoutineItem({
               size={36}
             />
           </div>
+          <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
+            {getRoutineIcon(label)}
+          </span>
           <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
             {label}
           </span>
@@ -3521,11 +3550,9 @@ function RoutineItem({
         <div className="flex items-center gap-2 shrink-0">
           {/* 스트릭 (체크박스 타입일 때만) */}
           {routineType === 'checkbox' && consecutiveDays > 0 && (
-            <div
-              className="px-2 py-1 text-[9px] font-medium rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-            >
+            <span className="text-xs text-blue-400 dark:text-blue-500 font-medium">
               {consecutiveDays}일 연속
-            </div>
+            </span>
           )}
           
           {/* 연간 누적 (숫자 타입일 때) */}
@@ -3660,20 +3687,29 @@ function RoutineItem({
                   const isToday = i === 0;
                   
                   checkboxes.push(
-                    <div 
+                    <div
                       key={dateStr}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleCheckboxToggle(dateStr);
                       }}
+                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                        isChecked
+                          ? 'bg-blue-500 border-blue-500'
+                          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600'
+                      }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        readOnly
-                        className="cursor-pointer shrink-0 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
-                        style={{ width: '20px', height: '20px' }}
-                      />
+                      {isChecked && (
+                        <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+                          <path
+                            d="M1 4L4.5 7.5L11 1"
+                            stroke="white"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
                     </div>
                   );
                 }
@@ -3746,7 +3782,18 @@ function RoutineCalendar({
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [dateValues, setDateValues] = useState<Record<string, number>>({});
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [bookTitles, setBookTitles] = useState<Record<string, string>>({});
+  const [memos, setMemos] = useState<Record<string, string>>({});
   const [uploadingDate, setUploadingDate] = useState<string | null>(null);
+  const [readingModal, setReadingModal] = useState<{
+    date: string;
+    minutes: number | null;
+    bookTitle: string;
+    memo: string;
+    imgUrl: string | null;
+  } | null>(null);
+  const [isModalSaving, setIsModalSaving] = useState(false);
+  const [isModalDeleting, setIsModalDeleting] = useState(false);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -3808,7 +3855,7 @@ function RoutineCalendar({
 
         const { data: checks, error } = await supabase
           .from('daily_routine_checks')
-          .select('date, routine_id, checked, value, image_url')
+          .select('date, routine_id, checked, value, image_url, book_title, memo')
           .in('date', allDates)
           .eq('user_id', userId)
           .eq('routine_id', routineId)
@@ -3823,6 +3870,8 @@ function RoutineCalendar({
         const data: Record<string, Set<string>> = {};
         const values: Record<string, number> = {};
         const imgs: Record<string, string> = {};
+        const titles: Record<string, string> = {};
+        const notes: Record<string, string> = {};
         if (checks && checks.length > 0) {
           checks.forEach((check: any) => {
             if (!data[check.date]) {
@@ -3838,12 +3887,22 @@ function RoutineCalendar({
             if (check.image_url) {
               imgs[check.date] = check.image_url;
             }
+            // book_title이 있으면 저장
+            if (check.book_title) {
+              titles[check.date] = check.book_title;
+            }
+            // memo가 있으면 저장
+            if (check.memo) {
+              notes[check.date] = check.memo;
+            }
           });
         }
 
         setCheckedDates(data);
         setDateValues(values);
         setImageUrls(imgs);
+        setBookTitles(titles);
+        setMemos(notes);
       } catch (err) {
         console.error('데이터 로드 오류:', err);
       }
@@ -4151,10 +4210,119 @@ function RoutineCalendar({
     }
   };
 
+  // 독서 모달 저장 핸들러
+  const handleModalSave = async () => {
+    if (!readingModal || !supabase || !userId) return;
+    setIsModalSaving(true);
+
+    try {
+      const { date, minutes, bookTitle, memo, imgUrl } = readingModal;
+
+      // book_title과 memo를 upsert
+      const { error } = await supabase
+        .from('daily_routine_checks')
+        .upsert({
+          user_id: userId,
+          date,
+          routine_id: routineId,
+          checked: true,
+          value: minutes,
+          book_title: bookTitle || null,
+          memo: memo || null,
+        }, {
+          onConflict: 'user_id,date,routine_id'
+        });
+
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setCheckedDates(prev => {
+        const newData = { ...prev };
+        if (!newData[date]) {
+          newData[date] = new Set();
+        }
+        newData[date].add(routineId);
+        return newData;
+      });
+      setBookTitles(prev => ({ ...prev, [date]: bookTitle }));
+      setMemos(prev => ({ ...prev, [date]: memo }));
+      if (minutes != null) {
+        setDateValues(prev => ({ ...prev, [date]: minutes }));
+      }
+
+      setReadingModal(null);
+      onSync(); // 동기화
+    } catch (error) {
+      console.error('독서 데이터 저장 오류:', error);
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsModalSaving(false);
+    }
+  };
+
+  // 독서 모달 삭제 핸들러
+  const handleModalDelete = async () => {
+    if (!readingModal || !supabase || !userId) return;
+    if (!confirm('이 날짜의 독서 기록을 삭제하시겠습니까?')) return;
+
+    setIsModalDeleting(true);
+
+    try {
+      const { date } = readingModal;
+
+      const { error } = await supabase
+        .from('daily_routine_checks')
+        .delete()
+        .eq('user_id', userId)
+        .eq('date', date)
+        .eq('routine_id', routineId);
+
+      if (error) throw error;
+
+      // 로컬 상태 업데이트
+      setCheckedDates(prev => {
+        const newData = { ...prev };
+        if (newData[date]) {
+          newData[date].delete(routineId);
+          if (newData[date].size === 0) delete newData[date];
+        }
+        return newData;
+      });
+      setDateValues(prev => {
+        const newData = { ...prev };
+        delete newData[date];
+        return newData;
+      });
+      setImageUrls(prev => {
+        const newData = { ...prev };
+        delete newData[date];
+        return newData;
+      });
+      setBookTitles(prev => {
+        const newData = { ...prev };
+        delete newData[date];
+        return newData;
+      });
+      setMemos(prev => {
+        const newData = { ...prev };
+        delete newData[date];
+        return newData;
+      });
+
+      setReadingModal(null);
+      onSync(); // 동기화
+    } catch (error) {
+      console.error('독서 데이터 삭제 오류:', error);
+      alert('삭제 중 오류가 발생했습니다.');
+    } finally {
+      setIsModalDeleting(false);
+    }
+  };
+
   // 분(minutes) 입력 핸들러 (독서 루틴용)
   const handleMinutesChange = async (date: string, routineId: string, value: number | null) => {
     if (!supabase || !userId) return;
-    
+
     try {
       if (value === null || value === 0) {
         // 값이 없으면 삭제
@@ -4422,27 +4590,20 @@ function RoutineCalendar({
           </select>
         </div>
         
-        {/* 오른쪽: 수정 버튼 */}
+        {/* 오른쪽: 편집 모드 토글 버튼 */}
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => setEditModeRoutine(editModeRoutine === routineId ? null : routineId)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditModeRoutine(editModeRoutine === routineId ? null : routineId);
+            }}
+            className={`text-xs px-2 py-1 rounded border transition-colors ${
+              editModeRoutine === routineId
+                ? 'bg-blue-500 text-white border-blue-500'
+                : 'bg-white text-gray-500 border-gray-300 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-600'
+            }`}
           >
-            {editModeRoutine === routineId ? (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                저장
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                수정
-              </>
-            )}
+            {editModeRoutine === routineId ? '✓ 편집중' : '✏️ 편집'}
           </button>
         </div>
       </div>
@@ -4500,7 +4661,7 @@ function RoutineCalendar({
                     return (
                       <div
                         key={`${weekIdx}-${dayIdx}`}
-                        className="relative flex flex-col rounded-lg overflow-hidden"
+                        className="relative flex flex-col rounded-lg overflow-hidden cursor-pointer"
                         style={{
                           height: '72px',
                           border: isToday ? '2px solid #60A5FA' : '1px solid',
@@ -4509,6 +4670,17 @@ function RoutineCalendar({
                             ? 'rgba(59,130,246,0.06)'
                             : 'rgba(249,250,251,0.8)',
                           opacity: isCurrentMonth ? 1 : 0.25
+                        }}
+                        onClick={() => {
+                          if (!inEditMode && isCurrentMonth && imageUploadEnabled) {
+                            setReadingModal({
+                              date,
+                              minutes: minutes ?? null,
+                              bookTitle: bookTitles[date] ?? '',
+                              memo: memos[date] ?? '',
+                              imgUrl: imgUrl ?? null
+                            });
+                          }
                         }}
                       >
                         {/* 날짜 숫자 */}
@@ -4594,48 +4766,61 @@ function RoutineCalendar({
                           )}
                         </div>
 
-                        {/* 분 기록 — 하단 고정 */}
+                        {/* 책 제목 + 분 기록 — 하단 고정 */}
                         {isCurrentMonth && (
                           <div
-                            className="absolute bottom-0 left-0 right-0 text-center pb-1 px-0.5"
-                            style={{ height: '18px' }}
+                            className="absolute bottom-0 left-0 right-0 px-0.5 pb-0.5 flex flex-col items-center"
+                            style={{ minHeight: '18px' }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {inEditMode ? (
-                              <input
-                                type="number"
-                                min="0"
-                                max="999"
-                                value={minutes ?? ''}
-                                placeholder="-"
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => {
-                                  const val = e.target.value === '' ? null : Number(e.target.value);
-                                  handleMinutesChange(date, routineId, val);
-                                }}
-                                style={{
-                                  width: '100%',
-                                  fontSize: '10px',
-                                  textAlign: 'center',
-                                  background: 'transparent',
-                                  border: 'none',
-                                  borderBottom: '1px solid rgba(59,130,246,0.4)',
-                                  outline: 'none',
-                                  color: '#2563EB',
-                                  fontWeight: 'bold',
-                                  padding: '0',
-                                }}
-                              />
-                            ) : (
-                              minutes != null ? (
-                                <span
-                                  className="text-blue-600 dark:text-blue-400 font-bold"
-                                  style={{ fontSize: '10px' }}
-                                >
-                                  {minutes}분
-                                </span>
-                              ) : null
+                            {/* 책 제목 미리보기 */}
+                            {!inEditMode && bookTitles[date] && (
+                              <div
+                                className="text-gray-600 dark:text-gray-400 truncate w-full text-center"
+                                style={{ fontSize: '8px', lineHeight: '10px', maxHeight: '10px' }}
+                                title={bookTitles[date]}
+                              >
+                                {bookTitles[date]}
+                              </div>
                             )}
+                            {/* 분 기록 */}
+                            <div className="w-full text-center">
+                              {inEditMode ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="999"
+                                  value={minutes ?? ''}
+                                  placeholder="-"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => {
+                                    const val = e.target.value === '' ? null : Number(e.target.value);
+                                    handleMinutesChange(date, routineId, val);
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    fontSize: '10px',
+                                    textAlign: 'center',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    borderBottom: '1px solid rgba(59,130,246,0.4)',
+                                    outline: 'none',
+                                    color: '#2563EB',
+                                    fontWeight: 'bold',
+                                    padding: '0',
+                                  }}
+                                />
+                              ) : (
+                                minutes != null ? (
+                                  <span
+                                    className="text-blue-600 dark:text-blue-400 font-bold"
+                                    style={{ fontSize: '10px' }}
+                                  >
+                                    {minutes}분
+                                  </span>
+                                ) : null
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -5034,6 +5219,109 @@ function RoutineCalendar({
               </div>
             );
           })()}
+          </div>
+        </div>
+      )}
+
+      {/* 독서 캘린더 셀 모달 */}
+      {readingModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4"
+          onClick={() => setReadingModal(null)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">
+              {readingModal.date} 독서 기록
+            </h2>
+
+            {/* 독서 시간 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                독서 시간 (분)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="999"
+                value={readingModal.minutes ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? null : Number(e.target.value);
+                  setReadingModal({ ...readingModal, minutes: val });
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="예: 60"
+              />
+            </div>
+
+            {/* 책 제목 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                책 제목
+              </label>
+              <input
+                type="text"
+                value={readingModal.bookTitle}
+                onChange={(e) => setReadingModal({ ...readingModal, bookTitle: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="예: 해리포터"
+              />
+            </div>
+
+            {/* 메모 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                메모
+              </label>
+              <textarea
+                value={readingModal.memo}
+                onChange={(e) => setReadingModal({ ...readingModal, memo: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="간단한 독서 메모를 남겨보세요"
+              />
+            </div>
+
+            {/* 사진 미리보기 */}
+            {readingModal.imgUrl && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  사진
+                </label>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={readingModal.imgUrl}
+                  alt="독서 사진"
+                  className="w-full h-48 object-cover rounded-lg"
+                />
+              </div>
+            )}
+
+            {/* 버튼 */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setReadingModal(null)}
+                className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleModalDelete}
+                disabled={isModalDeleting}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {isModalDeleting ? '삭제 중...' : '삭제'}
+              </button>
+              <button
+                onClick={handleModalSave}
+                disabled={isModalSaving}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+              >
+                {isModalSaving ? '저장 중...' : '저장'}
+              </button>
+            </div>
           </div>
         </div>
       )}
