@@ -93,7 +93,11 @@ function RoutineItemWithChart({
   template: RoutineTemplate;
   index: number;
   progress: number;
-  onUpdate: (index: number, field: 'label' | 'type' | 'unit', value: string) => void;
+  onUpdate: (
+    index: number,
+    field: 'label' | 'type' | 'unit' | 'image_upload_enabled',
+    value: string | boolean
+  ) => void;
   onMove: (index: number, direction: 'up' | 'down') => void;
   onSave: (templateId: string) => void;
   onDelete: (templateId: string) => void;
@@ -173,7 +177,7 @@ function RoutineItemWithChart({
       </div>
       {/* 타입 선택 */}
       <div className="pl-14">
-          <div className="flex items-center justify-between gap-2 flex-nowrap whitespace-nowrap">
+          <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
           <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
             <span className="text-[11px] text-gray-600 dark:text-gray-400 shrink-0 whitespace-nowrap">타입:</span>
             <div className="flex gap-2 whitespace-nowrap">
@@ -200,7 +204,7 @@ function RoutineItemWithChart({
             </div>
           </div>
 
-          {/* 숫자 타입일 때 단위 선택 (타입 오른쪽) */}
+          {/* 숫자 타입일 때 단위 선택 */}
           {template.type === 'number' && (
             <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
               <span className="text-[11px] text-gray-600 dark:text-gray-400">단위:</span>
@@ -230,6 +234,19 @@ function RoutineItemWithChart({
               )}
             </div>
           )}
+
+          <label className="flex items-center gap-1.5 cursor-pointer shrink-0">
+            <input
+              type="checkbox"
+              checked={!!template.image_upload_enabled}
+              onChange={(e) => onUpdate(index, 'image_upload_enabled', e.target.checked)}
+              className="w-4 h-4"
+              aria-label="사진업로드 사용"
+            />
+            <span className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-nowrap">
+              📷 사진업로드
+            </span>
+          </label>
         </div>
         {isDirty && (
           <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
@@ -249,6 +266,7 @@ interface RoutineTemplate {
   sort_order: number;
   type: 'checkbox' | 'number';
   unit?: string;
+  image_upload_enabled?: boolean;
 }
 
 export default function SettingsPage() {
@@ -283,7 +301,7 @@ export default function SettingsPage() {
       // type, unit, deleted_at 컬럼 포함하여 조회 시도 (deleted_at은 soft delete 용)
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled')
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('sort_order', { ascending: true });
@@ -298,7 +316,7 @@ export default function SettingsPage() {
           .order('sort_order', { ascending: true });
         
         // type, unit 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null }));
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null, image_upload_enabled: false }));
         error = result.error;
       }
 
@@ -317,7 +335,8 @@ export default function SettingsPage() {
         .map(t => ({
         ...t,
         type: t.type || 'checkbox' as 'checkbox' | 'number',
-        unit: t.unit || undefined
+        unit: t.unit || undefined,
+        image_upload_enabled: t.image_upload_enabled ?? false
       }));
       setRoutineTemplates(templatesWithType);
       setDirtyById(Object.fromEntries((templatesWithType || []).map(t => [t.id, false])));
@@ -456,6 +475,7 @@ export default function SettingsPage() {
         type: t.type || 'checkbox',
         unit: t.unit || null,
         deleted_at: null,
+        image_upload_enabled: t.image_upload_enabled ?? false,
       }));
 
       // 3) upsert (id 기준). 컬럼/제약이 없는 구버전 DB는 기존 fallback 로직으로 처리
@@ -476,11 +496,29 @@ export default function SettingsPage() {
             field_key: t.field_key,
             sort_order: index,
             type: t.type || 'checkbox',
+            image_upload_enabled: t.image_upload_enabled ?? false,
           }));
 
           const result = await supabase
             .from('routine_templates')
             .upsert(payloadNoUnit, { onConflict: 'id' });
+          upsertError = result.error;
+        } else if (upsertError.message.includes('image_upload_enabled')) {
+          const payloadNoImageFlag = templates.map((t, index) => ({
+            id: t.id,
+            user_id: userId,
+            emoji: t.emoji,
+            label: t.label,
+            field_key: t.field_key,
+            sort_order: index,
+            type: t.type || 'checkbox',
+            unit: t.unit || null,
+            deleted_at: null,
+          }));
+
+          const result = await supabase
+            .from('routine_templates')
+            .upsert(payloadNoImageFlag, { onConflict: 'id' });
           upsertError = result.error;
         } else if (upsertError.message.includes('type')) {
           // type이 없는 경우: type, unit 모두 제거하고 upsert 재시도
@@ -522,7 +560,11 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdate = (index: number, field: 'label' | 'type' | 'unit', value: string) => {
+  const handleUpdate = (
+    index: number,
+    field: 'label' | 'type' | 'unit' | 'image_upload_enabled',
+    value: string | boolean
+  ) => {
     const updated = [...routineTemplates];
     updated[index] = { ...updated[index], [field]: value };
     setRoutineTemplates(updated);
@@ -698,6 +740,7 @@ export default function SettingsPage() {
         field_key: newFieldKey,
         sort_order: routineTemplates.length,
         type: 'checkbox',
+        image_upload_enabled: false,
       },
     ]);
     setDirtyById(prev => ({ ...prev, [newId]: true }));

@@ -8,14 +8,14 @@ import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
 import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/container';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
 
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -97,32 +97,25 @@ function MemoPageContent() {
       Link.configure({
         openOnClick: false,
         HTMLAttributes: {
-          class: 'text-blue-600 dark:text-blue-400 underline cursor-pointer hover:text-blue-700',
+          class: 'text-blue-600 dark:text-blue-400 underline',
         },
       }),
       Image.configure({
         HTMLAttributes: {
-          class: 'max-w-full h-auto rounded my-2',
+          class: 'max-w-full h-auto rounded',
         },
       }),
       Placeholder.configure({
         placeholder: '내용을 입력하세요...\n\n# 입력하면 큰 제목\n## 입력하면 중간 제목\n### 입력하면 작은 제목',
       }),
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-        HTMLAttributes: {
-          class: 'flex items-start gap-2',
-        },
-      }),
     ],
-    content: '',
+    content: formData.content,
     onUpdate: ({ editor }) => {
       setFormData(prev => ({ ...prev, content: editor.getHTML() }));
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose dark:prose-invert max-w-none min-h-[300px] p-4 focus:outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
+        class: 'prose prose-sm sm:prose lg:prose-lg dark:prose-invert max-w-none min-h-[300px] p-4 focus:outline-none',
       },
     },
   });
@@ -130,9 +123,11 @@ function MemoPageContent() {
   // 에디터 내용 업데이트 (편집 모드 진입 시)
   useEffect(() => {
     if (editor && showEditor) {
-      editor.commands.setContent(formData.content || '');
+      editor.commands.setContent(formData.content);
     }
   }, [editor, showEditor]);
+
+
 
   // 이미지 업로드 핸들러
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -184,7 +179,9 @@ function MemoPageContent() {
       const imageUrl = urlData.publicUrl;
 
       // Tiptap 에디터에 이미지 삽입
-      editor.chain().focus().setImage({ src: imageUrl }).run();
+      if (editor) {
+        editor.chain().focus().setImage({ src: imageUrl }).run();
+      }
 
       setMessage('✅ 이미지가 추가되었습니다!');
       setTimeout(() => setMessage(''), 2000);
@@ -275,6 +272,7 @@ function MemoPageContent() {
           });
           setEditingId(data.id);
           setShowEditor(true);
+          setEditorMode('write');
           // URL에서 edit 파라미터 제거
           router.replace('/memo', { scroll: false });
         }
@@ -339,10 +337,7 @@ function MemoPageContent() {
       setShowEditor(false);
       setFormData({ title: '', content: '' });
       setEditingId(null);
-      
-      if (editor) {
-        editor.commands.setContent('');
-      }
+      setEditorMode('write');
       
       await loadMemos(1);
       setTimeout(() => setMessage(''), 3000);
@@ -362,12 +357,12 @@ function MemoPageContent() {
     setShowEditor(true);
     setEditingId(null);
     setFormData({ title: '', content: '' });
-    if (editor) {
-      editor.commands.setContent('');
-      setTimeout(() => {
-        editor.commands.focus();
-      }, 100);
-    }
+    setEditorMode('write');
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }, 100);
   };
 
   const handleEdit = (memo: Memo) => {
@@ -377,6 +372,7 @@ function MemoPageContent() {
       title: memo.title,
       content: memo.content,
     });
+    setEditorMode('write');
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 100);
@@ -424,8 +420,22 @@ function MemoPageContent() {
 
   // 메모 카드 렌더링
   const renderMemoCard = (memo: Memo) => {
-    // HTML 텍스트 추출 및 미리보기 생성
-    const textPreview = extractText(memo.content).substring(0, 150);
+    // HTML/마크다운 판별 및 미리보기 생성
+    const isHtml = /<[a-z][\s\S]*>/i.test(memo.content);
+    let textPreview = '';
+    
+    if (isHtml) {
+      // 기존 HTML 글: HTML에서 텍스트 추출
+      textPreview = extractText(memo.content).substring(0, 150);
+    } else {
+      // 새 마크다운 글: 마크다운 기호 제거하고 텍스트만
+      textPreview = memo.content
+        .replace(/[#*`>\-\[\]]/g, '')  // 마크다운 기호 제거
+        .replace(/!\[.*?\]\(.*?\)/g, '[이미지]')  // 이미지 링크 → [이미지]
+        .trim()
+        .substring(0, 150);
+    }
+    
     const thumbnail = extractFirstImage(memo.content);
     const isLiked = likedMemos.has(memo.id || '');
     const likeCount = (memo.likes || 0) + (isLiked ? 1 : 0);
@@ -623,8 +633,8 @@ function MemoPageContent() {
           </div>
         )}
 
-        {/* Tiptap 에디터 */}
-        {showEditor && editor && (
+        {/* 에디터 */}
+        {showEditor && (
           <>
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-5 mb-4">
             {/* 제목 입력 */}
@@ -638,129 +648,136 @@ function MemoPageContent() {
               />
             </div>
 
-            {/* 툴바 */}
-            <div 
-              className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center"
-              style={{ touchAction: 'manipulation' }}
-            >
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                disabled={!editor.can().chain().focus().toggleBold().run()}
-                className={`p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('bold') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="굵게 (Ctrl+B)"
-              >
-                <strong>B</strong>
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                disabled={!editor.can().chain().focus().toggleItalic().run()}
-                className={`p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('italic') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="기울임 (Ctrl+I)"
-              >
-                <em>I</em>
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleUnderline().run()}
-                disabled={!editor.can().chain().focus().toggleUnderline().run()}
-                className={`p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('underline') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="밑줄 (Ctrl+U)"
-              >
-                <u>U</u>
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('heading', { level: 1 }) ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="제목 1"
-              >
-                H1
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="제목 2"
-              >
-                H2
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('heading', { level: 3 }) ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="제목 3"
-              >
-                H3
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('bulletList') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="목록"
-              >
-                • 목록
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleTaskList().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('taskList') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="할일"
-              >
-                ☑ 할일
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('blockquote') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="인용구"
-              >
-                " 인용
-              </button>
-              <button 
-                type="button" 
-                onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('codeBlock') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="코드"
-              >
-                {'<>'} 코드
-              </button>
-              <button 
-                type="button" 
-                onClick={() => {
-                  const url = prompt('링크 URL을 입력하세요:', 'https://');
-                  if (url) {
-                    editor.chain().focus().setLink({ href: url }).run();
-                  }
-                }}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('link') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
-                title="링크"
-              >
-                🔗 링크
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-                id="image-upload"
-              />
+            {/* 작성/미리보기 탭 */}
+            <div className="flex gap-2 mb-3 border-b border-gray-300 dark:border-gray-600">
               <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center gap-1 disabled:opacity-50 transition-colors"
-                title="이미지 추가"
+                onClick={() => setEditorMode('write')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  editorMode === 'write'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
               >
-                {isUploading ? '⏳' : '📷'} 이미지
+                ✏️ 작성
+              </button>
+              <button
+                onClick={() => setEditorMode('preview')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  editorMode === 'preview'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                👁️ 미리보기
               </button>
             </div>
 
-            {/* Tiptap 에디터 */}
+            {/* 툴바 (작성 모드에서만 표시) */}
+            {editorMode === 'write' && (
+              <div 
+                className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <button type="button" onTouchEnd={handleToolbarAction('bold')} onClick={handleToolbarAction('bold')} className="p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center" title="굵게">
+                  <strong>B</strong>
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('italic')} onClick={handleToolbarAction('italic')} className="p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center" title="기울임">
+                  <em>I</em>
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('underline')} onClick={handleToolbarAction('underline')} className="p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center" title="밑줄">
+                  <u>U</u>
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('h1')} onClick={handleToolbarAction('h1')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="제목 1">
+                  H1
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('h2')} onClick={handleToolbarAction('h2')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="제목 2">
+                  H2
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('h3')} onClick={handleToolbarAction('h3')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="제목 3">
+                  H3
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('list')} onClick={handleToolbarAction('list')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="목록">
+                  • 목록
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('checkbox')} onClick={handleToolbarAction('checkbox')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="할일">
+                  ☑ 할일
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('quote')} onClick={handleToolbarAction('quote')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="인용구">
+                  " 인용
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('code')} onClick={handleToolbarAction('code')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="코드">
+                  {'<>'} 코드
+                </button>
+                <button type="button" onTouchEnd={handleToolbarAction('link')} onClick={handleToolbarAction('link')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="링크">
+                  🔗 링크
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                  id="image-upload"
+                />
+                <button
+                  type="button"
+                  onTouchEnd={(e) => { e.preventDefault(); fileInputRef.current?.click(); }}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center gap-1 disabled:opacity-50"
+                  title="이미지 추가"
+                >
+                  {isUploading ? '⏳' : '📷'} 이미지
+                </button>
+              </div>
+            )}
+
+            {/* 에디터/미리보기 영역 */}
             <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
-              <EditorContent editor={editor} />
+              {editorMode === 'write' ? (
+                <textarea
+                  ref={textareaRef}
+                  value={formData.content}
+                  onChange={handleTextareaChange}
+                  onSelect={(e) => {
+                    // 모바일 지원: 커서 위치 변경 시 항상 저장 (blur 시 손실 방지)
+                    const target = e.target as HTMLTextAreaElement;
+                    lastSelectionRef.current = {
+                      start: target.selectionStart,
+                      end: target.selectionEnd,
+                    };
+                  }}
+                  onClick={(e) => {
+                    // 모바일 지원: 클릭 시에도 저장
+                    const target = e.target as HTMLTextAreaElement;
+                    lastSelectionRef.current = {
+                      start: target.selectionStart,
+                      end: target.selectionEnd,
+                    };
+                  }}
+                  onKeyUp={(e) => {
+                    // 타이핑 후 커서 이동 시에도 저장 (Android에서 onSelect 미발생 보완)
+                    const target = e.target as HTMLTextAreaElement;
+                    lastSelectionRef.current = {
+                      start: target.selectionStart,
+                      end: target.selectionEnd,
+                    };
+                  }}
+                  placeholder="마크다운으로 작성하세요...&#10;&#10;# 제목&#10;## 부제목&#10;**굵게** *기울임*&#10;- 목록 항목&#10;> 인용구&#10;```코드```"
+                  className="w-full min-h-[300px] p-3 text-sm text-gray-900 dark:text-white bg-transparent focus:outline-none resize-none"
+                  style={{ fontFamily: 'inherit' }}
+                />
+              ) : (
+                <div className="p-3 min-h-[300px] text-sm text-gray-900 dark:text-white prose prose-sm dark:prose-invert max-w-none">
+                  {formData.content ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {formData.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-gray-400">미리보기할 내용이 없습니다.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 저장/취소 버튼 */}
@@ -777,9 +794,7 @@ function MemoPageContent() {
                   setShowEditor(false);
                   setFormData({ title: '', content: '' });
                   setEditingId(null);
-                  if (editor) {
-                    editor.commands.setContent('');
-                  }
+                  setEditorMode('write');
                 }}
                 className="px-4 py-2.5 text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
               >
@@ -850,65 +865,6 @@ function MemoPageContent() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
-        }
-        
-        /* Tiptap 에디터 스타일 */
-        .ProseMirror {
-          outline: none;
-        }
-        
-        .ProseMirror p.is-editor-empty:first-child::before {
-          color: #adb5bd;
-          content: attr(data-placeholder);
-          float: left;
-          height: 0;
-          pointer-events: none;
-        }
-        
-        .ProseMirror h1 {
-          font-size: 2em;
-          font-weight: bold;
-          margin-top: 0.5em;
-          margin-bottom: 0.5em;
-        }
-        
-        .ProseMirror h2 {
-          font-size: 1.5em;
-          font-weight: bold;
-          margin-top: 0.5em;
-          margin-bottom: 0.5em;
-        }
-        
-        .ProseMirror h3 {
-          font-size: 1.25em;
-          font-weight: bold;
-          margin-top: 0.5em;
-          margin-bottom: 0.5em;
-        }
-        
-        .ProseMirror ul[data-type="taskList"] {
-          list-style: none;
-          padding: 0;
-        }
-        
-        .ProseMirror ul[data-type="taskList"] li {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-        }
-        
-        .ProseMirror ul[data-type="taskList"] li > label {
-          flex: 0 0 auto;
-          margin-right: 0.5rem;
-          user-select: none;
-        }
-        
-        .ProseMirror ul[data-type="taskList"] li > div {
-          flex: 1 1 auto;
-        }
-        
-        .ProseMirror ul[data-type="taskList"] input[type="checkbox"] {
-          cursor: pointer;
         }
       `}</style>
     </div>

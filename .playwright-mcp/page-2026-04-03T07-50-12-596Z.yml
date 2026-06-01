@@ -1,0 +1,26 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - navigation [ref=e3]:
+      - generic [ref=e5]:
+        - link "Little Life Little Life" [ref=e6] [cursor=pointer]:
+          - /url: /daily
+          - img "Little Life" [ref=e7]
+          - generic [ref=e8]: Little Life
+        - generic [ref=e9]:
+          - link "로그인" [ref=e10] [cursor=pointer]:
+            - /url: /login
+          - button "설정" [ref=e11]
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - heading "로그인" [level=1] [ref=e19]
+        - textbox "email@example.com" [ref=e20]
+        - textbox "비밀번호" [ref=e21]
+        - button "로그인" [ref=e22]
+      - generic [ref=e24]:
+        - heading "회원가입" [level=2] [ref=e25]
+        - textbox "email@example.com" [ref=e26]
+        - textbox "비밀번호(6자 이상)" [ref=e27]
+        - button "회원가입" [ref=e28]
+  - button "Open Next.js Dev Tools" [ref=e34] [cursor=pointer]:
+    - img [ref=e35]
+  - alert [ref=e38]

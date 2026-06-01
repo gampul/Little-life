@@ -164,31 +164,55 @@ function parseAccountNumber(message: string): string | null {
 }
 
 function parseItemName(message: string): string | null {
-  // 1) Labeled fields: "종목명: TIGER 미국초단기(3개월이하)국채"
-  // - 숫자/괄호 포함 이름도 허용
-  // - 줄바꿈 전까지 추출
+  // 공통: 줄 분리
+  const lines = message.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+  // 1) Labeled fields: "종목명 : TIGER ...", "가맹점 : ...", "적요 : ..."
   const labeled =
     message.match(/종목명\s*[:\-]\s*([^\n\r]+)/) ||
     message.match(/가맹점\s*[:\-]\s*([^\n\r]+)/) ||
     message.match(/적요\s*[:\-]\s*([^\n\r]+)/);
   if (labeled) {
-    const name = labeled[1]
-      .replace(/^▶\s*/, '')
-      .trim();
+    const name = labeled[1].replace(/^▶\s*/, '').trim();
     if (name.length > 0) return name;
   }
 
-  // 2) Card approval format: "MM/DD HH:MM 가맹점명 N,NNN원 승인"
+  // 2) Multi-line card format:
+  //    "04/06 08:59"  ← 이 줄의 바로 다음 줄이 가맹점명
+  //    "세븐일레븐롯데월드타워1호점"
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (/^\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/.test(lines[i])) {
+      const next = lines[i + 1].trim();
+      if (next.length > 0) return next;
+    }
+  }
+
+  // 3) Inline card approval format: "MM/DD HH:MM 가맹점명 N,NNN원"
   const afterTime = message.match(/\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}\s+(.+?)\s+[0-9,]+원/);
   if (afterTime) return afterTime[1].trim();
 
-  // 3) "HH:MM 가맹점명 N,NNN원"
+  // 4) "HH:MM 가맹점명 N,NNN원"
   const afterTime2 = message.match(/\d{1,2}:\d{2}\s+(.+?)\s+[0-9,]+원/);
   if (afterTime2) return afterTime2[1].trim();
 
-  // 4) Text between 원 and 승인/결제
+  // 5) Text between 원 and 승인/결제
   const between = message.match(/원\s+(.+?)\s+(?:승인|결제)/);
   if (between) return between[1].trim();
+
+  // 6) Fallback for approval messages: 마지막 의미 있는 줄 (헤더·금액·날짜·이름·카드승인 줄 제외)
+  if (/승인|결제/.test(message)) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (
+        /^\[.*\]$/.test(l) ||                          // [Web발신]
+        /원$/.test(l) ||                               // 금액 줄
+        /^\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/.test(l) || // 날짜시간 줄
+        /님$/.test(l) ||                               // 고객명 줄
+        /카드.*승인|카드.*체크/.test(l)                 // 카드승인 안내 줄
+      ) continue;
+      return l;
+    }
+  }
 
   return null;
 }
@@ -202,10 +226,21 @@ function parseSenderName(senderHeader: string | undefined, message: string): str
   const bracket = message.match(/\[([^\]]+)\]/);
   const bracketSender = bracket?.[1]?.trim() ?? '';
   if (senderTrimmed) {
-    if (/카카오|kakao|알림톡/i.test(senderTrimmed) && bracketSender) {
+    if (
+      /카카오|kakao|알림톡|web발신|웹발신|notification/i.test(senderTrimmed) &&
+      bracketSender &&
+      !/web발신|웹발신/i.test(bracketSender)
+    ) {
       return bracketSender;
     }
-    // 2) 일반 SMS면 기존 sender 헤더 우선
+
+    // 카드 승인 문구라면 "우리카드" 같은 발신 기관을 메시지에서 추출
+    if (/web발신|웹발신|notification/i.test(senderTrimmed)) {
+      const cardIssuer = message.match(/([^\s(\n\r]+카드)/);
+      if (cardIssuer) return cardIssuer[1];
+    }
+
+    // 2) 일반 SMS면 sender 헤더 우선
     return senderTrimmed;
   }
 
@@ -227,7 +262,7 @@ function inferCategory(message: string): string | null {
   if (/이자/.test(s)) return '이자';
   if (/이체/.test(s)) return '이체';
   if (/택시|버스|지하철|교통/.test(s)) return '교통';
-  if (/편의점|마트|슈퍼/.test(s)) return '생활비';
+  if (/편의점|마트|슈퍼|세븐일레븐|GS25|CU|이마트24/i.test(s)) return '생활비';
   if (/카페|스타벅스|커피/.test(s)) return '카페';
   if (/식당|치킨|피자|배달/.test(s)) return '식비';
   if (/병원|약국|의료/.test(s)) return '의료';
@@ -271,8 +306,16 @@ Deno.serve(async (req: Request) => {
     const rawBody = await req.text().catch(() => '');
     const body: RequestBody = parseIncomingBody(rawBody);
 
-    const senderRaw = (body.sender ?? body.not_title ?? body.title ?? '').toString();
-    const message = (body.message ?? body.not_text ?? body.notification ?? body.text ?? '').toString();
+    // sender는 선택 사항 — 없거나 비어 있으면 빈 문자열로 처리
+    const senderRaw = (
+      body.sender ?? body.not_title ?? body.title ?? ''
+    ).toString().trim();
+
+    // message는 필수
+    const message = (
+      body.message ?? body.not_text ?? body.notification ?? body.text ?? ''
+    ).toString().trim();
+
     const receivedAt = (body.received_at ?? body.not_timestamp ?? '').toString();
 
     if (!message) {
@@ -309,7 +352,7 @@ Deno.serve(async (req: Request) => {
     const insertPayload = {
       user_id: userId,
       raw_sms: message,
-      sender: sender,
+      sender: sender ?? '',   // sender 없을 때 빈 문자열 보장
       amount: amount,
       amount_before_tax: amountBeforeTax,
       transaction_date: transactionDate,
