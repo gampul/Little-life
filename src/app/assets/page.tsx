@@ -43,22 +43,6 @@ export default function AssetsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [mappings, setMappings] = useState<CategoryMapping[]>([]);
 
-  // 사용자 인증 확인 및 데이터 로드 통합
-  useEffect(() => {
-    if (!supabase) return;
-    
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error || !session?.user?.id) {
-        setUserId(null);
-        setIsLoading(false);
-        return;
-      }
-      const uid = session.user.id;
-      setUserId(uid);
-      loadAssetData(uid); // state 업데이트 기다리지 않고 즉시 호출
-    });
-  }, [supabase, loadAssetData]);
-
   // 자산/부채 데이터 로드
   const loadAssetData = useCallback(async (uid: string) => {
     if (!supabase || !uid) return;
@@ -137,6 +121,22 @@ export default function AssetsPage() {
       setIsLoading(false);
     }
   }, [supabase]);
+
+  // 사용자 인증 확인 및 데이터 로드 통합
+  useEffect(() => {
+    if (!supabase) return;
+    
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error || !session?.user?.id) {
+        setUserId(null);
+        setIsLoading(false);
+        return;
+      }
+      const uid = session.user.id;
+      setUserId(uid);
+      loadAssetData(uid); // state 업데이트 기다리지 않고 즉시 호출
+    });
+  }, [supabase, loadAssetData]);
 
 
   return (
