@@ -92,6 +92,10 @@ function MemoPageContent() {
   // 좋아요 상태 (로컬)
   const [likedMemos, setLikedMemos] = useState<Set<string>>(new Set());
   
+  // 링크 복사 상태
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copyToast, setCopyToast] = useState(false);
+  
   // 페이지네이션 관련 상태
   const [displayedMemos, setDisplayedMemos] = useState<Memo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -317,6 +321,20 @@ function MemoPageContent() {
     });
   };
 
+  // 링크 복사
+  const handleCopyLink = (e: React.MouseEvent, memoId: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/memo/${memoId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(memoId);
+      setCopyToast(true);
+      setTimeout(() => {
+        setCopiedId(null);
+        setCopyToast(false);
+      }, 1500);
+    });
+  };
+
   const handleSave = async () => {
     if (!supabase) {
       setMessage('❌ Supabase 연결이 설정되지 않았습니다.');
@@ -476,6 +494,26 @@ function MemoPageContent() {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
+              onClick={(e) => handleCopyLink(e, memo.id || '')}
+              className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              style={{ touchAction: 'manipulation' }}
+              title="링크 복사"
+            >
+              {copiedId === memo.id ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                  fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12l5 5l10 -10" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 15l6 -6" />
+                  <path d="M11 6l.463 -.536a5 5 0 0 1 7.072 7.072l-.535 .464" />
+                  <path d="M13 18l-.464 .536a5 5 0 0 1 -7.071 -7.071l.535 -.465" />
+                </svg>
+              )}
+            </button>
+            <button
               onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
               className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
               style={{ touchAction: 'manipulation' }}
@@ -525,6 +563,26 @@ function MemoPageContent() {
                 <span>💬 {memo.comments || 0}</span>
               </div>
               <div className="flex items-center gap-1">
+                <button
+                  onClick={(e) => handleCopyLink(e, memo.id || '')}
+                  className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                  style={{ touchAction: 'manipulation' }}
+                  title="링크 복사"
+                >
+                  {copiedId === memo.id ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                      fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12l5 5l10 -10" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                      fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 15l6 -6" />
+                      <path d="M11 6l.463 -.536a5 5 0 0 1 7.072 7.072l-.535 .464" />
+                      <path d="M13 18l-.464 .536a5 5 0 0 1 -7.071 -7.071l.535 -.465" />
+                    </svg>
+                  )}
+                </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); handleEdit(memo); }} 
                   className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
@@ -576,8 +634,28 @@ function MemoPageContent() {
                 💬 {memo.comments || 0}
               </span>
               <button
-                onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
+                onClick={(e) => handleCopyLink(e, memo.id || '')}
                 className="ml-auto p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                style={{ touchAction: 'manipulation' }}
+                title="링크 복사"
+              >
+                {copiedId === memo.id ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                    fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12l5 5l10 -10" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 15l6 -6" />
+                    <path d="M11 6l.463 -.536a5 5 0 0 1 7.072 7.072l-.535 .464" />
+                    <path d="M13 18l-.464 .536a5 5 0 0 1 -7.071 -7.071l.535 -.465" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
+                className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
                 style={{ touchAction: 'manipulation' }}
               >
                 <IconEdit />
@@ -882,6 +960,17 @@ function MemoPageContent() {
           </div>
         )}
       </div>
+
+      {/* 토스트 메시지 */}
+      {copyToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-sm px-4 py-2.5 rounded-xl shadow-lg">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12l5 5l10 -10" />
+          </svg>
+          링크가 복사되었습니다
+        </div>
+      )}
 
       <FooterNav />
 
