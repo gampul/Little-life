@@ -106,7 +106,7 @@ function MemoPageContent() {
         },
       }),
       Placeholder.configure({
-        placeholder: '내용을 입력하세요...\n\n# 입력하면 큰 제목\n## 입력하면 중간 제목\n### 입력하면 작은 제목',
+        placeholder: '오늘의 생각을 기록하세요...',
       }),
       TaskList,
       TaskItem.configure({
@@ -122,7 +122,7 @@ function MemoPageContent() {
     },
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose dark:prose-invert max-w-none min-h-[300px] p-4 focus:outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
+        class: 'prose prose-sm dark:prose-invert max-w-none focus:outline-none bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200',
       },
     },
   });
@@ -612,13 +612,6 @@ function MemoPageContent() {
                 </button>
               </div>
               
-              {/* 글쓰기 버튼 */}
-              <button
-                onClick={handleWrite}
-                className="px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                ✏️ 글쓰기
-              </button>
             </div>
           </div>
         )}
@@ -626,28 +619,27 @@ function MemoPageContent() {
         {/* Tiptap 에디터 */}
         {showEditor && editor && (
           <>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-5 mb-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden mb-4">
             {/* 제목 입력 */}
-            <div className="mb-3">
-              <input
-                type="text"
-                value={formData.title || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="제목을 입력하세요"
-                className="w-full px-0 py-2 text-base sm:text-lg font-semibold bg-transparent text-gray-900 dark:text-white border-0 border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none"
-              />
-            </div>
+            <input
+              type="text"
+              value={formData.title || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+              placeholder="제목"
+              className="w-full px-5 pt-5 pb-3 text-xl font-bold bg-transparent text-gray-900 dark:text-white placeholder-gray-300 dark:placeholder-gray-600 border-0 outline-none"
+            />
+            <div className="h-px bg-gray-100 dark:bg-gray-800 mx-4" />
 
             {/* 툴바 */}
             <div 
-              className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center"
+              className="flex items-center gap-0.5 px-3 py-2 border-b border-gray-100 dark:border-gray-800 overflow-x-auto scrollbar-hide"
               style={{ touchAction: 'manipulation' }}
             >
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 disabled={!editor.can().chain().focus().toggleBold().run()}
-                className={`p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('bold') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl text-sm font-medium transition-colors ${editor.isActive('bold') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="굵게 (Ctrl+B)"
               >
                 <strong>B</strong>
@@ -656,7 +648,7 @@ function MemoPageContent() {
                 type="button" 
                 onClick={() => editor.chain().focus().toggleItalic().run()}
                 disabled={!editor.can().chain().focus().toggleItalic().run()}
-                className={`p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('italic') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl text-sm font-medium transition-colors ${editor.isActive('italic') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="기울임 (Ctrl+I)"
               >
                 <em>I</em>
@@ -665,7 +657,7 @@ function MemoPageContent() {
                 type="button" 
                 onClick={() => editor.chain().focus().toggleUnderline().run()}
                 disabled={!editor.can().chain().focus().toggleUnderline().run()}
-                className={`p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('underline') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 w-11 h-11 flex items-center justify-center rounded-xl text-sm font-medium transition-colors ${editor.isActive('underline') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="밑줄 (Ctrl+U)"
               >
                 <u>U</u>
@@ -673,7 +665,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('heading', { level: 1 }) ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="제목 1"
               >
                 H1
@@ -681,7 +673,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="제목 2"
               >
                 H2
@@ -689,7 +681,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('heading', { level: 3 }) ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="제목 3"
               >
                 H3
@@ -697,7 +689,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('bulletList') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('bulletList') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="목록"
               >
                 • 목록
@@ -705,7 +697,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleTaskList().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('taskList') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('taskList') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="할일"
               >
                 ☑ 할일
@@ -713,7 +705,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('blockquote') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('blockquote') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="인용구"
               >
                 " 인용
@@ -721,7 +713,7 @@ function MemoPageContent() {
               <button 
                 type="button" 
                 onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('codeBlock') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('codeBlock') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="코드"
               >
                 {'<>'} 코드
@@ -734,7 +726,7 @@ function MemoPageContent() {
                     editor.chain().focus().setLink({ href: url }).run();
                   }
                 }}
-                className={`px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center transition-colors ${editor.isActive('link') ? 'bg-gray-300 dark:bg-gray-600' : ''}`}
+                className={`flex-shrink-0 h-11 px-3 flex items-center justify-center rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${editor.isActive('link') ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
                 title="링크"
               >
                 🔗 링크
@@ -751,7 +743,7 @@ function MemoPageContent() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center gap-1 disabled:opacity-50 transition-colors"
+                className="flex-shrink-0 h-11 px-3 flex items-center justify-center gap-1 rounded-xl text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors whitespace-nowrap"
                 title="이미지 추가"
               >
                 {isUploading ? '⏳' : '📷'} 이미지
@@ -759,18 +751,16 @@ function MemoPageContent() {
             </div>
 
             {/* Tiptap 에디터 */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
-              <EditorContent editor={editor} />
-            </div>
+            <EditorContent editor={editor} />
 
             {/* 저장/취소 버튼 */}
-            <div className="mt-3 flex gap-2">
+            <div className="flex gap-2 px-4 py-4 border-t border-gray-100 dark:border-gray-800">
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex-1 px-4 py-2.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                className="flex-1 h-12 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-50"
               >
-                {isSaving ? '저장 중...' : (editingId ? '수정' : '저장')}
+                {isSaving ? '저장 중...' : (editingId ? '수정 완료' : '저장')}
               </button>
               <button
                 onClick={() => {
@@ -781,7 +771,7 @@ function MemoPageContent() {
                     editor.commands.setContent('');
                   }
                 }}
-                className="px-4 py-2.5 text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
+                className="h-12 px-6 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-xl transition-colors"
               >
                 취소
               </button>
@@ -795,6 +785,20 @@ function MemoPageContent() {
             )}
           </div>
           </>
+        )}
+
+        {/* FAB: 글쓰기 버튼 */}
+        {!showEditor && (
+          <button
+            onClick={handleWrite}
+            className="fixed bottom-24 right-4 z-50 w-14 h-14 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
+            style={{ touchAction: 'manipulation' }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
         )}
 
         {/* 메모 목록 */}
@@ -855,14 +859,32 @@ function MemoPageContent() {
         /* Tiptap 에디터 스타일 */
         .ProseMirror {
           outline: none;
+          min-height: 280px;
+          padding: 1rem 1.25rem;
+          font-size: 0.875rem;
+          line-height: 1.75;
         }
         
         .ProseMirror p.is-editor-empty:first-child::before {
-          color: #adb5bd;
+          color: #d1d5db;
           content: attr(data-placeholder);
           float: left;
           height: 0;
           pointer-events: none;
+        }
+        
+        .dark .ProseMirror p.is-editor-empty:first-child::before {
+          color: #4b5563;
+        }
+        
+        /* 가로 스크롤바 숨기기 */
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
         }
         
         .ProseMirror h1 {
