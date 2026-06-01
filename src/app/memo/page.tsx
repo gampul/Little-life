@@ -751,37 +751,37 @@ function MemoPageContent() {
             {/* 툴바 (작성 모드에서만 표시) */}
             {editorMode === 'write' && (
               <div className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center">
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
+                <button type="button" onClick={() => insertMarkdownSyntax('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
                   <strong>B</strong>
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
+                <button type="button" onClick={() => insertMarkdownSyntax('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
                   <em>I</em>
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
+                <button type="button" onClick={() => insertMarkdownSyntax('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
                   <u>U</u>
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('h1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                <button type="button" onClick={() => insertMarkdownSyntax('h1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
                   H1
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('h2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                <button type="button" onClick={() => insertMarkdownSyntax('h2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
                   H2
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('h3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                <button type="button" onClick={() => insertMarkdownSyntax('h3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
                   H3
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('list')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="목록">
+                <button type="button" onClick={() => insertMarkdownSyntax('list')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="목록">
                   • 목록
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="할일">
+                <button type="button" onClick={() => insertMarkdownSyntax('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="할일">
                   ☑ 할일
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                <button type="button" onClick={() => insertMarkdownSyntax('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
                   " 인용
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                <button type="button" onClick={() => insertMarkdownSyntax('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
                   {'<>'} 코드
                 </button>
-                <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insertMarkdownSyntax('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                <button type="button" onClick={() => insertMarkdownSyntax('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
                   🔗 링크
                 </button>
                 <input
@@ -794,7 +794,6 @@ function MemoPageContent() {
                 />
                 <button
                   type="button"
-                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                   className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"

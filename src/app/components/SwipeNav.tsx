@@ -10,9 +10,8 @@ function isInteractiveTarget(target: EventTarget | null) {
   const el = target as HTMLElement | null;
   if (!el) return false;
   if (el.isContentEditable) return true;
-  const tag = el.tagName?.toLowerCase();
-  if (!tag) return false;
-  return ['input', 'textarea', 'select', 'button', 'a', 'label'].includes(tag);
+  // closest를 사용하여 부모 요소까지 확인 (예: <button><strong>B</strong></button>)
+  return !!el.closest('button, a, input, textarea, select, label, [role="button"]');
 }
 
 export function SwipeNav({ children }: { children: React.ReactNode }) {
