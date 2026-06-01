@@ -764,38 +764,41 @@ function MemoPageContent() {
 
             {/* 툴바 (작성 모드에서만 표시) */}
             {editorMode === 'write' && (
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center">
-                <button type="button" onTouchEnd={handleToolbarAction('bold')} onClick={handleToolbarAction('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
+              <div 
+                className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center"
+                style={{ touchAction: 'manipulation' }}
+              >
+                <button type="button" onTouchEnd={handleToolbarAction('bold')} onClick={handleToolbarAction('bold')} className="p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center" title="굵게">
                   <strong>B</strong>
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('italic')} onClick={handleToolbarAction('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
+                <button type="button" onTouchEnd={handleToolbarAction('italic')} onClick={handleToolbarAction('italic')} className="p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center" title="기울임">
                   <em>I</em>
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('underline')} onClick={handleToolbarAction('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
+                <button type="button" onTouchEnd={handleToolbarAction('underline')} onClick={handleToolbarAction('underline')} className="p-3 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-w-[44px] min-h-[44px] flex items-center justify-center" title="밑줄">
                   <u>U</u>
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('h1')} onClick={handleToolbarAction('h1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                <button type="button" onTouchEnd={handleToolbarAction('h1')} onClick={handleToolbarAction('h1')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="제목 1">
                   H1
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('h2')} onClick={handleToolbarAction('h2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                <button type="button" onTouchEnd={handleToolbarAction('h2')} onClick={handleToolbarAction('h2')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="제목 2">
                   H2
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('h3')} onClick={handleToolbarAction('h3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                <button type="button" onTouchEnd={handleToolbarAction('h3')} onClick={handleToolbarAction('h3')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="제목 3">
                   H3
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('list')} onClick={handleToolbarAction('list')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="목록">
+                <button type="button" onTouchEnd={handleToolbarAction('list')} onClick={handleToolbarAction('list')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="목록">
                   • 목록
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('checkbox')} onClick={handleToolbarAction('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="할일">
+                <button type="button" onTouchEnd={handleToolbarAction('checkbox')} onClick={handleToolbarAction('checkbox')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="할일">
                   ☑ 할일
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('quote')} onClick={handleToolbarAction('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                <button type="button" onTouchEnd={handleToolbarAction('quote')} onClick={handleToolbarAction('quote')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="인용구">
                   " 인용
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('code')} onClick={handleToolbarAction('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                <button type="button" onTouchEnd={handleToolbarAction('code')} onClick={handleToolbarAction('code')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="코드">
                   {'<>'} 코드
                 </button>
-                <button type="button" onTouchEnd={handleToolbarAction('link')} onClick={handleToolbarAction('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                <button type="button" onTouchEnd={handleToolbarAction('link')} onClick={handleToolbarAction('link')} className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center" title="링크">
                   🔗 링크
                 </button>
                 <input
@@ -811,7 +814,7 @@ function MemoPageContent() {
                   onTouchEnd={(e) => { e.preventDefault(); fileInputRef.current?.click(); }}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
-                  className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"
+                  className="px-3 py-3 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 min-h-[44px] flex items-center justify-center gap-1 disabled:opacity-50"
                   title="이미지 추가"
                 >
                   {isUploading ? '⏳' : '📷'} 이미지
