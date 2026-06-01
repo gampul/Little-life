@@ -64,88 +64,71 @@ export default function AssetsPage() {
     setIsLoading(true);
     
     try {
-      // 1. 요약 데이터 로드
-      const { data: summaryData, error: summaryError } = await supabase.rpc('get_asset_summary', {
-        p_user_id: userId,
-      });
-      
-      if (summaryError) {
-        console.log('요약 로드 오류:', summaryError.message);
-        console.log('Supabase에서 004_create_asset_functions.sql 마이그레이션을 실행해주세요.');
-      } else if (summaryData && summaryData.length > 0) {
-        setSummary({
-          total_assets: summaryData[0].total_assets || 0,
-          total_liabilities: summaryData[0].total_liabilities || 0,
-          net_worth: summaryData[0].net_worth || 0,
-          asset_count: summaryData[0].asset_count || 0,
-          liability_count: summaryData[0].liability_count || 0,
-        });
-      }
-      
-      // 2. 자산별 잔액 로드
-      const { data: balancesData, error: balancesError } = await supabase.rpc('get_asset_balances', {
-        p_user_id: userId,
-      });
-      
-      if (balancesError) {
-        console.log('잔액 로드 오류:', balancesError.message);
-      } else if (balancesData) {
-        setAssetItems(balancesData);
-      }
-      
-      // 3. 거래내역 로드 (전체 - 페이지네이션)
-      let allTransactions: Transaction[] = [];
-      let hasMore = true;
-      let page = 0;
-      const PAGE_SIZE = 1000;
-      
-      while (hasMore) {
-        const { data: txData, error: txError } = await supabase
+      // 1~5번 동시에 실행 (순차 → 병렬)
+      const [summaryRes, balancesRes, txRes, catRes, mapRes] = await Promise.all([
+        supabase.rpc('get_asset_summary', { p_user_id: userId }),
+        supabase.rpc('get_asset_balances', { p_user_id: userId }),
+        supabase
           .from('transactions')
           .select('id, date, transaction_type, category, amount, memo, asset, transfer_asset')
           .eq('user_id', userId)
           .order('date', { ascending: true })
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-        
-        if (txError) {
-          console.log('거래내역 로드 오류:', txError.message);
-          hasMore = false;
-        } else if (txData && txData.length > 0) {
-          allTransactions = [...allTransactions, ...txData];
-          hasMore = txData.length === PAGE_SIZE;
-          page++;
-        } else {
-          hasMore = false;
-        }
+          .limit(500),  // while 루프 제거, 최근 500건으로 제한
+        supabase
+          .from('asset_categories')
+          .select('*')
+          .eq('user_id', userId)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('asset_category_mappings')
+          .select('*')
+          .eq('user_id', userId),
+      ]);
+
+      // 요약
+      if (summaryRes.error) {
+        console.log('요약 로드 오류:', summaryRes.error.message);
+        console.log('Supabase에서 004_create_asset_functions.sql 마이그레이션을 실행해주세요.');
+      } else if (summaryRes.data && summaryRes.data.length > 0) {
+        const d = summaryRes.data[0];
+        setSummary({
+          total_assets: d.total_assets || 0,
+          total_liabilities: d.total_liabilities || 0,
+          net_worth: d.net_worth || 0,
+          asset_count: d.asset_count || 0,
+          liability_count: d.liability_count || 0,
+        });
       }
-      
-      console.log('전체 거래내역 로드됨:', allTransactions.length, '개');
-      setTransactions(allTransactions);
-      
-      // 4. 카테고리 로드
-      const { data: catData, error: catError } = await supabase
-        .from('asset_categories')
-        .select('*')
-        .eq('user_id', userId)
-        .order('sort_order', { ascending: true });
-      
-      if (catError) {
-        console.log('카테고리 로드 오류:', catError.message);
-      } else if (catData) {
-        setCategories(catData);
+
+      // 잔액
+      if (balancesRes.error) {
+        console.log('잔액 로드 오류:', balancesRes.error.message);
+      } else if (balancesRes.data) {
+        setAssetItems(balancesRes.data);
       }
-      
-      // 5. 매핑 로드
-      const { data: mapData, error: mapError } = await supabase
-        .from('asset_category_mappings')
-        .select('*')
-        .eq('user_id', userId);
-      
-      if (mapError) {
-        console.log('매핑 로드 오류:', mapError.message);
-      } else if (mapData) {
-        setMappings(mapData);
+
+      // 거래내역
+      if (txRes.error) {
+        console.log('거래내역 로드 오류:', txRes.error.message);
+      } else if (txRes.data) {
+        console.log('거래내역 로드됨:', txRes.data.length, '개');
+        setTransactions(txRes.data);
       }
+
+      // 카테고리
+      if (catRes.error) {
+        console.log('카테고리 로드 오류:', catRes.error.message);
+      } else if (catRes.data) {
+        setCategories(catRes.data);
+      }
+
+      // 매핑
+      if (mapRes.error) {
+        console.log('매핑 로드 오류:', mapRes.error.message);
+      } else if (mapRes.data) {
+        setMappings(mapRes.data);
+      }
+
     } catch (err) {
       console.log('데이터 로드 오류:', err);
     } finally {
