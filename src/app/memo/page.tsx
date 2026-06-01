@@ -61,6 +61,9 @@ function MemoPageContent() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // 모바일 지원: 마지막 커서 위치 저장 (blur 시 손실 방지)
+  const lastSelectionRef = useRef({ start: 0, end: 0 });
+  
   // 뷰 모드 상태
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   
@@ -95,12 +98,9 @@ function MemoPageContent() {
     
     const textarea = textareaRef.current;
     
-    // 모바일 지원: 현재 포커스를 textarea로 먼저 이동
-    textarea.focus();
-    
-    // selection 정보를 즉시 저장 (모바일에서 리셋 방지)
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
+    // 모바일 지원: 저장된 마지막 커서 위치 사용 (blur로 손실된 selection 복구)
+    const start = lastSelectionRef.current.start;
+    const end = lastSelectionRef.current.end;
     const selectedText = textarea.value.substring(start, end);
     const beforeText = textarea.value.substring(0, start);
     const afterText = textarea.value.substring(end);
@@ -807,6 +807,22 @@ function MemoPageContent() {
                   ref={textareaRef}
                   value={formData.content}
                   onChange={handleTextareaChange}
+                  onSelect={(e) => {
+                    // 모바일 지원: 커서 위치 변경 시 항상 저장 (blur 시 손실 방지)
+                    const target = e.target as HTMLTextAreaElement;
+                    lastSelectionRef.current = {
+                      start: target.selectionStart,
+                      end: target.selectionEnd,
+                    };
+                  }}
+                  onClick={(e) => {
+                    // 모바일 지원: 클릭 시에도 저장
+                    const target = e.target as HTMLTextAreaElement;
+                    lastSelectionRef.current = {
+                      start: target.selectionStart,
+                      end: target.selectionEnd,
+                    };
+                  }}
                   placeholder="마크다운으로 작성하세요...&#10;&#10;# 제목&#10;## 부제목&#10;**굵게** *기울임*&#10;- 목록 항목&#10;> 인용구&#10;```코드```"
                   className="w-full min-h-[300px] p-3 text-sm text-gray-900 dark:text-white bg-transparent focus:outline-none resize-none"
                   style={{ fontFamily: 'inherit' }}
