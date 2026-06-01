@@ -86,6 +86,12 @@ function MemoPageContent() {
 
   // Textarea 내용 업데이트
   const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    // onChange는 React의 input 이벤트와 매핑 → 한글 IME 포함 모든 입력에서 발생
+    // 여기서 커서 위치를 저장해야 Android에서 정확한 위치에 삽입 가능
+    lastSelectionRef.current = {
+      start: e.target.selectionStart,
+      end: e.target.selectionEnd,
+    };
     setFormData(prev => ({
       ...prev,
       content: e.target.value,
@@ -824,14 +830,6 @@ function MemoPageContent() {
                   }}
                   onKeyUp={(e) => {
                     // 타이핑 후 커서 이동 시에도 저장 (Android에서 onSelect 미발생 보완)
-                    const target = e.target as HTMLTextAreaElement;
-                    lastSelectionRef.current = {
-                      start: target.selectionStart,
-                      end: target.selectionEnd,
-                    };
-                  }}
-                  onBlur={(e) => {
-                    // 포커스 잃기 직전 마지막 커서 위치 저장
                     const target = e.target as HTMLTextAreaElement;
                     lastSelectionRef.current = {
                       start: target.selectionStart,
