@@ -43,46 +43,48 @@ export default function AssetsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [mappings, setMappings] = useState<CategoryMapping[]>([]);
 
-  // 사용자 인증 확인
+  // 사용자 인증 확인 및 데이터 로드 통합
   useEffect(() => {
     if (!supabase) return;
     
     supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('세션 오류:', error);
+      if (error || !session?.user?.id) {
         setUserId(null);
-      } else if (session) {
-        setUserId(session.user?.id ?? null);
+        setIsLoading(false);
+        return;
       }
+      const uid = session.user.id;
+      setUserId(uid);
+      loadAssetData(uid); // state 업데이트 기다리지 않고 즉시 호출
     });
-  }, [supabase]);
+  }, [supabase, loadAssetData]);
 
   // 자산/부채 데이터 로드
-  const loadAssetData = useCallback(async () => {
-    if (!supabase || !userId) return;
+  const loadAssetData = useCallback(async (uid: string) => {
+    if (!supabase || !uid) return;
     
     setIsLoading(true);
     
     try {
       // 1~5번 동시에 실행 (순차 → 병렬)
       const [summaryRes, balancesRes, txRes, catRes, mapRes] = await Promise.all([
-        supabase.rpc('get_asset_summary', { p_user_id: userId }),
-        supabase.rpc('get_asset_balances', { p_user_id: userId }),
+        supabase.rpc('get_asset_summary', { p_user_id: uid }),
+        supabase.rpc('get_asset_balances', { p_user_id: uid }),
         supabase
           .from('transactions')
           .select('id, date, transaction_type, category, amount, memo, asset, transfer_asset')
-          .eq('user_id', userId)
+          .eq('user_id', uid)
           .order('date', { ascending: true })
           .limit(500),  // while 루프 제거, 최근 500건으로 제한
         supabase
           .from('asset_categories')
           .select('*')
-          .eq('user_id', userId)
+          .eq('user_id', uid)
           .order('sort_order', { ascending: true }),
         supabase
           .from('asset_category_mappings')
           .select('*')
-          .eq('user_id', userId),
+          .eq('user_id', uid),
       ]);
 
       // 요약
@@ -134,14 +136,7 @@ export default function AssetsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, userId]);
-
-  // 데이터 로드
-  useEffect(() => {
-    if (userId) {
-      loadAssetData();
-    }
-  }, [userId, loadAssetData]);
+  }, [supabase]);
 
 
   return (
