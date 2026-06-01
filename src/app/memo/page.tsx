@@ -8,6 +8,8 @@ import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { SwipeNav } from '../components/SwipeNav';
 import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/container';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -70,9 +72,9 @@ function MemoPageContent() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState('');
-  const editorRef = useRef<HTMLDivElement>(null);
+  const [editorMode, setEditorMode] = useState<'write' | 'preview'>('write');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const textColorInputRef = useRef<HTMLInputElement>(null);
   
   // 뷰 모드 상태
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -93,308 +95,99 @@ function MemoPageContent() {
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [inlineColorPickerPos, setInlineColorPickerPos] = useState<{ top: number; left: number } | null>(null);
-  const inlineColorPickerRef = useRef<HTMLDivElement>(null);
 
-  // 에디터 내용 업데이트
-  const handleEditorInput = () => {
-    if (editorRef.current) {
-      setFormData(prev => ({
-        ...prev,
-        content: editorRef.current?.innerHTML || '',
-      }));
-    }
+  // Textarea 내용 업데이트
+  const handleTextareaChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      content: e.target.value,
+    }));
   };
 
-  /** 라인 시작 `#` / `##` / `###` / `####` + 스페이스 → 헤딩 (GitHub 스타일 마크다운 쇼트컷) */
-  const headingStyles: Record<1 | 2 | 3 | 4, string> = {
-    1: 'font-size: 2em; font-weight: bold; margin: 0.67em 0;',
-    2: 'font-size: 1.5em; font-weight: bold; margin: 0.75em 0;',
-    3: 'font-size: 1.17em; font-weight: bold; margin: 0.83em 0;',
-    4: 'font-size: 1em; font-weight: bold; margin: 1em 0;',
-  };
-
-  const getBlockElementForCaret = (root: HTMLElement, sel: Selection): HTMLElement | null => {
-    let n: Node | null = sel.anchorNode;
-    if (!n || !root.contains(n)) return null;
-    while (n && n !== root) {
-      if (n.nodeType === Node.ELEMENT_NODE) {
-        const tag = (n as HTMLElement).tagName;
-        if (tag === 'DIV' || tag === 'P' || tag === 'LI') {
-          return n as HTMLElement;
-        }
-      }
-      n = n.parentNode;
-    }
-    return root;
-  };
-
-  const textFromBlockStartToCaret = (block: HTMLElement, sel: Selection): string => {
-    const r = document.createRange();
-    try {
-      r.setStart(block, 0);
-      r.setEnd(sel.anchorNode!, sel.anchorOffset);
-      return r.toString();
-    } catch {
-      return '';
-    }
-  };
-
-  const getHeadingElementForCaret = (root: HTMLElement, sel: Selection): HTMLElement | null => {
-    let n: Node | null = sel.anchorNode;
-    if (!n || !root.contains(n)) return null;
-    while (n && n !== root) {
-      if (n.nodeType === Node.ELEMENT_NODE) {
-        const tag = (n as HTMLElement).tagName;
-        if (/^H[1-6]$/i.test(tag)) {
-          return n as HTMLElement;
-        }
-      }
-      n = n.parentNode;
-    }
-    return null;
-  };
-
-  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.nativeEvent.isComposing) return;
-    if (e.key === 'Enter' && editorRef.current) {
-      const sel = window.getSelection();
-      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
-
-      const headingEl = getHeadingElementForCaret(editorRef.current, sel);
-      if (!headingEl) return;
-
-      e.preventDefault();
-      const paragraph = document.createElement('div');
-      paragraph.appendChild(document.createElement('br'));
-      headingEl.insertAdjacentElement('afterend', paragraph);
-
-      const range = document.createRange();
-      range.setStart(paragraph, 0);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      handleEditorInput();
-      return;
-    }
-    if (inlineColorPickerPos && e.key === 'Escape') {
-      e.preventDefault();
-      setInlineColorPickerPos(null);
-      return;
-    }
-    if (e.key !== ' ' || !editorRef.current) return;
-    const sel = window.getSelection();
-    if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
-
-    const root = editorRef.current;
-    const block = getBlockElementForCaret(root, sel);
-    if (!block) return;
-    if (/^H[1-6]$/i.test(block.tagName)) return;
-
-    const before = textFromBlockStartToCaret(block, sel);
-
-    if (before === INLINE_COLOR_TRIGGER) {
-      e.preventDefault();
-      setInlineColorPickerPos(null);
-
-      const del = document.createRange();
-      try {
-        del.setStart(block, 0);
-        del.setEnd(sel.anchorNode, sel.anchorOffset);
-        del.deleteContents();
-      } catch {
-        return;
-      }
-
-      const caret = document.createRange();
-      try {
-        caret.setStart(block, 0);
-        caret.collapse(true);
-      } catch {
-        editorRef.current.focus();
-        handleEditorInput();
-        return;
-      }
-      if (block.childNodes.length === 0) {
-        block.appendChild(document.createElement('br'));
-        caret.setStart(block, 0);
-        caret.collapse(true);
-      }
-      sel.removeAllRanges();
-      sel.addRange(caret);
-
-      const rect = caret.getBoundingClientRect();
-      const pad = 4;
-      let left = rect.left;
-      const top = rect.bottom + pad;
-      const panelW = 216;
-      if (left + panelW > window.innerWidth - 8) {
-        left = Math.max(8, window.innerWidth - panelW - 8);
-      }
-
-      setInlineColorPickerPos({ top, left });
-      handleEditorInput();
-      return;
-    }
-
-    const hm = before.match(/^(#{1,4})$/);
-    if (hm) {
-      e.preventDefault();
-
-      const level = hm[1].length as 1 | 2 | 3 | 4;
-      const h = document.createElement(`h${level}`);
-      h.setAttribute('style', headingStyles[level]);
-
-      const parent = block.parentNode;
-      if (parent) {
-        parent.replaceChild(h, block);
-      } else {
-        root.appendChild(h);
-      }
-
-      h.appendChild(document.createElement('br'));
-
-      const newRange = document.createRange();
-      newRange.setStart(h, 0);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-
-      handleEditorInput();
-      return;
-    }
-
-    // 라인 시작 `-` 또는 `*` + 스페이스 → 글머리(점) 목록
-    if (
-      (before === '-' || before === '*') &&
-      (block.tagName === 'DIV' || block.tagName === 'P')
-    ) {
-      e.preventDefault();
-
-      const ul = document.createElement('ul');
-      ul.setAttribute('style', 'margin: 0.5em 0; padding-left: 1.25em; list-style-type: disc;');
-      const li = document.createElement('li');
-      li.appendChild(document.createElement('br'));
-      ul.appendChild(li);
-
-      const parent = block.parentNode;
-      if (parent) {
-        parent.replaceChild(ul, block);
-      } else {
-        root.appendChild(ul);
-      }
-
-      const newRange = document.createRange();
-      newRange.setStart(li, 0);
-      newRange.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(newRange);
-
-      handleEditorInput();
-    }
-  };
-
-  // 에디터 포맷 버튼 핸들러
-  const formatText = (command: string, value?: string) => {
-    document.execCommand(command, false, value);
-    editorRef.current?.focus();
-    handleEditorInput();
-  };
-
-  const applyTextColor = (color: string) => {
-    if (!editorRef.current) return;
-    document.execCommand('foreColor', false, color);
-    editorRef.current.focus();
-    handleEditorInput();
-  };
-
-  /** 라이트/다크에 맞는 에디터 기본 글자색으로 맞춤 */
-  const applyDefaultTextColor = () => {
-    if (!editorRef.current) return;
-    const inherited = getComputedStyle(editorRef.current).color;
-    document.execCommand('foreColor', false, inherited);
-    editorRef.current.focus();
-    handleEditorInput();
-  };
-
-  const pickInlineColor = (hex: string) => {
-    if (!editorRef.current) return;
-    document.execCommand('foreColor', false, hex);
-    editorRef.current.focus();
-    setInlineColorPickerPos(null);
-    handleEditorInput();
-  };
-
-  const pickInlineDefaultColor = () => {
-    if (!editorRef.current) return;
-    const inherited = getComputedStyle(editorRef.current).color;
-    document.execCommand('foreColor', false, inherited);
-    editorRef.current.focus();
-    setInlineColorPickerPos(null);
-    handleEditorInput();
-  };
-
-  useEffect(() => {
-    if (!inlineColorPickerPos) return;
-    const handlePointerDown = (ev: PointerEvent) => {
-      const pop = inlineColorPickerRef.current;
-      if (pop && ev.target instanceof Node && pop.contains(ev.target)) return;
-      setInlineColorPickerPos(null);
-    };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
-  }, [inlineColorPickerPos]);
-
-  // 마크다운 삽입 핸들러
-  const insertMarkdown = (type: string) => {
-    if (!editorRef.current) return;
+  // Textarea 마크다운 삽입 함수
+  const insertMarkdownSyntax = (syntax: 'bold' | 'italic' | 'underline' | 'h1' | 'h2' | 'h3' | 'list' | 'quote' | 'code' | 'link' | 'checkbox') => {
+    if (!textareaRef.current) return;
     
-    const selection = window.getSelection();
-    const selectedText = selection?.toString() || '';
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    const beforeText = textarea.value.substring(0, start);
+    const afterText = textarea.value.substring(end);
     
-    let markdownText = '';
+    let newText = '';
+    let cursorOffset = 0;
     
-    switch (type) {
-      case 'heading1':
-        markdownText = `<h1 style="font-size: 2em; font-weight: bold; margin: 0.67em 0;">${selectedText || '제목 1'}</h1>`;
+    switch (syntax) {
+      case 'bold':
+        newText = `**${selectedText || '텍스트'}**`;
+        cursorOffset = selectedText ? newText.length : 2;
         break;
-      case 'heading2':
-        markdownText = `<h2 style="font-size: 1.5em; font-weight: bold; margin: 0.75em 0;">${selectedText || '제목 2'}</h2>`;
+      case 'italic':
+        newText = `*${selectedText || '텍스트'}*`;
+        cursorOffset = selectedText ? newText.length : 1;
         break;
-      case 'heading3':
-        markdownText = `<h3 style="font-size: 1.17em; font-weight: bold; margin: 0.83em 0;">${selectedText || '제목 3'}</h3>`;
+      case 'underline':
+        newText = `<u>${selectedText || '텍스트'}</u>`;
+        cursorOffset = selectedText ? newText.length : 3;
+        break;
+      case 'h1':
+        newText = `# ${selectedText || '제목 1'}`;
+        cursorOffset = newText.length;
+        break;
+      case 'h2':
+        newText = `## ${selectedText || '제목 2'}`;
+        cursorOffset = newText.length;
+        break;
+      case 'h3':
+        newText = `### ${selectedText || '제목 3'}`;
+        cursorOffset = newText.length;
+        break;
+      case 'list':
+        newText = `- ${selectedText || '목록 항목'}`;
+        cursorOffset = newText.length;
         break;
       case 'quote':
-        markdownText = `<blockquote style="border-left: 4px solid #3B82F6; padding-left: 1em; margin: 1em 0; color: #6B7280;">${selectedText || '인용구'}</blockquote>`;
+        newText = `> ${selectedText || '인용구'}`;
+        cursorOffset = newText.length;
         break;
       case 'code':
         if (selectedText.includes('\n')) {
-          // 여러 줄 코드 블록
-          markdownText = `<pre style="background-color: #1F2937; color: #E5E7EB; padding: 1em; border-radius: 0.5em; overflow-x: auto; margin: 1em 0;"><code>${selectedText || '코드 블록'}</code></pre>`;
+          newText = `\`\`\`\n${selectedText || '코드'}\n\`\`\``;
         } else {
-          // 인라인 코드
-          markdownText = `<code style="background-color: #E5E7EB; color: #1F2937; padding: 0.2em 0.4em; border-radius: 0.25em; font-family: monospace;">${selectedText || '코드'}</code>`;
+          newText = `\`${selectedText || '코드'}\``;
         }
+        cursorOffset = selectedText ? newText.length : 1;
         break;
       case 'link':
         const url = prompt('링크 URL을 입력하세요:', 'https://');
         if (url) {
-          markdownText = `<a href="${url}" style="color: #3B82F6; text-decoration: underline;" target="_blank" rel="noopener noreferrer">${selectedText || '링크'}</a>`;
+          newText = `[${selectedText || '링크'}](${url})`;
+          cursorOffset = newText.length;
         }
         break;
       case 'checkbox':
-        markdownText = `<div style="margin: 0.5em 0;"><input type="checkbox" style="margin-right: 0.5em;"><span>${selectedText || '할 일'}</span></div>`;
+        newText = `- [ ] ${selectedText || '할 일'}`;
+        cursorOffset = newText.length;
         break;
       default:
         return;
     }
     
-    if (markdownText) {
-      document.execCommand('insertHTML', false, markdownText);
-      editorRef.current.focus();
-      handleEditorInput();
-    }
+    const updatedContent = beforeText + newText + afterText;
+    setFormData(prev => ({ ...prev, content: updatedContent }));
+    
+    // 커서 위치 설정
+    setTimeout(() => {
+      if (textarea) {
+        const newCursorPos = start + cursorOffset;
+        textarea.focus();
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
   };
+
+
 
   // 이미지 업로드 핸들러
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -445,31 +238,27 @@ function MemoPageContent() {
 
       const imageUrl = urlData.publicUrl;
 
-      // 에디터에 이미지 삽입
-      if (editorRef.current) {
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.alt = file.name;
-        img.style.maxWidth = '100%';
-        img.style.height = 'auto';
-        img.style.borderRadius = '8px';
-        img.style.margin = '8px 0';
+      // Textarea에 마크다운 이미지 삽입
+      if (textareaRef.current) {
+        const textarea = textareaRef.current;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const beforeText = textarea.value.substring(0, start);
+        const afterText = textarea.value.substring(end);
         
-        // 현재 커서 위치에 삽입
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          range.insertNode(img);
-          range.collapse(false);
-        } else {
-          editorRef.current.appendChild(img);
-        }
+        const markdownImage = `![${file.name}](${imageUrl})\n`;
+        const updatedContent = beforeText + markdownImage + afterText;
         
-        // 줄바꿈 추가
-        const br = document.createElement('br');
-        editorRef.current.appendChild(br);
+        setFormData(prev => ({ ...prev, content: updatedContent }));
         
-        handleEditorInput();
+        // 커서 위치 설정
+        setTimeout(() => {
+          if (textarea) {
+            const newCursorPos = start + markdownImage.length;
+            textarea.focus();
+            textarea.setSelectionRange(newCursorPos, newCursorPos);
+          }
+        }, 0);
       }
 
       setMessage('✅ 이미지가 추가되었습니다!');
@@ -940,18 +729,18 @@ function MemoPageContent() {
 
               {/* 포맷 툴바 */}
               <div className="bg-gray-50 dark:bg-gray-700 rounded-t-lg px-2 py-2 flex flex-wrap gap-1 items-center">
-                <button type="button" onClick={() => formatText('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('bold'); }} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
                   <strong>B</strong>
                 </button>
-                <button type="button" onClick={() => formatText('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('italic'); }} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
                   <em>I</em>
                 </button>
-                <button type="button" onClick={() => formatText('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('underline'); }} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
                   <u>U</u>
                 </button>
                 <button
                   type="button"
-                  onClick={applyDefaultTextColor}
+                  onMouseDown={(e) => { e.preventDefault(); applyDefaultTextColor(); }}
                   className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 font-semibold text-gray-800 dark:text-gray-100"
                   title="기본 글자색 (테마)"
                 >
@@ -961,7 +750,7 @@ function MemoPageContent() {
                   <button
                     key={hex}
                     type="button"
-                    onClick={() => applyTextColor(hex)}
+                    onMouseDown={(e) => { e.preventDefault(); applyTextColor(hex); }}
                     title={label}
                     className="w-6 h-6 min-w-[1.5rem] rounded border border-gray-300 dark:border-gray-500 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     style={{ backgroundColor: hex }}
@@ -980,39 +769,39 @@ function MemoPageContent() {
                 />
                 <button
                   type="button"
-                  onClick={() => textColorInputRef.current?.click()}
+                  onMouseDown={(e) => { e.preventDefault(); textColorInputRef.current?.click(); }}
                   className="px-2 py-1.5 text-xs rounded border border-dashed border-gray-400 dark:border-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
                   title="색 직접 선택"
                 >
                   🎨
                 </button>
                 {/* 마크다운 헤딩 */}
-                <button type="button" onClick={() => insertMarkdown('heading1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('heading1'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
                   H1
                 </button>
-                <button type="button" onClick={() => insertMarkdown('heading2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('heading2'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
                   H2
                 </button>
-                <button type="button" onClick={() => insertMarkdown('heading3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('heading3'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
                   H3
                 </button>
-                <button type="button" onClick={() => formatText('insertUnorderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="글머리">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('insertUnorderedList'); }} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="글머리">
                   • 목록
                 </button>
-                <button type="button" onClick={() => formatText('insertOrderedList')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="번호">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('insertOrderedList'); }} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="번호">
                   1. 목록
                 </button>
-                <button type="button" onClick={() => insertMarkdown('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="체크박스">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('checkbox'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="체크박스">
                   ☑ 할일
                 </button>
                 {/* 마크다운 추가 기능 */}
-                <button type="button" onClick={() => insertMarkdown('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('quote'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
                   " 인용
                 </button>
-                <button type="button" onClick={() => insertMarkdown('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('code'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
                   {'<>'} 코드
                 </button>
-                <button type="button" onClick={() => insertMarkdown('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('link'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
                   🔗 링크
                 </button>
                 {/* 이미지 업로드 버튼 */}
@@ -1026,7 +815,7 @@ function MemoPageContent() {
                 />
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
+                  onMouseDown={(e) => { e.preventDefault(); fileInputRef.current?.click(); }}
                   disabled={isUploading}
                   className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"
                   title="이미지 추가"
@@ -1041,8 +830,18 @@ function MemoPageContent() {
                   contentEditable
                   onKeyDown={handleEditorKeyDown}
                   onInput={handleEditorInput}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  onTouchStart={(e) => {
+                    // iOS에서 터치 시 포커스 명시적 처리
+                    e.currentTarget.focus();
+                  }}
                   className="min-h-[200px] py-3 text-[14px] text-gray-900 dark:text-white focus:outline-none"
-                  style={{ whiteSpace: 'pre-wrap' }}
+                  style={{ 
+                    whiteSpace: 'pre-wrap',
+                    WebkitUserSelect: 'text',
+                    userSelect: 'text'
+                  }}
                   suppressContentEditableWarning
                   data-placeholder="오늘 하루를 기록해보세요..."
                 />
