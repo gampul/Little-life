@@ -98,6 +98,17 @@ function MemoPageContent() {
     }));
   };
 
+  // Android 모바일 지원: 버튼 터치 시작 시점에 커서 위치 저장
+  const saveSelectionBeforeTap = () => {
+    // onTouchStart가 blur보다 먼저 발생 → 이 시점에서 selectionStart가 아직 유효
+    if (textareaRef.current) {
+      lastSelectionRef.current = {
+        start: textareaRef.current.selectionStart,
+        end: textareaRef.current.selectionEnd,
+      };
+    }
+  };
+
   // Textarea 마크다운 삽입 함수
   const insertMarkdownSyntax = (syntax: 'bold' | 'italic' | 'underline' | 'h1' | 'h2' | 'h3' | 'list' | 'quote' | 'code' | 'link' | 'checkbox') => {
     if (!textareaRef.current) return;
@@ -751,37 +762,37 @@ function MemoPageContent() {
             {/* 툴바 (작성 모드에서만 표시) */}
             {editorMode === 'write' && (
               <div className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center">
-                <button type="button" onClick={() => insertMarkdownSyntax('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
                   <strong>B</strong>
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
                   <em>I</em>
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
                   <u>U</u>
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('h1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('h1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
                   H1
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('h2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('h2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
                   H2
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('h3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('h3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
                   H3
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('list')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="목록">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('list')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="목록">
                   • 목록
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="할일">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="할일">
                   ☑ 할일
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
                   " 인용
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
                   {'<>'} 코드
                 </button>
-                <button type="button" onClick={() => insertMarkdownSyntax('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                <button type="button" onTouchStart={saveSelectionBeforeTap} onClick={() => insertMarkdownSyntax('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
                   🔗 링크
                 </button>
                 <input
@@ -794,6 +805,7 @@ function MemoPageContent() {
                 />
                 <button
                   type="button"
+                  onTouchStart={saveSelectionBeforeTap}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                   className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"
@@ -834,6 +846,17 @@ function MemoPageContent() {
                       start: target.selectionStart,
                       end: target.selectionEnd,
                     };
+                  }}
+                  onTouchEnd={() => {
+                    // 탭으로 커서 이동 후 위치 저장 (onSelect 불안정 보완)
+                    requestAnimationFrame(() => {
+                      if (textareaRef.current) {
+                        lastSelectionRef.current = {
+                          start: textareaRef.current.selectionStart,
+                          end: textareaRef.current.selectionEnd,
+                        };
+                      }
+                    });
                   }}
                   placeholder="마크다운으로 작성하세요...&#10;&#10;# 제목&#10;## 부제목&#10;**굵게** *기울임*&#10;- 목록 항목&#10;> 인용구&#10;```코드```"
                   className="w-full min-h-[300px] p-3 text-sm text-gray-900 dark:text-white bg-transparent focus:outline-none resize-none"
