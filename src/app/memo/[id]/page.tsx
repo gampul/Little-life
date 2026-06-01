@@ -219,7 +219,7 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
             lineHeight: 1.8,
           }}
         >
-          {memo.content.startsWith('<') ? (
+          {/<[a-z][\s\S]*>/i.test(memo.content) ? (
             // 기존 HTML 글
             <div dangerouslySetInnerHTML={{ __html: memo.content }} />
           ) : (
