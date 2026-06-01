@@ -17,6 +17,27 @@ import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 
+// 아이콘 컴포넌트
+const IconEdit = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 7H6a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
+    <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
+    <path d="M16 5l3 3" />
+  </svg>
+);
+
+const IconTrash = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+    fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 7l16 0" />
+    <path d="M10 11l0 6" />
+    <path d="M14 11l0 6" />
+    <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12" />
+    <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3" />
+  </svg>
+);
+
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
@@ -456,15 +477,17 @@ function MemoPageContent() {
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
-              className="p-2 text-gray-400 hover:text-blue-500 transition-colors"
+              className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              style={{ touchAction: 'manipulation' }}
             >
-              ✏️
+              <IconEdit />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleDelete(memo); }}
-              className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+              className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              style={{ touchAction: 'manipulation' }}
             >
-              🗑️
+              <IconTrash />
             </button>
           </div>
         </div>
@@ -502,8 +525,20 @@ function MemoPageContent() {
                 <span>💬 {memo.comments || 0}</span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={(e) => { e.stopPropagation(); handleEdit(memo); }} className="p-1 text-gray-400 hover:text-blue-500">✏️</button>
-                <button onClick={(e) => { e.stopPropagation(); handleDelete(memo); }} className="p-1 text-gray-400 hover:text-red-500">🗑️</button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleEdit(memo); }} 
+                  className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <IconEdit />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleDelete(memo); }} 
+                  className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <IconTrash />
+                </button>
               </div>
             </div>
           </div>
@@ -542,15 +577,17 @@ function MemoPageContent() {
               </span>
               <button
                 onClick={(e) => { e.stopPropagation(); handleEdit(memo); }}
-                className="ml-auto text-gray-400 hover:text-blue-500 transition-colors"
+                className="ml-auto p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                style={{ touchAction: 'manipulation' }}
               >
-                ✏️
+                <IconEdit />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(memo); }}
-                className="text-gray-400 hover:text-red-500 transition-colors"
+                className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                style={{ touchAction: 'manipulation' }}
               >
-                🗑️
+                <IconTrash />
               </button>
             </div>
           </div>
