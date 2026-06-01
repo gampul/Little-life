@@ -14,21 +14,6 @@ import remarkGfm from 'remark-gfm';
 // 이미지 업로드 최대 크기 (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-/** 줄 시작 `컬러` + 스페이스 → 대표 색상 선택 */
-const INLINE_COLOR_TRIGGER = '컬러';
-
-/** 글자색 툴바 프리셋 */
-const TEXT_COLOR_PRESETS: { hex: string; label: string }[] = [
-  { hex: '#111827', label: '검정' },
-  { hex: '#6b7280', label: '회색' },
-  { hex: '#dc2626', label: '빨강' },
-  { hex: '#ea580c', label: '주황' },
-  { hex: '#ca8a04', label: '황토' },
-  { hex: '#16a34a', label: '초록' },
-  { hex: '#2563eb', label: '파랑' },
-  { hex: '#7c3aed', label: '보라' },
-];
-
 interface Memo {
   id?: string;
   title: string;
@@ -350,12 +335,7 @@ function MemoPageContent() {
           });
           setEditingId(data.id);
           setShowEditor(true);
-          // 에디터에 내용 설정
-          setTimeout(() => {
-            if (editorRef.current) {
-              editorRef.current.innerHTML = data.content || '';
-            }
-          }, 100);
+          setEditorMode('write');
           // URL에서 edit 파라미터 제거
           router.replace('/memo', { scroll: false });
         }
@@ -383,10 +363,7 @@ function MemoPageContent() {
       return;
     }
     
-    const editorContent = editorRef.current?.innerHTML || formData.content || '';
-    const textContent = editorRef.current?.textContent || '';
-    
-    if (!textContent.trim()) {
+    if (!formData.content.trim()) {
       setMessage('❌ 메모 내용을 입력해주세요.');
       setTimeout(() => setMessage(''), 3000);
       return;
@@ -401,7 +378,7 @@ function MemoPageContent() {
           .from('memos')
           .update({
             title: formData.title,
-            content: editorContent,
+            content: formData.content,
             updated_at: new Date().toISOString(),
           })
           .eq('id', editingId);
@@ -413,7 +390,7 @@ function MemoPageContent() {
           .from('memos')
           .insert([{
             title: formData.title,
-            content: editorContent,
+            content: formData.content,
           }]);
 
         if (error) throw error;
@@ -421,13 +398,9 @@ function MemoPageContent() {
       }
 
       setShowEditor(false);
-      setInlineColorPickerPos(null);
       setFormData({ title: '', content: '' });
       setEditingId(null);
-      
-      if (editorRef.current) {
-        editorRef.current.innerHTML = '';
-      }
+      setEditorMode('write');
       
       await loadMemos(1);
       setTimeout(() => setMessage(''), 3000);
@@ -444,31 +417,27 @@ function MemoPageContent() {
   };
 
   const handleWrite = () => {
-    setInlineColorPickerPos(null);
     setShowEditor(true);
     setEditingId(null);
     setFormData({ title: '', content: '' });
+    setEditorMode('write');
     setTimeout(() => {
-      if (editorRef.current) {
-        editorRef.current.innerHTML = '';
-        editorRef.current.focus();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
       }
     }, 100);
   };
 
   const handleEdit = (memo: Memo) => {
-    setInlineColorPickerPos(null);
     setShowEditor(true);
     setEditingId(memo.id || null);
     setFormData({
       title: memo.title,
       content: memo.content,
     });
+    setEditorMode('write');
     setTimeout(() => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      if (editorRef.current) {
-        editorRef.current.innerHTML = memo.content || '';
-      }
     }, 100);
   };
 
@@ -514,7 +483,22 @@ function MemoPageContent() {
 
   // 메모 카드 렌더링
   const renderMemoCard = (memo: Memo) => {
-    const textPreview = extractText(memo.content);
+    // HTML/마크다운 판별 및 미리보기 생성
+    const isHtml = memo.content.startsWith('<');
+    let textPreview = '';
+    
+    if (isHtml) {
+      // 기존 HTML 글: HTML에서 텍스트 추출
+      textPreview = extractText(memo.content).substring(0, 150);
+    } else {
+      // 새 마크다운 글: 마크다운 기호 제거하고 텍스트만
+      textPreview = memo.content
+        .replace(/[#*`>\-\[\]]/g, '')  // 마크다운 기호 제거
+        .replace(/!\[.*?\]\(.*?\)/g, '[이미지]')  // 이미지 링크 → [이미지]
+        .trim()
+        .substring(0, 150);
+    }
+    
     const thumbnail = extractFirstImage(memo.content);
     const isLiked = likedMemos.has(memo.id || '');
     const likeCount = (memo.likes || 0) + (isLiked ? 1 : 0);
@@ -716,95 +700,77 @@ function MemoPageContent() {
         {showEditor && (
           <>
           <div className="bg-white dark:bg-gray-800 rounded-xl p-4 sm:p-5 mb-4">
-            <div className="-mx-4 sm:-mx-5">
-              <div className="mb-3 px-2">
-                <input
-                  type="text"
-                  value={formData.title || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="제목을 입력하세요"
-                  className="w-full px-0 py-2 text-base sm:text-lg font-semibold bg-transparent text-gray-900 dark:text-white border-0 border-b border-transparent focus:border-blue-500 outline-none"
-                />
-              </div>
+            {/* 제목 입력 */}
+            <div className="mb-3">
+              <input
+                type="text"
+                value={formData.title || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="제목을 입력하세요"
+                className="w-full px-0 py-2 text-base sm:text-lg font-semibold bg-transparent text-gray-900 dark:text-white border-0 border-b border-gray-300 dark:border-gray-600 focus:border-blue-500 outline-none"
+              />
+            </div>
 
-              {/* 포맷 툴바 */}
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-t-lg px-2 py-2 flex flex-wrap gap-1 items-center">
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('bold'); }} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
+            {/* 작성/미리보기 탭 */}
+            <div className="flex gap-2 mb-3 border-b border-gray-300 dark:border-gray-600">
+              <button
+                onClick={() => setEditorMode('write')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  editorMode === 'write'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                ✏️ 작성
+              </button>
+              <button
+                onClick={() => setEditorMode('preview')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  editorMode === 'preview'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                👁️ 미리보기
+              </button>
+            </div>
+
+            {/* 툴바 (작성 모드에서만 표시) */}
+            {editorMode === 'write' && (
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg px-2 py-2 mb-2 flex flex-wrap gap-1 items-center">
+                <button type="button" onClick={() => insertMarkdownSyntax('bold')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="굵게">
                   <strong>B</strong>
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('italic'); }} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
+                <button type="button" onClick={() => insertMarkdownSyntax('italic')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="기울임">
                   <em>I</em>
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('underline'); }} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
+                <button type="button" onClick={() => insertMarkdownSyntax('underline')} className="p-2 text-sm rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="밑줄">
                   <u>U</u>
                 </button>
-                <button
-                  type="button"
-                  onMouseDown={(e) => { e.preventDefault(); applyDefaultTextColor(); }}
-                  className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 font-semibold text-gray-800 dark:text-gray-100"
-                  title="기본 글자색 (테마)"
-                >
-                  A
-                </button>
-                {TEXT_COLOR_PRESETS.map(({ hex, label }) => (
-                  <button
-                    key={hex}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); applyTextColor(hex); }}
-                    title={label}
-                    className="w-6 h-6 min-w-[1.5rem] rounded border border-gray-300 dark:border-gray-500 shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    style={{ backgroundColor: hex }}
-                  />
-                ))}
-                <input
-                  ref={textColorInputRef}
-                  type="color"
-                  defaultValue="#2563eb"
-                  className="sr-only"
-                  aria-label="글자 색 직접 선택"
-                  onChange={(e) => {
-                    applyTextColor(e.target.value);
-                    setInlineColorPickerPos(null);
-                  }}
-                />
-                <button
-                  type="button"
-                  onMouseDown={(e) => { e.preventDefault(); textColorInputRef.current?.click(); }}
-                  className="px-2 py-1.5 text-xs rounded border border-dashed border-gray-400 dark:border-gray-500 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  title="색 직접 선택"
-                >
-                  🎨
-                </button>
-                {/* 마크다운 헤딩 */}
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('heading1'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
+                <button type="button" onClick={() => insertMarkdownSyntax('h1')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 1">
                   H1
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('heading2'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
+                <button type="button" onClick={() => insertMarkdownSyntax('h2')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 2">
                   H2
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('heading3'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
+                <button type="button" onClick={() => insertMarkdownSyntax('h3')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="제목 3">
                   H3
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('insertUnorderedList'); }} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="글머리">
+                <button type="button" onClick={() => insertMarkdownSyntax('list')} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="목록">
                   • 목록
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); formatText('insertOrderedList'); }} className="p-2 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="번호">
-                  1. 목록
-                </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('checkbox'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="체크박스">
+                <button type="button" onClick={() => insertMarkdownSyntax('checkbox')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="할일">
                   ☑ 할일
                 </button>
-                {/* 마크다운 추가 기능 */}
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('quote'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
+                <button type="button" onClick={() => insertMarkdownSyntax('quote')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="인용구">
                   " 인용
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('code'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
+                <button type="button" onClick={() => insertMarkdownSyntax('code')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="코드">
                   {'<>'} 코드
                 </button>
-                <button type="button" onMouseDown={(e) => { e.preventDefault(); insertMarkdown('link'); }} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
+                <button type="button" onClick={() => insertMarkdownSyntax('link')} className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600" title="링크">
                   🔗 링크
                 </button>
-                {/* 이미지 업로드 버튼 */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -815,7 +781,7 @@ function MemoPageContent() {
                 />
                 <button
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); fileInputRef.current?.click(); }}
+                  onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                   className="px-2 py-1.5 text-xs rounded hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-1 disabled:opacity-50"
                   title="이미지 추가"
@@ -823,32 +789,34 @@ function MemoPageContent() {
                   {isUploading ? '⏳' : '📷'} 이미지
                 </button>
               </div>
+            )}
 
-              <div className="bg-white dark:bg-gray-800 rounded-b-lg overflow-hidden px-2">
-                <div
-                  ref={editorRef}
-                  contentEditable
-                  onKeyDown={handleEditorKeyDown}
-                  onInput={handleEditorInput}
-                  onCompositionStart={handleCompositionStart}
-                  onCompositionEnd={handleCompositionEnd}
-                  onTouchStart={(e) => {
-                    // iOS에서 터치 시 포커스 명시적 처리
-                    e.currentTarget.focus();
-                  }}
-                  className="min-h-[200px] py-3 text-[14px] text-gray-900 dark:text-white focus:outline-none"
-                  style={{ 
-                    whiteSpace: 'pre-wrap',
-                    WebkitUserSelect: 'text',
-                    userSelect: 'text'
-                  }}
-                  suppressContentEditableWarning
-                  data-placeholder="오늘 하루를 기록해보세요..."
+            {/* 에디터/미리보기 영역 */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
+              {editorMode === 'write' ? (
+                <textarea
+                  ref={textareaRef}
+                  value={formData.content}
+                  onChange={handleTextareaChange}
+                  placeholder="마크다운으로 작성하세요...&#10;&#10;# 제목&#10;## 부제목&#10;**굵게** *기울임*&#10;- 목록 항목&#10;> 인용구&#10;```코드```"
+                  className="w-full min-h-[300px] p-3 text-sm text-gray-900 dark:text-white bg-transparent focus:outline-none resize-none"
+                  style={{ fontFamily: 'inherit' }}
                 />
-              </div>
+              ) : (
+                <div className="p-3 min-h-[300px] text-sm text-gray-900 dark:text-white prose prose-sm dark:prose-invert max-w-none">
+                  {formData.content ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {formData.content}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-gray-400">미리보기할 내용이 없습니다.</p>
+                  )}
+                </div>
+              )}
             </div>
 
-            <div className="mt-3 -mx-4 sm:-mx-5 px-2 flex gap-2">
+            {/* 저장/취소 버튼 */}
+            <div className="mt-3 flex gap-2">
               <button
                 onClick={handleSave}
                 disabled={isSaving}
@@ -858,64 +826,24 @@ function MemoPageContent() {
               </button>
               <button
                 onClick={() => {
-                  setInlineColorPickerPos(null);
                   setShowEditor(false);
                   setFormData({ title: '', content: '' });
                   setEditingId(null);
+                  setEditorMode('write');
                 }}
-                className="px-4 py-2.5 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg transition-colors hover:bg-gray-300 dark:hover:bg-gray-600"
+                className="px-4 py-2.5 text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-white rounded-lg transition-colors"
               >
                 취소
               </button>
             </div>
-            
+
+            {/* 메시지 표시 */}
             {message && (
               <div className={`mt-2 text-sm text-center ${message.includes('✅') ? 'text-green-600' : 'text-red-600'}`}>
                 {message}
               </div>
             )}
           </div>
-
-          {inlineColorPickerPos && (
-            <div
-              ref={inlineColorPickerRef}
-              role="dialog"
-              aria-label="글자 색 선택"
-              className="fixed z-[200] rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-xl p-2.5 w-[200px]"
-              style={{ top: inlineColorPickerPos.top, left: inlineColorPickerPos.left }}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">대표 색상</p>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  title="기본 글자색"
-                  onClick={() => pickInlineDefaultColor()}
-                  className="px-2 py-1 text-[11px] rounded-md border border-gray-300 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-100"
-                >
-                  기본
-                </button>
-                {TEXT_COLOR_PRESETS.map(({ hex, label }) => (
-                  <button
-                    key={`inline-${hex}`}
-                    type="button"
-                    title={label}
-                    onClick={() => pickInlineColor(hex)}
-                    className="w-7 h-7 min-w-[1.75rem] rounded-md border border-gray-300 dark:border-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    style={{ backgroundColor: hex }}
-                  />
-                ))}
-                <button
-                  type="button"
-                  title="색 직접 선택"
-                  onClick={() => textColorInputRef.current?.click()}
-                  className="px-2 py-1 text-[11px] rounded-md border border-dashed border-gray-400 dark:border-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  🎨 직접
-                </button>
-              </div>
-            </div>
-          )}
           </>
         )}
 
@@ -967,16 +895,6 @@ function MemoPageContent() {
       <FooterNav />
 
       <style jsx global>{`
-        [contenteditable][data-placeholder]:empty:before {
-          content: attr(data-placeholder);
-          color: rgb(156 163 175);
-          pointer-events: none;
-        }
-        
-        .dark [contenteditable][data-placeholder]:empty:before {
-          color: rgb(107 114 128);
-        }
-        
         .line-clamp-2 {
           display: -webkit-box;
           -webkit-line-clamp: 2;

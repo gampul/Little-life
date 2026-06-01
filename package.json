@@ -21,6 +21,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.76.1",
     "@tabler/icons-react": "^3.44.0",
+    "@tailwindcss/typography": "^0.5.19",
     "dotenv": "^17.2.3",
     "lexical": "^0.38.2",
     "next": "^16.1.1",

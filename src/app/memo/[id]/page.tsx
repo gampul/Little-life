@@ -6,6 +6,8 @@ import { getSupabase } from '../../../lib/supabase';
 import { GlobalNav } from '../../components/GlobalNav';
 import { FooterNav } from '../../components/FooterNav';
 import { APP_HORIZONTAL_CONTAINER } from '../../components/container';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Memo {
   id?: string;
@@ -212,12 +214,21 @@ export default function MemoDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* 본문 내용 */}
         <div 
-          className="memo-content prose dark:prose-invert max-w-none mb-8 text-[14px]"
-          dangerouslySetInnerHTML={{ __html: memo.content }}
+          className="memo-content prose prose-sm dark:prose-invert max-w-none mb-8 text-[14px]"
           style={{
             lineHeight: 1.8,
           }}
-        />
+        >
+          {memo.content.startsWith('<') ? (
+            // 기존 HTML 글
+            <div dangerouslySetInnerHTML={{ __html: memo.content }} />
+          ) : (
+            // 새 마크다운 글
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {memo.content}
+            </ReactMarkdown>
+          )}
+        </div>
 
         {/* 하단 액션 */}
         <div className="flex items-center justify-between py-4 border-t border-gray-200 dark:border-gray-700">
