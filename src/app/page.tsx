@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
 import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
 import { PendingSmsPopup } from './components/PendingSmsPopup';
@@ -2582,9 +2583,11 @@ export default function Home() {
                     unit={routine.unit}
                     syncTick={routineSyncTick}
                     onSync={bumpRoutineSync}
+                    imageUploadEnabled={!!routine.image_upload_enabled}
+                    routineTemplateData={routine}
                   />
-                  {/* 확장된 루틴의 캘린더 표시 */}
-                  {expandedRoutineId === routine.id && (
+                  {/* 확장된 루틴의 캘린더 표시 (이미지 업로드가 아닌 루틴만) */}
+                  {expandedRoutineId === routine.id && !routine.image_upload_enabled && (
                     <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
                       <RoutineCalendar
                         userId={userId}
@@ -2597,7 +2600,7 @@ export default function Home() {
                         setEditModeRoutine={setEditModeRoutine}
                         syncTick={routineSyncTick}
                         onSync={bumpRoutineSync}
-                        imageUploadEnabled={!!routine.image_upload_enabled}
+                        imageUploadEnabled={false}
                       />
                     </div>
                   )}
@@ -3016,6 +3019,9 @@ function RoutineItem({
   unit,
   syncTick,
   onSync,
+  imageUploadEnabled = false,
+  onPhotoManagementClick,
+  routineTemplateData,
 }: {
   emoji: string;
   label: string;
@@ -3036,7 +3042,11 @@ function RoutineItem({
   unit?: string;
   syncTick: number;
   onSync: () => void;
+  imageUploadEnabled?: boolean;
+  onPhotoManagementClick?: () => void;
+  routineTemplateData?: RoutineTemplate;
 }) {
+  const router = useRouter();
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
@@ -3045,6 +3055,15 @@ function RoutineItem({
     dateStr: string;
     valueText: string;
   }>({ open: false, dateStr: '', valueText: '' });
+  const [integratedInputModal, setIntegratedInputModal] = useState<{
+    open: boolean;
+    dateStr: string;
+    valueText: string;
+    selectedImage: File | null;
+    previewUrl: string | null;
+    isUploading: boolean;
+  }>({ open: false, dateStr: '', valueText: '', selectedImage: null, previewUrl: null, isUploading: false });
+  const [photoManagementOpen, setPhotoManagementOpen] = useState(false);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -3256,6 +3275,20 @@ function RoutineItem({
     
     const newChecked = !isTodayChecked;
     
+    // 숫자 타입 루틴이고 체크하려는 경우, 통합 입력 모달 열기
+    if (routineType === 'number' && newChecked) {
+      const currentValue = numberDateValues[todayDateStr] ?? null;
+      setIntegratedInputModal({
+        open: true,
+        dateStr: todayDateStr,
+        valueText: currentValue !== null ? currentValue.toFixed(1) : '0.0',
+        selectedImage: null,
+        previewUrl: null,
+        isUploading: false
+      });
+      return;
+    }
+    
     // Supabase에 저장
     if (supabase) {
       try {
@@ -3449,6 +3482,137 @@ function RoutineItem({
       alert(`오류 발생: ${err}`);
     }
   };
+
+  // 통합 입력 모달 저장 (숫자 + 이미지)
+  const saveIntegratedInput = async () => {
+    if (!supabase) return;
+
+    const { dateStr, valueText, selectedImage } = integratedInputModal;
+    const trimmed = String(valueText ?? '').trim();
+
+    let numValue: number | null = null;
+    if (trimmed !== '') {
+      const parsed = parseFloat(trimmed);
+      if (Number.isNaN(parsed)) {
+        alert('올바른 숫자를 입력해주세요.');
+        return;
+      }
+      numValue = Math.round(parsed * 10) / 10;
+    }
+
+    setIntegratedInputModal(prev => ({ ...prev, isUploading: true }));
+
+    try {
+      let imageUrl: string | null = null;
+
+      // 이미지 업로드
+      if (selectedImage) {
+        const fileExt = selectedImage.name.split('.').pop() || 'jpg';
+        const filePath = `${userId}/${routineId}/${dateStr}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('routine-images')
+          .upload(filePath, selectedImage, { upsert: true });
+
+        if (uploadError) {
+          console.error('이미지 업로드 오류:', uploadError);
+          alert('이미지 업로드에 실패했습니다.');
+          setIntegratedInputModal(prev => ({ ...prev, isUploading: false }));
+          return;
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('routine-images')
+          .getPublicUrl(filePath);
+
+        imageUrl = urlData.publicUrl;
+      }
+
+      // DB에 저장
+      const { error: dbError } = await supabase
+        .from('daily_routine_checks')
+        .upsert(
+          {
+            user_id: userId,
+            date: dateStr,
+            routine_id: routineId,
+            checked: true,
+            value: numValue,
+            ...(imageUrl && { image_url: imageUrl })
+          },
+          {
+            onConflict: 'user_id,date,routine_id',
+          }
+        );
+
+      if (dbError) {
+        console.error('DB 저장 오류:', dbError);
+        alert(`저장 실패: ${dbError.message || '알 수 없는 오류'}`);
+        setIntegratedInputModal(prev => ({ ...prev, isUploading: false }));
+        return;
+      }
+
+      // UI 업데이트
+      if (numValue !== null) {
+        setNumberDateValues(prev => ({ ...prev, [dateStr]: numValue! }));
+      }
+      
+      setCheckedDates(prev => {
+        const newData = { ...prev };
+        if (!newData[dateStr]) {
+          newData[dateStr] = new Set();
+        }
+        newData[dateStr].add(routineId);
+        return newData;
+      });
+
+      onSync();
+      onChange(); // 부모 컴포넌트 상태 업데이트
+
+      // 모달 닫기
+      setIntegratedInputModal({
+        open: false,
+        dateStr: '',
+        valueText: '',
+        selectedImage: null,
+        previewUrl: null,
+        isUploading: false
+      });
+    } catch (err) {
+      console.error('저장 오류:', err);
+      alert(`오류 발생: ${err}`);
+      setIntegratedInputModal(prev => ({ ...prev, isUploading: false }));
+    }
+  };
+
+  // 독서 일기 쓰기 버튼 클릭 핸들러
+  const handleWriteDiary = () => {
+    const { dateStr } = integratedInputModal;
+    
+    // 미리보기 URL 정리
+    if (integratedInputModal.previewUrl) {
+      URL.revokeObjectURL(integratedInputModal.previewUrl);
+    }
+
+    // 모달 닫기
+    setIntegratedInputModal({
+      open: false,
+      dateStr: '',
+      valueText: '',
+      selectedImage: null,
+      previewUrl: null,
+      isUploading: false
+    });
+
+    // /diary 페이지로 이동 (URL 파라미터 전달)
+    const params = new URLSearchParams({
+      date: dateStr,
+      from: 'routine',
+      routineId: routineId,
+      label: label
+    });
+    router.push(`/diary?${params.toString()}`);
+  };
   
   return (
     <div>
@@ -3520,6 +3684,249 @@ function RoutineItem({
                 }}
               >
                 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 통합 입력 바텀시트 (숫자 + 이미지) */}
+      {integratedInputModal.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="루틴 기록"
+        >
+          <div
+            className="absolute inset-0 bg-black/40 transition-opacity"
+            onClick={() => {
+              if (!integratedInputModal.isUploading) {
+                setIntegratedInputModal({
+                  open: false,
+                  dateStr: '',
+                  valueText: '',
+                  selectedImage: null,
+                  previewUrl: null,
+                  isUploading: false
+                });
+              }
+            }}
+          />
+          <div className="relative w-full sm:max-w-[480px] rounded-t-3xl sm:rounded-2xl border-t sm:border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl animate-slide-up sm:animate-none max-h-[90vh] flex flex-col">
+            {/* 헤더 */}
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-base font-semibold text-gray-900 dark:text-white">
+                    {label}
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                    {integratedInputModal.dateStr}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (!integratedInputModal.isUploading) {
+                      setIntegratedInputModal({
+                        open: false,
+                        dateStr: '',
+                        valueText: '',
+                        selectedImage: null,
+                        previewUrl: null,
+                        isUploading: false
+                      });
+                    }
+                  }}
+                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  disabled={integratedInputModal.isUploading}
+                >
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* 컨텐츠 영역 - 스크롤 가능 */}
+            <div className="px-5 py-4 flex-1 overflow-y-auto">
+              {/* 숫자 입력 */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {unit ? `${unit} 입력` : '값 입력'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    autoFocus
+                    value={integratedInputModal.valueText}
+                    onChange={(e) =>
+                      setIntegratedInputModal((prev) => ({ ...prev, valueText: e.target.value }))
+                    }
+                    onFocus={(e) => e.target.select()}
+                    placeholder="예: 7.6"
+                    disabled={integratedInputModal.isUploading}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
+                  />
+                  {unit && (
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">
+                      {unit}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  소수점 1자리까지 저장됩니다
+                </div>
+              </div>
+
+              {/* 사진 업로드 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  사진 업로드 (선택)
+                </label>
+                
+                {/* 미리보기 */}
+                {integratedInputModal.previewUrl && (
+                  <div className="mb-3 relative">
+                    <img
+                      src={integratedInputModal.previewUrl}
+                      alt="미리보기"
+                      className="w-full h-48 object-cover rounded-xl"
+                    />
+                    <button
+                      onClick={() => {
+                        if (integratedInputModal.previewUrl) {
+                          URL.revokeObjectURL(integratedInputModal.previewUrl);
+                        }
+                        setIntegratedInputModal(prev => ({
+                          ...prev,
+                          selectedImage: null,
+                          previewUrl: null
+                        }));
+                      }}
+                      disabled={integratedInputModal.isUploading}
+                      className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+
+                {/* 업로드 버튼 */}
+                {!integratedInputModal.previewUrl && (
+                  <div className="flex gap-2">
+                    <label className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const previewUrl = URL.createObjectURL(file);
+                            setIntegratedInputModal(prev => ({
+                              ...prev,
+                              selectedImage: file,
+                              previewUrl
+                            }));
+                          }
+                        }}
+                        disabled={integratedInputModal.isUploading}
+                        className="hidden"
+                      />
+                      <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+                        <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">카메라</span>
+                      </div>
+                    </label>
+                    <label className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const previewUrl = URL.createObjectURL(file);
+                            setIntegratedInputModal(prev => ({
+                              ...prev,
+                              selectedImage: file,
+                              previewUrl
+                            }));
+                          }
+                        }}
+                        disabled={integratedInputModal.isUploading}
+                        className="hidden"
+                      />
+                      <div className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
+                        <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">갤러리</span>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 독서 일기 쓰기 버튼 */}
+            <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={handleWriteDiary}
+                disabled={integratedInputModal.isUploading}
+                className="w-full flex items-center justify-center gap-2 py-3 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors font-medium disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                독서 일기 쓰기
+              </button>
+            </div>
+
+            {/* 액션 버튼 */}
+            <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex gap-3 flex-shrink-0">
+              <button
+                className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
+                onClick={() => {
+                  if (integratedInputModal.previewUrl) {
+                    URL.revokeObjectURL(integratedInputModal.previewUrl);
+                  }
+                  setIntegratedInputModal({
+                    open: false,
+                    dateStr: '',
+                    valueText: '',
+                    selectedImage: null,
+                    previewUrl: null,
+                    isUploading: false
+                  });
+                }}
+                disabled={integratedInputModal.isUploading}
+              >
+                취소
+              </button>
+              <button
+                className="flex-1 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                onClick={saveIntegratedInput}
+                disabled={integratedInputModal.isUploading}
+              >
+                {integratedInputModal.isUploading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    저장 중...
+                  </>
+                ) : (
+                  '저장'
+                )}
               </button>
             </div>
           </div>
@@ -3613,6 +4020,23 @@ function RoutineItem({
                 return buttons;
               })()}
             </div>
+          )}
+          
+          {/* 사진 관리 버튼 (이미지 업로드 루틴일 때) */}
+          {imageUploadEnabled && isExpanded && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setPhotoManagementOpen(true);
+              }}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="사진 관리"
+            >
+              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
           )}
           
           {/* 최근 5일 체크박스 (체크박스 타입일 때) */}
@@ -3721,6 +4145,27 @@ function RoutineItem({
         </div>
       </div>
       {!isLast && <div style={{ height: '0.5px' }} className="bg-gray-200 dark:bg-gray-600"></div>}
+      
+      {/* 확장된 루틴의 캘린더 표시 */}
+      {isExpanded && imageUploadEnabled && routineTemplateData && (
+        <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
+          <RoutineCalendar
+            userId={userId}
+            routineId={routineId}
+            routineLabel={label}
+            routineEmoji={emoji}
+            routineTemplates={routineTemplates}
+            isExpanded={true}
+            editModeRoutine={editModeRoutine}
+            setEditModeRoutine={setEditModeRoutine}
+            syncTick={syncTick}
+            onSync={onSync}
+            imageUploadEnabled={imageUploadEnabled}
+            photoManagementOpen={photoManagementOpen}
+            onPhotoManagementOpenChange={setPhotoManagementOpen}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -3766,6 +4211,8 @@ function RoutineCalendar({
   syncTick,
   onSync,
   imageUploadEnabled = false,
+  photoManagementOpen = false,
+  onPhotoManagementOpenChange,
 }: {
   userId: string;
   routineId: string;
@@ -3778,6 +4225,8 @@ function RoutineCalendar({
   syncTick: number;
   onSync: () => void;
   imageUploadEnabled?: boolean;
+  photoManagementOpen?: boolean;
+  onPhotoManagementOpenChange?: (open: boolean) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [dateValues, setDateValues] = useState<Record<string, number>>({});
@@ -3794,6 +4243,12 @@ function RoutineCalendar({
   } | null>(null);
   const [isModalSaving, setIsModalSaving] = useState(false);
   const [isModalDeleting, setIsModalDeleting] = useState(false);
+  const [fullImageView, setFullImageView] = useState<{
+    open: boolean;
+    imageUrl: string;
+    date: string;
+    minutes: number | null;
+  } | null>(null);
   const calendarScrollRef = useRef<HTMLDivElement>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
@@ -4673,13 +5128,23 @@ function RoutineCalendar({
                         }}
                         onClick={() => {
                           if (!inEditMode && isCurrentMonth && imageUploadEnabled) {
-                            setReadingModal({
-                              date,
-                              minutes: minutes ?? null,
-                              bookTitle: bookTitles[date] ?? '',
-                              memo: memos[date] ?? '',
-                              imgUrl: imgUrl ?? null
-                            });
+                            // 사진이 있으면 풀스크린 뷰어, 없으면 독서 입력 모달
+                            if (imgUrl) {
+                              setFullImageView({
+                                open: true,
+                                imageUrl: imgUrl,
+                                date: date,
+                                minutes: minutes ?? null
+                              });
+                            } else {
+                              setReadingModal({
+                                date,
+                                minutes: minutes ?? null,
+                                bookTitle: bookTitles[date] ?? '',
+                                memo: memos[date] ?? '',
+                                imgUrl: imgUrl ?? null
+                              });
+                            }
                           }
                         }}
                       >
@@ -5321,6 +5786,197 @@ function RoutineCalendar({
               >
                 {isModalSaving ? '저장 중...' : '저장'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 풀스크린 이미지 뷰어 */}
+      {fullImageView && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+          onClick={() => setFullImageView(null)}
+        >
+          <button
+            onClick={() => setFullImageView(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/50 hover:bg-black/70 text-white transition-colors z-10"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          
+          <div className="relative max-w-4xl max-h-[90vh] w-full" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={fullImageView.imageUrl}
+              alt="독서 사진"
+              className="w-full h-full object-contain rounded-lg"
+            />
+            
+            {/* 하단 정보 */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent rounded-b-lg">
+              <div className="text-white text-center">
+                <div className="text-lg font-semibold">
+                  {new Date(fullImageView.date).toLocaleDateString('ko-KR', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}
+                </div>
+                {fullImageView.minutes && (
+                  <div className="text-sm text-gray-300 mt-1">
+                    독서 시간: {fullImageView.minutes}분
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 사진 관리 시트 */}
+      {photoManagementOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          onClick={() => onPhotoManagementOpenChange?.(false)}
+        >
+          <div className="absolute inset-0 bg-black/40 transition-opacity" />
+          <div 
+            className="relative w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl bg-white dark:bg-gray-900 shadow-2xl max-h-[80vh] flex flex-col animate-slide-up sm:animate-none"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 헤더 */}
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                사진 관리 ({selectedYear}년 {selectedMonth}월)
+              </h2>
+              <button
+                onClick={() => onPhotoManagementOpenChange?.(false)}
+                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 날짜 목록 */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="space-y-3">
+                {(() => {
+                  const monthNum = parseInt(selectedMonth);
+                  const daysInMonth = new Date(selectedYear, monthNum, 0).getDate();
+                  const dates = [];
+                  
+                  for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${selectedYear}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    dates.push(dateStr);
+                  }
+
+                  return dates.map((dateStr) => {
+                    const imgUrl = imageUrls[dateStr];
+                    const isUploading = uploadingDate === dateStr;
+                    const dayNum = parseInt(dateStr.split('-')[2]);
+
+                    return (
+                      <div
+                        key={dateStr}
+                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                      >
+                        {/* 날짜 */}
+                        <div className="w-16 text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {monthNum}월 {dayNum}일
+                        </div>
+
+                        {/* 썸네일 */}
+                        <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
+                          {isUploading ? (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                          ) : imgUrl ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img
+                              src={imgUrl}
+                              alt={`${dateStr} 독서`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 액션 버튼 */}
+                        <div className="flex-1 flex gap-2 justify-end">
+                          <label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  await handleImageUpload(dateStr, file);
+                                }
+                                e.target.value = '';
+                              }}
+                              disabled={isUploading}
+                            />
+                            <div className="px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors cursor-pointer">
+                              {imgUrl ? '변경' : '업로드'}
+                            </div>
+                          </label>
+                          
+                          {imgUrl && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`${dateStr} 사진을 삭제하시겠습니까?`)) return;
+                                
+                                try {
+                                  if (!supabase) return;
+                                  
+                                  // Storage에서 삭제
+                                  const fileExt = imgUrl.split('.').pop()?.split('?')[0] || 'jpg';
+                                  const filePath = `${userId}/${routineId}/${dateStr}.${fileExt}`;
+                                  await supabase.storage.from('routine-images').remove([filePath]);
+                                  
+                                  // DB에서 image_url 제거
+                                  await supabase
+                                    .from('daily_routine_checks')
+                                    .update({ image_url: null })
+                                    .eq('user_id', userId)
+                                    .eq('routine_id', routineId)
+                                    .eq('date', dateStr);
+                                  
+                                  // UI 업데이트
+                                  setImageUrls(prev => {
+                                    const next = { ...prev };
+                                    delete next[dateStr];
+                                    return next;
+                                  });
+                                  onSync();
+                                } catch (err) {
+                                  console.error('사진 삭제 오류:', err);
+                                  alert('사진 삭제에 실패했습니다.');
+                                }
+                              }}
+                              disabled={isUploading}
+                              className="px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              삭제
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
           </div>
         </div>
