@@ -3975,6 +3975,29 @@ function RoutineItem({
           {/* 숫자 입력 필드 (숫자 타입일 때) - 최근 5일 */}
           {routineType === 'number' && unit && (
             <div className="flex items-center gap-1 shrink-0">
+              {/* 오늘 날짜 체크박스 (숫자 타입) */}
+              <div
+                onClick={handleTodayToggle}
+                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer mr-1 ${
+                  isTodayChecked
+                    ? 'bg-blue-500 border-blue-500'
+                    : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600'
+                }`}
+                title="오늘 기록 추가"
+              >
+                {isTodayChecked && (
+                  <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+                    <path
+                      d="M1 4L4.5 7.5L11 1"
+                      stroke="white"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+              </div>
+              
               {(() => {
                 const today = new Date();
                 const buttons = [];
