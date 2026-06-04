@@ -3604,14 +3604,14 @@ function RoutineItem({
       isUploading: false
     });
 
-    // /diary 페이지로 이동 (URL 파라미터 전달)
+    // /memo 페이지로 이동 (URL 파라미터 전달)
     const params = new URLSearchParams({
       date: dateStr,
       from: 'routine',
       routineId: routineId,
       label: label
     });
-    router.push(`/diary?${params.toString()}`);
+    router.push(`/memo?${params.toString()}`);
   };
   
   return (

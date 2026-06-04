@@ -363,6 +363,34 @@ function MemoPageContent() {
     }
   }, [searchParams, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // URL에서 from=routine 파라미터 처리 (독서 루틴에서 일기 쓰기 버튼 클릭 시)
+  useEffect(() => {
+    const from = searchParams.get('from');
+    const date = searchParams.get('date');
+    const label = searchParams.get('label');
+    
+    if (from === 'routine' && date && label) {
+      // 날짜를 포맷팅 (예: 2025-01-15 -> 2025년 1월 15일)
+      const dateObj = new Date(date);
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth() + 1;
+      const day = dateObj.getDate();
+      
+      // 제목 자동 완성
+      const autoTitle = `📚 ${year}년 ${month}월 ${day}일 ${label} 기록`;
+      
+      setFormData({
+        title: autoTitle,
+        content: '',
+      });
+      setEditingId(null);
+      setShowEditor(true);
+      
+      // URL에서 파라미터 제거
+      router.replace('/memo', { scroll: false });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 좋아요 토글
   const handleLike = (memoId: string) => {
     setLikedMemos(prev => {
