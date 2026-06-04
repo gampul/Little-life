@@ -3998,23 +3998,6 @@ function RoutineItem({
             </div>
           )}
           
-          {/* 사진 관리 버튼 (이미지 업로드 루틴일 때) */}
-          {imageUploadEnabled && isExpanded && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setPhotoManagementOpen(true);
-              }}
-              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              title="사진 관리"
-            >
-              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          )}
-          
           {/* 최근 5일 체크박스 (체크박스 타입일 때) */}
           {routineType === 'checkbox' && (
             <div className="flex items-center gap-1 shrink-0">
@@ -4137,8 +4120,6 @@ function RoutineItem({
             syncTick={syncTick}
             onSync={onSync}
             imageUploadEnabled={imageUploadEnabled}
-            photoManagementOpen={photoManagementOpen}
-            onPhotoManagementOpenChange={setPhotoManagementOpen}
           />
         </div>
       )}
@@ -4187,8 +4168,6 @@ function RoutineCalendar({
   syncTick,
   onSync,
   imageUploadEnabled = false,
-  photoManagementOpen = false,
-  onPhotoManagementOpenChange,
 }: {
   userId: string;
   routineId: string;
@@ -4201,8 +4180,6 @@ function RoutineCalendar({
   syncTick: number;
   onSync: () => void;
   imageUploadEnabled?: boolean;
-  photoManagementOpen?: boolean;
-  onPhotoManagementOpenChange?: (open: boolean) => void;
 }) {
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [dateValues, setDateValues] = useState<Record<string, number>>({});
@@ -5805,153 +5782,6 @@ function RoutineCalendar({
                     독서 시간: {fullImageView.minutes}분
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 사진 관리 시트 */}
-      {photoManagementOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-          onClick={() => onPhotoManagementOpenChange?.(false)}
-        >
-          <div className="absolute inset-0 bg-black/40 transition-opacity" />
-          <div 
-            className="relative w-full sm:max-w-2xl rounded-t-3xl sm:rounded-2xl bg-white dark:bg-gray-900 shadow-2xl max-h-[80vh] flex flex-col animate-slide-up sm:animate-none"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 헤더 */}
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                사진 관리 ({selectedYear}년 {selectedMonth}월)
-              </h2>
-              <button
-                onClick={() => onPhotoManagementOpenChange?.(false)}
-                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* 날짜 목록 */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <div className="space-y-3">
-                {(() => {
-                  const monthNum = parseInt(selectedMonth);
-                  const daysInMonth = new Date(selectedYear, monthNum, 0).getDate();
-                  const dates = [];
-                  
-                  for (let day = 1; day <= daysInMonth; day++) {
-                    const dateStr = `${selectedYear}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    dates.push(dateStr);
-                  }
-
-                  return dates.map((dateStr) => {
-                    const imgUrl = imageUrls[dateStr];
-                    const isUploading = uploadingDate === dateStr;
-                    const dayNum = parseInt(dateStr.split('-')[2]);
-
-                    return (
-                      <div
-                        key={dateStr}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
-                      >
-                        {/* 날짜 */}
-                        <div className="w-16 text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {monthNum}월 {dayNum}일
-                        </div>
-
-                        {/* 썸네일 */}
-                        <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-200 dark:bg-gray-700">
-                          {isUploading ? (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                            </div>
-                          ) : imgUrl ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img
-                              src={imgUrl}
-                              alt={`${dateStr} 독서`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 액션 버튼 */}
-                        <div className="flex-1 flex gap-2 justify-end">
-                          <label>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                  await handleImageUpload(dateStr, file);
-                                }
-                                e.target.value = '';
-                              }}
-                              disabled={isUploading}
-                            />
-                            <div className="px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors cursor-pointer">
-                              {imgUrl ? '변경' : '업로드'}
-                            </div>
-                          </label>
-                          
-                          {imgUrl && (
-                            <button
-                              onClick={async () => {
-                                if (!confirm(`${dateStr} 사진을 삭제하시겠습니까?`)) return;
-                                
-                                try {
-                                  if (!supabase) return;
-                                  
-                                  // Storage에서 삭제
-                                  const fileExt = imgUrl.split('.').pop()?.split('?')[0] || 'jpg';
-                                  const filePath = `${userId}/${routineId}/${dateStr}.${fileExt}`;
-                                  await supabase.storage.from('routine-images').remove([filePath]);
-                                  
-                                  // DB에서 image_url 제거
-                                  await supabase
-                                    .from('daily_routine_checks')
-                                    .update({ image_url: null })
-                                    .eq('user_id', userId)
-                                    .eq('routine_id', routineId)
-                                    .eq('date', dateStr);
-                                  
-                                  // UI 업데이트
-                                  setImageUrls(prev => {
-                                    const next = { ...prev };
-                                    delete next[dateStr];
-                                    return next;
-                                  });
-                                  onSync();
-                                } catch (err) {
-                                  console.error('사진 삭제 오류:', err);
-                                  alert('사진 삭제에 실패했습니다.');
-                                }
-                              }}
-                              disabled={isUploading}
-                              className="px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors disabled:opacity-50"
-                            >
-                              삭제
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
               </div>
             </div>
           </div>
