@@ -325,7 +325,7 @@ function MemoPageContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, selectedCategoryFilter]);
 
   useEffect(() => {
     loadMemos(1);
