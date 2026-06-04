@@ -3280,6 +3280,15 @@ function RoutineItem({
     
     const newChecked = !isTodayChecked;
     
+    // 디버깅
+    console.log('🔍 handleTodayToggle:', {
+      label,
+      routineType,
+      imageUploadEnabled,
+      newChecked,
+      unit
+    });
+    
     // 이미지 업로드 루틴(독서)이고 체크하려는 경우, 통합 바텀시트 열기
     if (imageUploadEnabled && newChecked) {
       const currentValue = numberDateValues[todayDateStr] ?? null;
