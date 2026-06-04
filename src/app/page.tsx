@@ -3064,6 +3064,7 @@ function RoutineItem({
     label: string;
     emoji: string;
     unit: string;
+    dateStr: string;
   } | null>(null);
   const [readingMinutes, setReadingMinutes] = useState('');
   const [readingImageUrl, setReadingImageUrl] = useState<string | null>(null);
@@ -3280,16 +3281,7 @@ function RoutineItem({
     
     // 이미지 업로드 루틴이고 체크하려는 경우, 통합 바텀시트 열기
     if (imageUploadEnabled && newChecked) {
-      const currentValue = numberDateValues[todayDateStr] ?? null;
-      setReadingSheet({
-        open: true,
-        routineId: routineId,
-        label: label,
-        emoji: emoji,
-        unit: unit || '분',
-      });
-      setReadingMinutes(currentValue !== null ? currentValue.toString() : '');
-      setReadingImageUrl(null);
+      openReadingSheet(todayDateStr);
       return;
     }
     
@@ -3498,13 +3490,26 @@ function RoutineItem({
     }
   };
 
-  // 통합 입력 모달 저장 (숫자 + 이미지)
-  // 독서 바텀시트 저장
+  // 독서 시트 열기 (특정 날짜)
+  const openReadingSheet = (dateStr: string) => {
+    const currentValue = numberDateValues[dateStr] ?? null;
+    setReadingSheet({
+      open: true,
+      routineId: routineId,
+      label: label,
+      emoji: emoji,
+      unit: unit || '분',
+      dateStr,
+    });
+    setReadingMinutes(currentValue !== null ? currentValue.toString() : '');
+    setReadingImageUrl(null);
+  };
+
   // 독서 시트 저장
   const saveReadingSheet = async () => {
     if (!supabase || !readingSheet) return;
 
-    const todayStr = getKoreaDateString(new Date());
+    const todayStr = readingSheet.dateStr;
     const trimmed = readingMinutes.trim();
 
     let numValue: number | null = null;
@@ -3580,7 +3585,7 @@ function RoutineItem({
     setReadingUploading(true);
 
     try {
-      const todayStr = getKoreaDateString(new Date());
+      const todayStr = readingSheet.dateStr;
       const fileExt = file.name.split('.').pop() || 'jpg';
       const filePath = `${userId}/${readingSheet.routineId}/${todayStr}.${fileExt}`;
 
@@ -3626,7 +3631,8 @@ function RoutineItem({
   const handleWriteDiary = () => {
     if (!readingSheet) return;
     
-    const todayStr = getKoreaDateString(new Date());
+    const targetDate = readingSheet.dateStr;
+    const targetLabel = readingSheet.label;
     
     // 시트 닫기
     setReadingSheet(null);
@@ -3635,9 +3641,9 @@ function RoutineItem({
 
     // /memo 페이지로 이동
     const params = new URLSearchParams({
-      date: todayStr,
+      date: targetDate,
       from: 'routine',
-      label: readingSheet.label
+      label: targetLabel
     });
     router.push(`/memo?${params.toString()}`);
   };
@@ -3746,7 +3752,7 @@ function RoutineItem({
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     {(() => {
-                      const date = new Date();
+                      const date = new Date(readingSheet.dateStr);
                       return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
                     })()}
                   </div>
@@ -3972,11 +3978,16 @@ function RoutineItem({
                       key={dateStr}
                       onClick={(e) => {
                         e.stopPropagation();
-                        setNumberInputModal({
-                          open: true,
-                          dateStr,
-                          valueText: dayValue !== null ? dayValue.toFixed(1) : '0.0',
-                        });
+                        if (imageUploadEnabled) {
+                          // 이미지 업로드 루틴: 통합 바텀시트 열기
+                          openReadingSheet(dateStr);
+                        } else {
+                          setNumberInputModal({
+                            open: true,
+                            dateStr,
+                            valueText: dayValue !== null ? dayValue.toFixed(1) : '0.0',
+                          });
+                        }
                       }}
                       className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
