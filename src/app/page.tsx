@@ -8,6 +8,7 @@ import { GlobalNav } from './components/GlobalNav';
 import { PendingSmsPopup } from './components/PendingSmsPopup';
 import type { PendingTransaction, TransactionType } from '../types/pending_transaction';
 import { FooterNav } from './components/FooterNav';
+import RoutineMonthCalendar from './components/RoutineMonthCalendar';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from './components/container';
@@ -23,6 +24,9 @@ import {
   IconRun,
   IconDeviceLaptop,
   IconCheckbox,
+  IconCamera,
+  IconPencil,
+  IconX,
 } from '@tabler/icons-react';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
@@ -2928,6 +2932,9 @@ export default function Home() {
               )}
             </div>
             </div>
+
+            {/* 월간 루틴 캘린더 */}
+            <RoutineMonthCalendar userId={userId} routineTemplates={routineTemplates} />
           </div>
         </div>
         
@@ -3267,101 +3274,6 @@ function RoutineItem({
     const day = String(koreaTime.getUTCDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-  
-  const today = new Date();
-  const todayDateStr = getKoreaDateString(today);
-  const isTodayChecked = isDateChecked(todayDateStr, routineId);
-  
-  // 오늘 날짜 체크/언체크 핸들러
-  const handleTodayToggle = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (disabled) return;
-    
-    const newChecked = !isTodayChecked;
-    
-    // 이미지 업로드 루틴이고 체크하려는 경우, 통합 바텀시트 열기
-    if (imageUploadEnabled && newChecked) {
-      openReadingSheet(todayDateStr);
-      return;
-    }
-    
-    // 숫자 타입 루틴이고 체크하려는 경우, 숫자 입력 모달 열기
-    if (routineType === 'number' && newChecked && !imageUploadEnabled) {
-      const currentValue = numberDateValues[todayDateStr] ?? null;
-      setNumberInputModal({
-        open: true,
-        dateStr: todayDateStr,
-        valueText: currentValue !== null ? currentValue.toFixed(1) : '0.0',
-      });
-      return;
-    }
-    
-    // Supabase에 저장
-    if (supabase) {
-      try {
-        if (newChecked) {
-          // 체크: insert 또는 update
-          const { error } = await supabase
-            .from('daily_routine_checks')
-            .upsert({
-              user_id: userId,
-              date: todayDateStr,
-              routine_id: routineId,
-              checked: true
-            }, {
-              onConflict: 'user_id,date,routine_id'
-            });
-          
-          if (error) {
-            console.error('Supabase 저장 오류:', error);
-            return;
-          }
-        } else {
-          // 언체크: delete
-          const { error } = await supabase
-            .from('daily_routine_checks')
-            .delete()
-            .eq('date', todayDateStr)
-            .eq('routine_id', routineId)
-            .eq('user_id', userId);
-          
-          if (error) {
-            console.error('Supabase 삭제 오류:', error);
-            return;
-          }
-        }
-        
-        // 상태 업데이트
-        setCheckedDates(prev => {
-          const newData = { ...prev };
-          if (!newData[todayDateStr]) {
-            newData[todayDateStr] = new Set();
-          }
-          
-          const dateSet = new Set(newData[todayDateStr]);
-          if (newChecked) {
-            dateSet.add(routineId);
-          } else {
-            dateSet.delete(routineId);
-          }
-          
-          if (dateSet.size === 0) {
-            delete newData[todayDateStr];
-          } else {
-            newData[todayDateStr] = dateSet;
-          }
-          
-          return newData;
-        });
-      } catch (err) {
-        console.error('Supabase 작업 오류:', err);
-        return;
-      }
-    }
-    
-    // 부모 컴포넌트의 onChange 호출 (체크박스 상태 업데이트)
-    onChange();
-  };
 
   // 숫자 입력 저장/삭제 (prompt 대신 모달에서 호출)
   const saveNumberValueForDate = async (dateStr: string, valueText: string) => {
@@ -3510,17 +3422,7 @@ function RoutineItem({
     if (!supabase || !readingSheet) return;
 
     const todayStr = readingSheet.dateStr;
-    const trimmed = readingMinutes.trim();
-
-    let numValue: number | null = null;
-    if (trimmed !== '') {
-      const parsed = parseFloat(trimmed);
-      if (Number.isNaN(parsed)) {
-        alert('올바른 숫자를 입력해주세요.');
-        return;
-      }
-      numValue = parsed;
-    }
+    const numValue: number | null = parseFloat(readingMinutes) || null;
 
     setReadingUploading(true);
 
@@ -3531,20 +3433,20 @@ function RoutineItem({
         .upsert(
           {
             user_id: userId,
-            date: todayStr,
             routine_id: readingSheet.routineId,
+            date: todayStr,
             checked: true,
             value: numValue,
-            image_url: readingImageUrl,
+            image_url: readingImageUrl || null,
           },
           {
-            onConflict: 'user_id,date,routine_id',
+            onConflict: 'user_id,routine_id,date',
           }
         );
 
       if (dbError) {
         console.error('DB 저장 오류:', dbError);
-        alert(`저장 실패: ${dbError.message || '알 수 없는 오류'}`);
+        alert('저장 중 오류가 발생했습니다.');
         setReadingUploading(false);
         return;
       }
@@ -3573,7 +3475,7 @@ function RoutineItem({
       setReadingUploading(false);
     } catch (err) {
       console.error('저장 오류:', err);
-      alert(`오류 발생: ${err}`);
+      alert('저장 중 오류가 발생했습니다.');
       setReadingUploading(false);
     }
   };
@@ -3727,10 +3629,10 @@ function RoutineItem({
       {/* 독서 루틴 통합 바텀시트 */}
       {readingSheet && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-50 flex items-center justify-center"
           role="dialog"
           aria-modal="true"
-          aria-label="독서 기록"
+          aria-label={`${readingSheet.label} 기록`}
         >
           <div
             className="absolute inset-0 bg-black/50 transition-opacity"
@@ -3742,13 +3644,14 @@ function RoutineItem({
               }
             }}
           />
-          <div className="relative w-full max-w-[412px] mx-auto rounded-t-2xl bg-white dark:bg-gray-900 shadow-2xl animate-slide-up overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="relative w-[90%] max-w-[400px] mx-auto rounded-2xl bg-white dark:bg-gray-900 shadow-xl animate-fade-in overflow-hidden flex flex-col max-h-[90vh]">
             {/* 헤더 */}
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-base font-semibold text-gray-900 dark:text-white">
-                    {readingSheet.emoji} {readingSheet.label}
+                  <div className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white">
+                    {getRoutineIcon(readingSheet.label)}
+                    {readingSheet.label}
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     {(() => {
@@ -3766,11 +3669,9 @@ function RoutineItem({
                     }
                   }}
                   disabled={readingUploading}
-                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 >
-                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <IconX size={18} />
                 </button>
               </div>
             </div>
@@ -3780,7 +3681,7 @@ function RoutineItem({
               {/* 숫자 입력 */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  오늘 독서 시간
+                  오늘 {readingSheet.label} 시간
                 </label>
                 <div className="relative">
                   <input
@@ -3803,7 +3704,7 @@ function RoutineItem({
               {/* 사진 업로드 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  오늘 책 사진 (선택)
+                  오늘 사진 (선택)
                 </label>
                 
                 {readingUploading ? (
@@ -3843,11 +3744,8 @@ function RoutineItem({
                       }}
                       className="hidden"
                     />
-                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">📷 사진 추가</span>
+                    <IconCamera size={22} stroke={1.5} className="text-gray-400" />
+                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">사진 추가</span>
                   </label>
                 )}
               </div>
@@ -3858,12 +3756,11 @@ function RoutineItem({
               <button
                 onClick={handleWriteDiary}
                 disabled={readingUploading}
-                className="w-full flex items-center justify-center gap-2 py-3 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors font-medium disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors font-medium disabled:opacity-50"
+                style={{ color: '#178CF2' }}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                ✏️ 독서 일기 쓰기
+                <IconPencil size={20} stroke={1.5} />
+                {readingSheet.label} 일기 쓰기
               </button>
             </div>
 
@@ -3876,16 +3773,26 @@ function RoutineItem({
                   setReadingImageUrl(null);
                 }}
                 disabled={readingUploading}
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium disabled:opacity-50"
+                className="flex-1 px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium disabled:opacity-50"
               >
                 취소
               </button>
               <button
                 onClick={saveReadingSheet}
                 disabled={readingUploading}
-                className="flex-1 px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors font-medium disabled:opacity-50"
+                className="flex-1 px-4 py-3 rounded-xl bg-[#178CF2] hover:brightness-95 text-white transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {readingUploading ? '저장 중...' : '저장'}
+                {readingUploading ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    저장 중
+                  </>
+                ) : (
+                  '저장'
+                )}
               </button>
             </div>
           </div>
@@ -3893,21 +3800,15 @@ function RoutineItem({
       )}
 
       <div 
-        className="flex items-center gap-3 py-2 min-h-[44px] cursor-pointer"
+        className="flex items-center gap-3 py-2 min-h-[48px] cursor-pointer"
           onClick={onExpandToggle}
       >
-        {/* 원형 그래프 + 아이콘 + 텍스트 영역 */}
-        <div className="flex items-center gap-3 flex-1">
-          <div className="flex-shrink-0">
-            <CircularProgressChart 
-              progress={getMonthProgress(currentYear, currentMonth, routineId)} 
-              size={36}
-            />
-          </div>
+        {/* 아이콘 + 텍스트 영역 */}
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
             {getRoutineIcon(label)}
           </span>
-          <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
+          <span className={`text-sm truncate ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
             {label}
           </span>
         </div>
@@ -3921,42 +3822,9 @@ function RoutineItem({
             </span>
           )}
           
-          {/* 연간 누적 (숫자 타입일 때) */}
-          {routineType === 'number' && yearlyTotal > 0 && (
-            <div
-              className="px-2 py-1 text-[9px] font-medium rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-            >
-              {(Number.isInteger(yearlyTotal) ? String(yearlyTotal) : yearlyTotal.toFixed(1))}
-              {(unit || '').toLowerCase()}
-            </div>
-          )}
-          
           {/* 숫자 입력 필드 (숫자 타입일 때) - 최근 5일 */}
           {routineType === 'number' && unit && (
             <div className="flex items-center gap-1 shrink-0">
-              {/* 오늘 날짜 체크박스 (숫자 타입) */}
-              <div
-                onClick={handleTodayToggle}
-                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer mr-1 ${
-                  isTodayChecked
-                    ? 'bg-blue-500 border-blue-500'
-                    : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600'
-                }`}
-                title="오늘 기록 추가"
-              >
-                {isTodayChecked && (
-                  <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
-                    <path
-                      d="M1 4L4.5 7.5L11 1"
-                      stroke="white"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                )}
-              </div>
-              
               {(() => {
                 const today = new Date();
                 const buttons = [];
@@ -3994,7 +3862,7 @@ function RoutineItem({
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
                       <span 
-                        className={`font-bold ${dayValue !== null && dayValue !== 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-white'}`} 
+                        className={`font-bold ${dayValue !== null && dayValue !== 0 ? 'text-gray-900 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600'}`} 
                         style={{ fontSize: '14px' }}
                       >
                         {dayValue !== null ? Math.round(dayValue) : '0'}
@@ -4089,8 +3957,8 @@ function RoutineItem({
                       }}
                       className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer ${
                         isChecked
-                          ? 'bg-blue-500 border-blue-500'
-                          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600'
+                          ? 'bg-gray-900 dark:bg-gray-700 border-gray-900 dark:border-gray-700'
+                          : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
                       }`}
                     >
                       {isChecked && (
@@ -4157,7 +4025,7 @@ function MealCheckbox({
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        className="w-6 h-6 text-blue-500 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+        className="w-6 h-6 text-gray-900 dark:text-gray-200 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 rounded focus:ring-2 focus:ring-gray-700 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
       />
       <span className={`text-sm ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
         {label}
@@ -4856,6 +4724,13 @@ function RoutineCalendar({
   const isHexColor = routineColor.startsWith('#');
   const consecutiveDays = getConsecutiveDays(routineId);
 
+  // 헤더에서 이동해온 월별 달성률/연간 누적 (펼침 상태에서 드롭박스 행 우측에 표시)
+  const headerRoutineData = routineTemplates.find(r => r.id === routineId);
+  const headerRoutineType: 'checkbox' | 'number' = headerRoutineData?.type || 'checkbox';
+  const headerUnit = headerRoutineData?.unit;
+  const headerMonthProgress = getMonthProgress(currentYear, currentMonth, routineId);
+  const headerYearlyTotal = Object.values(dateValues).reduce((sum, v) => sum + (v || 0), 0);
+
   return (
     <div className="bg-gray-50 dark:bg-gray-800 p-2 sm:p-3 w-full">
       {/* 날짜 선택 + 수정 버튼 */}
@@ -4886,8 +4761,17 @@ function RoutineCalendar({
           </select>
         </div>
         
-        {/* 오른쪽: 편집 모드 토글 버튼 */}
+        {/* 오른쪽: 월 달성률 + 연간 누적 + 편집 모드 토글 버튼 */}
         <div className="flex items-center gap-2 shrink-0">
+          <div className="flex-shrink-0">
+            <CircularProgressChart progress={headerMonthProgress} size={32} />
+          </div>
+          {headerRoutineType === 'number' && headerYearlyTotal > 0 && (
+            <div className="px-2 py-1 text-[9px] font-medium rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+              {(Number.isInteger(headerYearlyTotal) ? String(headerYearlyTotal) : headerYearlyTotal.toFixed(1))}
+              {(headerUnit || '').toLowerCase()}
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -4961,9 +4845,9 @@ function RoutineCalendar({
                         style={{
                           height: '72px',
                           border: isToday ? '2px solid #60A5FA' : '1px solid',
-                          borderColor: isToday ? '#60A5FA' : isChecked ? 'rgba(59,130,246,0.3)' : 'rgba(107,114,128,0.2)',
+                          borderColor: isToday ? '#60A5FA' : isChecked ? 'rgba(17,24,39,0.3)' : 'rgba(107,114,128,0.2)',
                           backgroundColor: isChecked
-                            ? 'rgba(59,130,246,0.06)'
+                            ? 'rgba(17,24,39,0.06)'
                             : 'rgba(249,250,251,0.8)',
                           opacity: isCurrentMonth ? 1 : 0.25
                         }}
@@ -4972,7 +4856,7 @@ function RoutineCalendar({
                         <div
                           className="absolute top-1 left-1.5 text-xs font-semibold leading-none z-10"
                           style={{
-                            color: isSat ? '#3B82F6' : isSun ? '#EF4444' : isChecked ? '#1D4ED8' : '#9CA3AF',
+                            color: isSat ? '#3B82F6' : isSun ? '#EF4444' : isChecked ? '#111827' : '#9CA3AF',
                             fontSize: '10px'
                           }}
                         >
@@ -5090,7 +4974,7 @@ function RoutineCalendar({
                                     border: 'none',
                                     borderBottom: '1px solid rgba(59,130,246,0.4)',
                                     outline: 'none',
-                                    color: '#2563EB',
+                                    color: '#111827',
                                     fontWeight: 'bold',
                                     padding: '0',
                                   }}
@@ -5098,7 +4982,7 @@ function RoutineCalendar({
                               ) : (
                                 minutes != null ? (
                                   <span
-                                    className="text-blue-600 dark:text-blue-400 font-bold"
+                                    className="text-gray-900 dark:text-gray-200 font-bold"
                                     style={{ fontSize: '10px' }}
                                   >
                                     {minutes}분
@@ -5183,7 +5067,7 @@ function RoutineCalendar({
                       // 배경색 결정
                       let backgroundColor = 'rgba(75, 85, 99, 0.15)';
                       if (isChecked) {
-                        backgroundColor = '#9CA3AF'; // 체크된 날짜는 모두 회색
+                        backgroundColor = '#111827'; // 체크된 날짜는 모두 다크 네이비
                       } else if (isSaturday || isSunday) {
                         backgroundColor = 'rgba(75, 85, 99, 0.15)'; // 토/일요일도 회색 배경
                       }
@@ -5341,7 +5225,7 @@ function RoutineCalendar({
                   return (
                     <div
                       key={`month-${header.weekIndex}`}
-                      className="flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold"
+                      className="flex items-center justify-center text-gray-900 dark:text-gray-200 font-bold"
                       style={{
                         gridRow: 1,
                         gridColumn: header.weekIndex + 2,
@@ -5421,7 +5305,7 @@ function RoutineCalendar({
                       } else if (isSunday) {
                         backgroundColor = '#EF4444'; // 일요일: 빨간색
                       } else {
-                        backgroundColor = '#9CA3AF'; // 월~금: 밝은 회색
+                        backgroundColor = '#111827'; // 월~금: 다크 네이비
                       }
                     } else if (isSaturday) {
                       backgroundColor = 'rgba(59, 130, 246, 0.15)'; // 토요일: 파란색 (투명도 15%)

@@ -165,3 +165,17 @@ input[type="checkbox"]:focus {
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* 중앙 모달 페이드인 애니메이션 */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
