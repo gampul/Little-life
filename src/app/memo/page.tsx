@@ -153,6 +153,8 @@ function MemoPageContent() {
             content: data.content || '',
           });
           setEditingId(data.id);
+          // 편집 진입 시 카테고리 폼 상태를 원본 category_id 로 초기화 (미설정 시 null)
+          setSelectedCategoryId(data.category_id ?? null);
           setShowEditor(true);
           // URL에서 edit 파라미터 제거
           router.replace('/memo', { scroll: false });
@@ -242,6 +244,10 @@ function MemoPageContent() {
       const excerpt = extractText(formData.content).substring(0, 150);
       const cover_image = extractFirstImage(formData.content);
 
+      // selectedCategoryId: 편집 진입 시 원본으로 초기화됨.
+      // '없음'을 고르면 null, 그 외에는 선택 UUID — || 로 덮어쓰지 않음.
+      const categoryIdForSave = selectedCategoryId;
+
       if (editingId) {
         const { error } = await supabase
           .from('memos')
@@ -251,7 +257,7 @@ function MemoPageContent() {
             excerpt,
             cover_image,
             updated_at: new Date().toISOString(),
-            category_id: selectedCategoryId || null,
+            category_id: categoryIdForSave,
           })
           .eq('id', editingId);
 
@@ -265,7 +271,7 @@ function MemoPageContent() {
             content: formData.content,
             excerpt,
             cover_image,
-            category_id: selectedCategoryId || null,
+            category_id: categoryIdForSave,
           }]);
 
         if (error) throw error;
@@ -311,6 +317,9 @@ function MemoPageContent() {
     async (memo: MemoListCard) => {
       if (!supabase || !memo.id) return;
 
+      // 목록에 있는 category_id 로 먼저 초기화(칩·저장 불일치 방지), 단건 fetch 후 확정
+      setSelectedCategoryId(memo.category_id ?? null);
+
       const { data, error } = await supabase
         .from('memos')
         .select('*')
@@ -329,7 +338,7 @@ function MemoPageContent() {
         title: data.title || '',
         content: data.content || '',
       });
-      setSelectedCategoryId(data.category_id || null);
+      setSelectedCategoryId(data.category_id ?? null);
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 100);
