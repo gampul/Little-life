@@ -3057,6 +3057,7 @@ function RoutineItem({
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
+  const [imageDateValues, setImageDateValues] = useState<Record<string, string>>({});
   const [numberInputModal, setNumberInputModal] = useState<{
     open: boolean;
     dateStr: string;
@@ -3094,7 +3095,7 @@ function RoutineItem({
 
         const { data: checks, error } = await supabase
           .from('daily_routine_checks')
-          .select('date, routine_id, checked, value')
+          .select('date, routine_id, checked, value, image_url')
           .gte('date', rangeStart)
           .lte('date', rangeEnd)
           .eq('user_id', userId)
@@ -3110,6 +3111,7 @@ function RoutineItem({
         const data: Record<string, Set<string>> = {};
         let totalValue = 0;
         const valuesByDate: Record<string, number> = {};
+        const imagesByDate: Record<string, string> = {};
         
         if (checks && checks.length > 0) {
           checks.forEach((check: any) => {
@@ -3118,6 +3120,7 @@ function RoutineItem({
             }
             data[check.date].add(check.routine_id);
             
+            if (check.image_url) imagesByDate[check.date] = check.image_url;
             // 숫자 타입인 경우: 날짜별 값 저장 + "올해" 누적만 합산
             if (routineType === 'number' && check.value != null) {
               if (String(check.date).startsWith(`${currentYear}-`)) {
@@ -3131,6 +3134,7 @@ function RoutineItem({
         setCheckedDates(data);
         setYearlyTotal(totalValue);
         setNumberDateValues(valuesByDate);
+        setImageDateValues(imagesByDate);
       } catch (err) {
         console.error('데이터 로드 오류:', err);
       }
@@ -3414,7 +3418,7 @@ function RoutineItem({
       dateStr,
     });
     setReadingMinutes(currentValue !== null ? currentValue.toString() : '');
-    setReadingImageUrl(null);
+    setReadingImageUrl(imageDateValues[dateStr] ?? null);
   };
 
   // 독서 시트 저장
@@ -3455,6 +3459,12 @@ function RoutineItem({
       if (numValue !== null) {
         setNumberDateValues(prev => ({ ...prev, [todayStr]: numValue! }));
       }
+      setImageDateValues(prev => {
+        const next = { ...prev };
+        if (readingImageUrl) next[todayStr] = readingImageUrl;
+        else delete next[todayStr];
+        return next;
+      });
       
       setCheckedDates(prev => {
         const newData = { ...prev };
