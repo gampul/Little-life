@@ -8,6 +8,7 @@ export type MemoCardVariant = 'grid' | 'list' | 'compact';
 export interface MemoCardData {
   id?: string;
   title: string;
+  content?: string | null;
   excerpt?: string | null;
   cover_image?: string | null;
   created_at?: string;
@@ -56,6 +57,17 @@ function formatDate(dateStr?: string): string {
   return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`;
 }
 
+function previewFromContent(html?: string | null): string {
+  if (!html) return '';
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150);
+}
+
+function firstImageFromContent(html?: string | null): string | null {
+  if (!html) return null;
+  const m = html.match(/<img[^>]+src="([^">]+)"/);
+  return m ? m[1] : null;
+}
+
 /** variant별 대략 높이 — content-visibility intrinsic size */
 const INTRINSIC_SIZE: Record<MemoCardVariant, string> = {
   list: '120px',
@@ -74,8 +86,9 @@ function MemoCardComponent({
   onCopyLink,
   onOpen,
 }: MemoCardProps) {
-  const textPreview = memo.excerpt || '';
-  const thumbnail = memo.cover_image || null;
+  // excerpt/cover 컬럼이 없는 환경에서는 content 로 폴백
+  const textPreview = memo.excerpt || previewFromContent(memo.content);
+  const thumbnail = memo.cover_image || firstImageFromContent(memo.content);
   const likeCount = (memo.likes || 0) + (liked ? 1 : 0);
   const title = memo.title || '제목 없음';
 

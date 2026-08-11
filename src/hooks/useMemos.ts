@@ -38,13 +38,10 @@ async function fetchMemosPage(
   const startIndex = (page - 1) * pageSize;
   const endIndex = startIndex + pageSize - 1;
 
-  // 목록에 필요한 컬럼만 (content 본문 제외)
+  // 긴급 복구: 프로덕션 memos에 없는 컬럼(excerpt 등) select 시 400 발생 → * 로 되돌림
   let query = supabase
     .from('memos')
-    .select(
-      'id, title, excerpt, cover_image, likes, comments, created_at, updated_at, category_id, memo_categories(name)',
-      { count: 'exact' }
-    )
+    .select('*, memo_categories(name)', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(startIndex, endIndex);
 
