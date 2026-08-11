@@ -392,11 +392,15 @@ function MemoPageContent() {
 
   const handleAddCategory = async () => {
     if (!supabase || !newCategoryName.trim() || !user) return;
-    await supabase.from('memo_categories').insert({
+    const { error } = await supabase.from('memo_categories').insert({
       name: newCategoryName.trim(),
       sort_order: memoCategories.length,
       user_id: user.id,
     });
+    if (error) {
+      alert('카테고리 추가에 실패했습니다.');
+      return;
+    }
     setNewCategoryName('');
     loadCategories();
   };
@@ -684,20 +688,21 @@ function MemoPageContent() {
         </div>
       )}
 
-      {/* 카테고리 관리 모달 */}
+      {/* 카테고리 관리 모달 — FooterNav(z-[100])보다 위에 두어 추가 입력이 클릭 가능해야 함 */}
       {showCategoryModal && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+          className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40"
           onClick={() => { setShowCategoryModal(false); setEditingCategory(null); setNewCategoryName(''); }}
         >
           <div
-            className="w-full max-w-[412px] bg-white dark:bg-gray-900 rounded-t-2xl overflow-hidden"
+            className="w-full max-w-[412px] bg-white dark:bg-gray-900 rounded-t-2xl overflow-hidden pb-[env(safe-area-inset-bottom,0px)]"
             onClick={e => e.stopPropagation()}
           >
             {/* 헤더 */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
               <span className="text-base font-semibold text-gray-900 dark:text-white">카테고리 관리</span>
               <button
+                type="button"
                 onClick={() => { setShowCategoryModal(false); setEditingCategory(null); setNewCategoryName(''); }}
                 className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
                 style={{ touchAction: 'manipulation' }}
@@ -735,6 +740,7 @@ function MemoPageContent() {
                   )}
                   {editingCategory?.id === cat.id ? (
                     <button
+                      type="button"
                       onClick={() => handleUpdateCategory(cat.id, editingCategory.name)}
                       style={{ touchAction: 'manipulation' }}
                       className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg"
@@ -744,6 +750,7 @@ function MemoPageContent() {
                   ) : (
                     <>
                       <button
+                        type="button"
                         onClick={() => setEditingCategory(cat)}
                         style={{ touchAction: 'manipulation' }}
                         className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
@@ -755,6 +762,7 @@ function MemoPageContent() {
                         </svg>
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDeleteCategory(cat.id)}
                         style={{ touchAction: 'manipulation' }}
                         className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -782,6 +790,7 @@ function MemoPageContent() {
                   className="flex-1 px-4 py-2.5 text-sm bg-gray-100 dark:bg-gray-800 rounded-xl outline-none text-gray-900 dark:text-white placeholder-gray-400"
                 />
                 <button
+                  type="button"
                   onClick={handleAddCategory}
                   disabled={!newCategoryName.trim()}
                   style={{ touchAction: 'manipulation' }}
