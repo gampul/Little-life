@@ -12,6 +12,77 @@ import TaskItem from '@tiptap/extension-task-item';
 import { getSupabase } from '../../lib/supabase';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_IMAGE_EDGE = 1600;
+
+type PreparedUpload = {
+  blob: Blob;
+  extension: string;
+  contentType: string;
+  width: number;
+  height: number;
+};
+
+/** 업로드 전 긴 변 ≤1600px + webp(0.8). 실패 시 원본 폴백. */
+async function prepareImageForUpload(file: File): Promise<PreparedUpload> {
+  const readSize = async (): Promise<{ width: number; height: number }> => {
+    try {
+      const bmp = await createImageBitmap(file);
+      const size = { width: bmp.width, height: bmp.height };
+      bmp.close();
+      return size;
+    } catch {
+      return { width: 0, height: 0 };
+    }
+  };
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    let width = bitmap.width;
+    let height = bitmap.height;
+    const longest = Math.max(width, height);
+    if (longest > MAX_IMAGE_EDGE) {
+      const scale = MAX_IMAGE_EDGE / longest;
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      bitmap.close();
+      throw new Error('canvas unsupported');
+    }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    const webpBlob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/webp', 0.8);
+    });
+    if (!webpBlob || webpBlob.size === 0) {
+      throw new Error('webp encode failed');
+    }
+
+    return {
+      blob: webpBlob,
+      extension: 'webp',
+      contentType: 'image/webp',
+      width,
+      height,
+    };
+  } catch {
+    const size = await readSize();
+    const extension = file.name.split('.').pop() || 'jpg';
+    return {
+      blob: file,
+      extension,
+      contentType: file.type || 'image/jpeg',
+      width: size.width,
+      height: size.height,
+    };
+  }
+}
 
 export interface MemoEditorCategory {
   id: string;
@@ -159,14 +230,18 @@ export default function MemoEditor({
     setUploadMessage('📷 이미지 업로드 중...');
 
     try {
+      const prepared = await prepareImageForUpload(file);
       const timestamp = Date.now();
       const randomStr = Math.random().toString(36).substring(2, 8);
-      const extension = file.name.split('.').pop() || 'jpg';
-      const fileName = `${timestamp}_${randomStr}.${extension}`;
+      const fileName = `${timestamp}_${randomStr}.${prepared.extension}`;
 
       const { error } = await supabase.storage
         .from('diary-images')
-        .upload(fileName, file, { cacheControl: '3600', upsert: false });
+        .upload(fileName, prepared.blob, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: prepared.contentType,
+        });
 
       if (error) throw error;
 
@@ -174,7 +249,14 @@ export default function MemoEditor({
         .from('diary-images')
         .getPublicUrl(fileName);
 
-      editor.chain().focus().setImage({ src: urlData.publicUrl }).run();
+      const imageAttrs: { src: string; width?: number; height?: number } = {
+        src: urlData.publicUrl,
+      };
+      if (prepared.width > 0 && prepared.height > 0) {
+        imageAttrs.width = prepared.width;
+        imageAttrs.height = prepared.height;
+      }
+      editor.chain().focus().setImage(imageAttrs).run();
       setUploadMessage('✅ 이미지가 추가되었습니다!');
       setTimeout(() => setUploadMessage(''), 2000);
     } catch (err: unknown) {

@@ -31,6 +31,16 @@ function formatDateTime(dateStr?: string): string {
   return DATE_TIME_FMT.format(new Date(dateStr));
 }
 
+/** 기존 HTML 본문 <img>에 lazy/async 주입 (속성 없으면만) */
+function injectLazyImgAttrs(html: string): string {
+  return html.replace(/<img\b([^>]*?)>/gi, (_match, attrs: string) => {
+    let next = attrs;
+    if (!/\bloading\s*=/i.test(next)) next += ' loading="lazy"';
+    if (!/\bdecoding\s*=/i.test(next)) next += ' decoding="async"';
+    return `<img${next}>`;
+  });
+}
+
 export default async function MemoDetailPage({
   params,
 }: {
@@ -68,6 +78,7 @@ export default async function MemoDetailPage({
   }
 
   const isHtml = /<[a-z][\s\S]*>/i.test(memo.content);
+  const htmlContent = isHtml ? injectLazyImgAttrs(memo.content) : memo.content;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24">
@@ -98,9 +109,19 @@ export default async function MemoDetailPage({
           style={{ lineHeight: 1.8 }}
         >
           {isHtml ? (
-            <div dangerouslySetInnerHTML={{ __html: memo.content }} />
+            <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{memo.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                img: ({ node: _node, ...props }) => (
+                  // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+                  <img {...props} loading="lazy" decoding="async" />
+                ),
+              }}
+            >
+              {memo.content}
+            </ReactMarkdown>
           )}
         </div>
 

@@ -137,18 +137,26 @@ function MemoCardComponent({
       }}
     >
       <div className={bodyWrapClass}>
-        {/* 미디어 — compact 에선 CSS hidden, 트리는 유지해 뷰 전환 시 이미지 리마운트 최소화 */}
-        <div className={mediaClass}>
-          {thumbnail && (
+        {/* 미디어 — compact 에선 CSS hidden. 커버 없어도 aspect/고정 박스로 CLS 방지 */}
+        <div className={mediaClass} aria-hidden={!thumbnail}>
+          {thumbnail ? (
             <NextImage
               src={thumbnail}
               alt={title}
               fill
-              sizes={variant === 'grid' ? '180px' : '96px'}
+              sizes={
+                variant === 'grid'
+                  ? '(max-width: 640px) 50vw, 200px'
+                  : '96px'
+              }
               loading="lazy"
               quality={70}
               className="object-cover"
             />
+          ) : (
+            variant !== 'compact' && (
+              <div className="absolute inset-0 bg-gray-100 dark:bg-gray-700" />
+            )
           )}
         </div>
 
