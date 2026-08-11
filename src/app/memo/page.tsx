@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense, type MouseEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
@@ -87,7 +87,18 @@ function MemoPageContent() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   
-  // 페이지네이션 — 목록은 React Query 단일 소스
+  // 검색 (클라이언트 — 현재 페이지 목록 내)
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedQuery(searchInput.trim());
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  // 페이지네이션 — 목록은 React Query 단일 소스 (카테고리 필터는 서버)
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const { data: memosPage, isLoading } = useMemos(
@@ -95,8 +106,22 @@ function MemoPageContent() {
     selectedCategoryFilter,
     pageSize
   );
-  const displayedMemos = (memosPage?.memos ?? []) as MemoListCard[];
+  const pageMemos = (memosPage?.memos ?? []) as MemoListCard[];
   const totalCount = memosPage?.totalCount ?? 0;
+
+  // 카테고리(서버) AND 검색어(클라이언트, 현재 페이지)
+  const displayedMemos = useMemo(() => {
+    const q = debouncedQuery.toLowerCase();
+    if (!q) return pageMemos;
+    return pageMemos.filter((memo) => {
+      const title = (memo.title || '').toLowerCase();
+      const excerpt = (memo.excerpt || '').toLowerCase();
+      const content = (memo.content || '').toLowerCase();
+      return title.includes(q) || excerpt.includes(q) || content.includes(q);
+    });
+  }, [pageMemos, debouncedQuery]);
+
+  const isSearchActive = debouncedQuery.length > 0;
 
   const [formData, setFormData] = useState<Memo>({
     title: '',
@@ -463,45 +488,87 @@ function MemoPageContent() {
           </div>
         )}
 
-        {/* 카테고리 필터 탭 */}
+        {/* 카테고리 필터 탭 + 검색 */}
         {!showEditor && (
-          <div className="flex items-center gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
-            <button
-              onClick={() => setSelectedCategoryFilter(null)}
-              style={{ touchAction: 'manipulation' }}
-              className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                !selectedCategoryFilter
-                  ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                  : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
-              }`}
-            >
-              전체
-            </button>
-            {memoCategories.map(cat => (
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
               <button
-                key={cat.id}
-                onClick={() => setSelectedCategoryFilter(cat.id)}
+                onClick={() => setSelectedCategoryFilter(null)}
                 style={{ touchAction: 'manipulation' }}
                 className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  selectedCategoryFilter === cat.id
+                  !selectedCategoryFilter
                     ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
                     : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
                 }`}
               >
-                {cat.name}
+                전체
               </button>
-            ))}
-            <button
-              onClick={() => setShowCategoryModal(true)}
-              style={{ touchAction: 'manipulation' }}
-              className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 transition-colors ml-auto"
-              title="카테고리 관리"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/>
-                <circle cx="19" cy="15" r="3"/><path d="M22 18l-1.5-1.5"/>
+              {memoCategories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategoryFilter(cat.id)}
+                  style={{ touchAction: 'manipulation' }}
+                  className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    selectedCategoryFilter === cat.id
+                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                      : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+              <button
+                onClick={() => setShowCategoryModal(true)}
+                style={{ touchAction: 'manipulation' }}
+                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 transition-colors ml-auto"
+                title="카테고리 관리"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/>
+                  <circle cx="19" cy="15" r="3"/><path d="M22 18l-1.5-1.5"/>
+                </svg>
+              </button>
+            </div>
+
+            <label className="flex items-center gap-2 h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus-within:border-blue-400 dark:focus-within:border-blue-500 transition-colors">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="flex-shrink-0 text-gray-400"
+                aria-hidden
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="M21 21l-4.3-4.3" />
               </svg>
-            </button>
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="제목·내용 검색 (현재 페이지)"
+                className="flex-1 min-w-0 h-full bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 outline-none"
+                aria-label="다이어리 검색"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  aria-label="검색어 지우기"
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </label>
           </div>
         )}
 
@@ -563,7 +630,7 @@ function MemoPageContent() {
           </div>
         ) : (
           <div className="text-center text-sm text-gray-400 dark:text-gray-500 py-12">
-            작성된 글이 없습니다
+            {isSearchActive ? '검색 결과가 없습니다' : '작성된 글이 없습니다'}
           </div>
         )}
 
