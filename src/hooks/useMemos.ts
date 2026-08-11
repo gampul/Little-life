@@ -23,10 +23,24 @@ export interface MemosPageResult {
 
 export const MEMOS_QUERY_KEY = ['memos'] as const;
 
+/**
+ * PostgREST `.or()` + `ilike` 패턴용 이스케이프.
+ * %, _, ", \ 및 or() 구분자(, .) 가 검색어에 있어도 깨지지 않게 값을 따옴표로 감싼다.
+ */
+function toIlikeOrPattern(raw: string): string {
+  const escaped = raw
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+    .replace(/"/g, '\\"');
+  return `"%${escaped}%"`;
+}
+
 async function fetchMemosPage(
   page: number,
   pageSize: number,
-  categoryId: string | null
+  categoryId: string | null,
+  searchTerm: string
 ): Promise<MemosPageResult> {
   const supabase = getSupabase();
   if (!supabase) {
@@ -36,19 +50,34 @@ async function fetchMemosPage(
   const startIndex = (page - 1) * pageSize;
   const endIndex = startIndex + pageSize - 1;
 
-  // 실제 스키마에 있는 컬럼만 (likes/comments 없음 — select 시 400)
+  // 실제 스키마에 있는 컬럼만 select (likes/comments 없음 — 400 방지)
+  // 검색 필터만 title/content 사용 (둘 다 실존 컬럼). select 목록에는 content 미포함.
+  //
+  // 성능 메모: 현재는 ilike 부분일치로 충분.
+  // 글이 많아지면 title/content 에 pg_trgm GIN 또는 to_tsvector 전문검색 인덱스를 검토:
+  //   CREATE INDEX memos_title_trgm ON memos USING gin (title gin_trgm_ops);
+  //   CREATE INDEX memos_content_trgm ON memos USING gin (content gin_trgm_ops);
+  //   -- 또는 tsvector 생성 컬럼 + GIN 인덱스 후 plainto_tsquery 로 전환
   let query = supabase
     .from('memos')
     .select(
       'id, title, excerpt, cover_image, created_at, updated_at, category_id, memo_categories(name)',
       { count: 'exact' }
     )
-    .order('created_at', { ascending: false })
-    .range(startIndex, endIndex);
+    .order('created_at', { ascending: false });
 
   if (categoryId) {
     query = query.eq('category_id', categoryId);
   }
+
+  const q = searchTerm.trim();
+  if (q) {
+    const pattern = toIlikeOrPattern(q);
+    // title OR content 부분일치 (대소문자 무시), 카테고리 조건과 AND
+    query = query.or(`title.ilike.${pattern},content.ilike.${pattern}`);
+  }
+
+  query = query.range(startIndex, endIndex);
 
   const { data, count, error } = await query;
   if (error) {
@@ -64,11 +93,14 @@ async function fetchMemosPage(
 export function useMemos(
   page: number,
   categoryId: string | null,
-  pageSize: number = 10
+  pageSize: number = 10,
+  searchTerm: string = ''
 ) {
+  const normalizedSearch = searchTerm.trim();
+
   return useQuery({
-    queryKey: [...MEMOS_QUERY_KEY, page, categoryId, pageSize],
-    queryFn: () => fetchMemosPage(page, pageSize, categoryId),
+    queryKey: [...MEMOS_QUERY_KEY, page, categoryId, pageSize, normalizedSearch],
+    queryFn: () => fetchMemosPage(page, pageSize, categoryId, normalizedSearch),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
   });

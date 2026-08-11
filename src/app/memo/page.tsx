@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Suspense, type MouseEvent } from 'react';
+import { useState, useEffect, useCallback, Suspense, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
@@ -87,7 +87,7 @@ function MemoPageContent() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   
-  // 검색 (클라이언트 — 현재 페이지 목록 내)
+  // 검색 (서버 — title/content ilike, 전체 글 대상)
   const [searchInput, setSearchInput] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
@@ -98,29 +98,17 @@ function MemoPageContent() {
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
-  // 페이지네이션 — 목록은 React Query 단일 소스 (카테고리 필터는 서버)
+  // 페이지네이션 — React Query (카테고리 + 검색은 서버 조건, count/range 동일 기준)
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   const { data: memosPage, isLoading } = useMemos(
     currentPage,
     selectedCategoryFilter,
-    pageSize
+    pageSize,
+    debouncedQuery
   );
-  const pageMemos = (memosPage?.memos ?? []) as MemoListCard[];
+  const displayedMemos = (memosPage?.memos ?? []) as MemoListCard[];
   const totalCount = memosPage?.totalCount ?? 0;
-
-  // 카테고리(서버) AND 검색어(클라이언트, 현재 페이지)
-  const displayedMemos = useMemo(() => {
-    const q = debouncedQuery.toLowerCase();
-    if (!q) return pageMemos;
-    return pageMemos.filter((memo) => {
-      const title = (memo.title || '').toLowerCase();
-      const excerpt = (memo.excerpt || '').toLowerCase();
-      const content = (memo.content || '').toLowerCase();
-      return title.includes(q) || excerpt.includes(q) || content.includes(q);
-    });
-  }, [pageMemos, debouncedQuery]);
-
   const isSearchActive = debouncedQuery.length > 0;
 
   const [formData, setFormData] = useState<Memo>({
@@ -155,10 +143,10 @@ function MemoPageContent() {
     loadCategories();
   }, [loadCategories]);
 
-  // 필터 변경 시 1페이지로 (목록 fetch 는 useMemos 가 담당 — 중복 useEffect 제거)
+  // 카테고리·검색어 변경 시 1페이지로
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategoryFilter]);
+  }, [selectedCategoryFilter, debouncedQuery]);
 
   // URL에서 edit 파라미터 처리 (상세 페이지에서 수정 버튼 클릭 시)
   useEffect(() => {
@@ -551,7 +539,7 @@ function MemoPageContent() {
                 type="search"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="제목·내용 검색 (현재 페이지)"
+                placeholder="제목·내용 검색"
                 className="flex-1 min-w-0 h-full bg-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 outline-none"
                 aria-label="다이어리 검색"
               />
