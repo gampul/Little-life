@@ -4,7 +4,7 @@ import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getSupabase } from '../lib/supabase';
 
-/** 목록 카드용 — content(본문) 제외 */
+/** 목록 카드용 — 실제 memos 컬럼만 (likes/comments 컬럼 없음) */
 export interface MemoListItem {
   id?: string;
   title: string;
@@ -12,8 +12,6 @@ export interface MemoListItem {
   cover_image?: string | null;
   created_at?: string;
   updated_at?: string;
-  likes?: number;
-  comments?: number;
   category_id?: string | null;
   memo_categories?: { name: string } | null;
 }
@@ -38,10 +36,13 @@ async function fetchMemosPage(
   const startIndex = (page - 1) * pageSize;
   const endIndex = startIndex + pageSize - 1;
 
-  // 긴급 복구: 프로덕션 memos에 없는 컬럼(excerpt 등) select 시 400 발생 → * 로 되돌림
+  // 실제 스키마에 있는 컬럼만 (likes/comments 없음 — select 시 400)
   let query = supabase
     .from('memos')
-    .select('*, memo_categories(name)', { count: 'exact' })
+    .select(
+      'id, title, excerpt, cover_image, created_at, updated_at, category_id, memo_categories(name)',
+      { count: 'exact' }
+    )
     .order('created_at', { ascending: false })
     .range(startIndex, endIndex);
 
