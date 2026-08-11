@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { signOutAction } from '../actions/auth';
 import { APP_HORIZONTAL_CONTAINER } from './container';
 import { useAuth } from './AuthProvider';
@@ -17,6 +17,8 @@ export function GlobalNav(props: GlobalNavProps) {
   const [imgSrc, setImgSrc] = useState('/little-life-logo.png');
   const { user } = useAuth();
   const userEmail = user?.email ?? null;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const handleImageError = () => {
     if (imgSrc.includes('.png')) {
@@ -28,13 +30,33 @@ export function GlobalNav(props: GlobalNavProps) {
     }
   };
 
-  const handleSettingsClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  const goSettings = () => {
+    setMenuOpen(false);
     if (pathname === '/settings') {
       router.back();
     } else {
       router.push('/settings');
     }
+  };
+
+  const goMemoCategories = () => {
+    setMenuOpen(false);
+    router.push('/memo?manageCategories=1');
   };
 
   return (
@@ -86,26 +108,54 @@ export function GlobalNav(props: GlobalNavProps) {
               </Link>
             )}
 
-            {/* Settings 버튼 */}
-            <button
-              onClick={handleSettingsClick}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
-                pathname === '/settings'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-              aria-label={pathname === '/settings' ? '취소' : '설정'}
-            >
-              <span className="flex flex-col gap-1 items-center justify-center">
-                <span className="w-5 h-0.5 bg-current"></span>
-                <span className="w-5 h-0.5 bg-current"></span>
-                <span className="w-5 h-0.5 bg-current"></span>
-              </span>
-            </button>
+            {/* 햄버거 메뉴 */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
+                  menuOpen || pathname === '/settings'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+                }`}
+                aria-label="메뉴"
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+              >
+                <span className="flex flex-col gap-1 items-center justify-center">
+                  <span className="w-5 h-0.5 bg-current"></span>
+                  <span className="w-5 h-0.5 bg-current"></span>
+                  <span className="w-5 h-0.5 bg-current"></span>
+                </span>
+              </button>
+
+              {menuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 z-50"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={goSettings}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    설정
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={goMemoCategories}
+                    className="w-full px-4 py-2.5 text-left text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    카테고리 관리
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </nav>
   );
 }
-

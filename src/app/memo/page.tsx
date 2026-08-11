@@ -148,6 +148,14 @@ function MemoPageContent() {
     setCurrentPage(1);
   }, [selectedCategoryFilter, debouncedQuery]);
 
+  // 설정/햄버거에서 ?manageCategories=1 로 진입 시 기존 모달만 연다 (로직 동일)
+  useEffect(() => {
+    if (searchParams.get('manageCategories') === '1') {
+      setShowCategoryModal(true);
+      router.replace('/memo', { scroll: false });
+    }
+  }, [searchParams, router]);
+
   // URL에서 edit 파라미터 처리 (상세 페이지에서 수정 버튼 클릭 시)
   useEffect(() => {
     const editId = searchParams.get('edit');
@@ -506,17 +514,34 @@ function MemoPageContent() {
                 </button>
               ))}
               <button
+                type="button"
                 onClick={() => setShowCategoryModal(true)}
                 style={{ touchAction: 'manipulation' }}
-                className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-600 transition-colors ml-auto"
+                className="flex-shrink-0 ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 title="카테고리 관리"
+                aria-label="카테고리 관리"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/>
-                  <circle cx="19" cy="15" r="3"/><path d="M22 18l-1.5-1.5"/>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                 </svg>
+                <span>카테고리 관리</span>
               </button>
             </div>
+
+            {memoCategories.length === 0 && (
+              <button
+                type="button"
+                onClick={() => setShowCategoryModal(true)}
+                style={{ touchAction: 'manipulation' }}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-800/50 text-left"
+              >
+                <span className="text-sm text-gray-600 dark:text-gray-300">
+                  아직 카테고리가 없습니다. <span className="font-medium text-blue-600 dark:text-blue-400">카테고리 추가</span>
+                </span>
+                <span className="text-blue-600 dark:text-blue-400 text-sm font-medium flex-shrink-0">추가</span>
+              </button>
+            )}
 
             <label className="flex items-center gap-2 h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus-within:border-blue-400 dark:focus-within:border-blue-500 transition-colors">
               <svg

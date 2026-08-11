@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { getSupabase } from '../../lib/supabase';
 import { GlobalNav } from '../components/GlobalNav';
@@ -835,6 +836,24 @@ export default function SettingsPage() {
             </div>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               자산과 부채를 카테고리별로 그룹화하여 관리할 수 있습니다.
+            </p>
+          </div>
+
+          {/* 다이어리 카테고리 — /memo 기존 모달로 이동 (로직 변경 없음) */}
+          <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                다이어리 카테고리
+              </h3>
+              <Link
+                href="/memo?manageCategories=1"
+                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                카테고리 관리
+              </Link>
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              다이어리(/memo) 글 분류용 카테고리를 추가·수정·삭제합니다.
             </p>
           </div>
 
