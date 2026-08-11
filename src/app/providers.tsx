@@ -1,9 +1,24 @@
 'use client';
 
 import { ThemeProvider as NextThemesProvider } from 'next-themes';
-import { ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactNode, useState } from 'react';
+import { AuthProvider } from './components/AuthProvider';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60_000,
+            gcTime: 5 * 60_000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      })
+  );
+
   return (
     <NextThemesProvider
       attribute="class"
@@ -12,8 +27,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       storageKey="little-life-theme"
       disableTransitionOnChange={false}
     >
-      {children}
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
     </NextThemesProvider>
   );
 }
-
