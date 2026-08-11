@@ -42,6 +42,7 @@ interface MemoCategory {
   id: string;
   name: string;
   sort_order: number;
+  parent_id?: string | null;
 }
 
 type ViewMode = 'grid' | 'list' | 'compact';
@@ -85,6 +86,8 @@ function MemoPageContent() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MemoCategory | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  /** 서브카테고리 추가 시 상위 (null = 최상위). 후보에는 최상위만. */
+  const [newCategoryParentId, setNewCategoryParentId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   
   // 검색 (서버 — title/content ilike, 전체 글 대상)
@@ -392,16 +395,27 @@ function MemoPageContent() {
 
   const handleAddCategory = async () => {
     if (!supabase || !newCategoryName.trim() || !user) return;
+    // 1단계만: parent 는 최상위여야 함 (자식 id 선택 불가 — UI에서 제외)
+    const parentId = newCategoryParentId;
+    if (parentId) {
+      const parent = memoCategories.find((c) => c.id === parentId);
+      if (!parent || parent.parent_id) return;
+    }
+    const siblings = memoCategories.filter(
+      (c) => (c.parent_id ?? null) === (parentId ?? null)
+    );
     const { error } = await supabase.from('memo_categories').insert({
       name: newCategoryName.trim(),
-      sort_order: memoCategories.length,
+      sort_order: siblings.length,
       user_id: user.id,
+      parent_id: parentId,
     });
     if (error) {
       alert('카테고리 추가에 실패했습니다.');
       return;
     }
     setNewCategoryName('');
+    setNewCategoryParentId(null);
     loadCategories();
   };
 
@@ -414,11 +428,47 @@ function MemoPageContent() {
 
   const handleDeleteCategory = async (id: string) => {
     if (!supabase) return;
-    const confirmed = window.confirm('카테고리를 삭제하면 해당 글은 미분류로 변경됩니다. 삭제할까요?');
+    const confirmed = window.confirm(
+      '카테고리를 삭제하면 해당 글은 미분류로 변경됩니다. 하위 카테고리는 최상위로 이동합니다. 삭제할까요?'
+    );
     if (!confirmed) return;
     await supabase.from('memo_categories').delete().eq('id', id);
     if (selectedCategoryFilter === id) setSelectedCategoryFilter(null);
+    if (newCategoryParentId === id) setNewCategoryParentId(null);
     loadCategories();
+  };
+
+  /** 같은 부모(형제) 내에서만 sort_order 교환 — 부모 간 이동은 미구현 */
+  const handleReorderSibling = async (id: string, direction: 'up' | 'down') => {
+    if (!supabase) return;
+    const cat = memoCategories.find((c) => c.id === id);
+    if (!cat) return;
+    const parentKey = cat.parent_id ?? null;
+    const siblings = memoCategories
+      .filter((c) => (c.parent_id ?? null) === parentKey)
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    const idx = siblings.findIndex((c) => c.id === id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= siblings.length) return;
+    const a = siblings[idx];
+    const b = siblings[swapIdx];
+    const [resA, resB] = await Promise.all([
+      supabase.from('memo_categories').update({ sort_order: b.sort_order }).eq('id', a.id),
+      supabase.from('memo_categories').update({ sort_order: a.sort_order }).eq('id', b.id),
+    ]);
+    if (resA.error || resB.error) {
+      alert('순서 변경에 실패했습니다.');
+      return;
+    }
+    loadCategories();
+  };
+
+  const closeCategoryModal = () => {
+    setShowCategoryModal(false);
+    setEditingCategory(null);
+    setNewCategoryName('');
+    setNewCategoryParentId(null);
   };
 
   if (!supabase) {
@@ -437,6 +487,30 @@ function MemoPageContent() {
   }
 
   const totalPages = Math.ceil(totalCount / pageSize);
+
+  // 최상위만 상위 후보 (1단계 제한). 트리는 parent_id 기준, sort_order 유지
+  const rootCategories = memoCategories
+    .filter((c) => !c.parent_id)
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const categoryTreeRows: { cat: MemoCategory; depth: 0 | 1 }[] = [];
+  for (const root of rootCategories) {
+    categoryTreeRows.push({ cat: root, depth: 0 });
+    const children = memoCategories
+      .filter((c) => c.parent_id === root.id)
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+    for (const child of children) {
+      categoryTreeRows.push({ cat: child, depth: 1 });
+    }
+  }
+  // parent_id 가 있지만 부모가 목록에 없는 경우(이상치) → 최상위로 표시
+  const listedIds = new Set(categoryTreeRows.map((r) => r.cat.id));
+  for (const c of memoCategories) {
+    if (!listedIds.has(c.id)) {
+      categoryTreeRows.push({ cat: c, depth: 0 });
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
@@ -692,7 +766,7 @@ function MemoPageContent() {
       {showCategoryModal && (
         <div
           className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40"
-          onClick={() => { setShowCategoryModal(false); setEditingCategory(null); setNewCategoryName(''); }}
+          onClick={closeCategoryModal}
         >
           <div
             className="w-full max-w-[412px] bg-white dark:bg-gray-900 rounded-t-2xl overflow-hidden pb-[env(safe-area-inset-bottom,0px)]"
@@ -703,7 +777,7 @@ function MemoPageContent() {
               <span className="text-base font-semibold text-gray-900 dark:text-white">카테고리 관리</span>
               <button
                 type="button"
-                onClick={() => { setShowCategoryModal(false); setEditingCategory(null); setNewCategoryName(''); }}
+                onClick={closeCategoryModal}
                 className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
                 style={{ touchAction: 'manipulation' }}
               >
@@ -713,74 +787,131 @@ function MemoPageContent() {
               </button>
             </div>
 
-            {/* 카테고리 목록 */}
+            {/* 카테고리 목록 (트리) */}
             <div className="max-h-[50vh] overflow-y-auto">
-              {memoCategories.length === 0 && (
+              {categoryTreeRows.length === 0 && (
                 <p className="text-center text-sm text-gray-400 py-8">카테고리가 없습니다</p>
               )}
-              {memoCategories.map(cat => (
-                <div key={cat.id} className="flex items-center gap-3 px-5 py-3 border-b border-gray-50 dark:border-gray-800">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-300 flex-shrink-0">
-                    <circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/>
-                    <circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/>
-                  </svg>
-                  {editingCategory?.id === cat.id ? (
-                    <input
-                      autoFocus
-                      value={editingCategory.name}
-                      onChange={e => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleUpdateCategory(cat.id, editingCategory.name);
-                        if (e.key === 'Escape') setEditingCategory(null);
-                      }}
-                      className="flex-1 text-sm bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg outline-none text-gray-900 dark:text-white"
-                    />
-                  ) : (
-                    <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{cat.name}</span>
-                  )}
-                  {editingCategory?.id === cat.id ? (
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateCategory(cat.id, editingCategory.name)}
-                      style={{ touchAction: 'manipulation' }}
-                      className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg"
-                    >
-                      완료
-                    </button>
-                  ) : (
-                    <>
+              {categoryTreeRows.map(({ cat, depth }) => {
+                const parentKey = cat.parent_id ?? null;
+                const siblings = memoCategories
+                  .filter((c) => (c.parent_id ?? null) === parentKey)
+                  .slice()
+                  .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+                const sibIdx = siblings.findIndex((c) => c.id === cat.id);
+                const canUp = sibIdx > 0;
+                const canDown = sibIdx >= 0 && sibIdx < siblings.length - 1;
+
+                return (
+                  <div
+                    key={cat.id}
+                    className={`flex items-center gap-2 py-3 border-b border-gray-50 dark:border-gray-800 ${
+                      depth === 0 ? 'px-5' : 'pl-10 pr-5 bg-gray-50/60 dark:bg-gray-800/30'
+                    }`}
+                  >
+                    <div className="flex flex-col gap-0.5 flex-shrink-0">
                       <button
                         type="button"
-                        onClick={() => setEditingCategory(cat)}
+                        aria-label="위로"
+                        disabled={!canUp}
+                        onClick={() => handleReorderSibling(cat.id, 'up')}
                         style={{ touchAction: 'manipulation' }}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        className="w-7 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 disabled:opacity-25 disabled:pointer-events-none"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M7 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1"/>
-                          <path d="M20.385 6.585a2.1 2.1 0 0 0-2.97-2.97l-8.415 8.385v3h3l8.385-8.415z"/>
-                          <path d="M16 5l3 3"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M18 15l-6-6-6 6" />
                         </svg>
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeleteCategory(cat.id)}
+                        aria-label="아래로"
+                        disabled={!canDown}
+                        onClick={() => handleReorderSibling(cat.id, 'down')}
                         style={{ touchAction: 'manipulation' }}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        className="w-7 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 disabled:opacity-25 disabled:pointer-events-none"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/>
-                          <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/>
-                          <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M6 9l6 6 6-6" />
                         </svg>
                       </button>
-                    </>
-                  )}
-                </div>
-              ))}
+                    </div>
+                    {editingCategory?.id === cat.id ? (
+                      <input
+                        autoFocus
+                        value={editingCategory.name}
+                        onChange={e => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleUpdateCategory(cat.id, editingCategory.name);
+                          if (e.key === 'Escape') setEditingCategory(null);
+                        }}
+                        className="flex-1 text-sm bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg outline-none text-gray-900 dark:text-white"
+                      />
+                    ) : (
+                      <span className={`flex-1 text-sm ${depth === 0 ? 'font-medium text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {depth === 1 && <span className="text-gray-400 mr-1" aria-hidden>└</span>}
+                        {cat.name}
+                      </span>
+                    )}
+                    {editingCategory?.id === cat.id ? (
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateCategory(cat.id, editingCategory.name)}
+                        style={{ touchAction: 'manipulation' }}
+                        className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg"
+                      >
+                        완료
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCategory(cat)}
+                          style={{ touchAction: 'manipulation' }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M7 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1"/>
+                            <path d="M20.385 6.585a2.1 2.1 0 0 0-2.97-2.97l-8.415 8.385v3h3l8.385-8.415z"/>
+                            <path d="M16 5l3 3"/>
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat.id)}
+                          style={{ touchAction: 'manipulation' }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/>
+                            <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12"/>
+                            <path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
-            {/* 카테고리 추가 */}
-            <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800">
+            {/* 카테고리 추가 — 상위 드롭다운(최상위만) */}
+            <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 space-y-2">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                상위 카테고리
+              </label>
+              <select
+                value={newCategoryParentId ?? ''}
+                onChange={(e) => setNewCategoryParentId(e.target.value || null)}
+                style={{ touchAction: 'manipulation' }}
+                className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white outline-none"
+              >
+                <option value="">없음 (최상위)</option>
+                {rootCategories.map((root) => (
+                  <option key={root.id} value={root.id}>
+                    {root.name}
+                  </option>
+                ))}
+              </select>
               <div className="flex gap-2">
                 <input
                   value={newCategoryName}
