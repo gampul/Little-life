@@ -104,9 +104,20 @@ function MemoPageContent() {
   // 페이지네이션 — React Query (카테고리 + 검색은 서버 조건, count/range 동일 기준)
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+  // 대분류 선택 시 자식 글까지 포함 (소분류/단독은 자기 자신만)
+  const effectiveCategoryIds: string[] | null = selectedCategoryFilter
+    ? (() => {
+        const childIds = memoCategories
+          .filter((c) => c.parent_id === selectedCategoryFilter)
+          .map((c) => c.id);
+        return childIds.length
+          ? [selectedCategoryFilter, ...childIds]
+          : [selectedCategoryFilter];
+      })()
+    : null;
   const { data: memosPage, isLoading } = useMemos(
     currentPage,
-    selectedCategoryFilter,
+    effectiveCategoryIds,
     pageSize,
     debouncedQuery
   );

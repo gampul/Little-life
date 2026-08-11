@@ -39,7 +39,7 @@ function toIlikeOrPattern(raw: string): string {
 async function fetchMemosPage(
   page: number,
   pageSize: number,
-  categoryId: string | null,
+  categoryIds: string[] | null,
   searchTerm: string
 ): Promise<MemosPageResult> {
   const supabase = getSupabase();
@@ -66,8 +66,13 @@ async function fetchMemosPage(
     )
     .order('created_at', { ascending: false });
 
-  if (categoryId) {
-    query = query.eq('category_id', categoryId);
+  // 단일 카테고리는 eq, 대분류(부모+자식) 선택 시 여러 id를 in() 으로 필터
+  if (categoryIds && categoryIds.length > 0) {
+    if (categoryIds.length === 1) {
+      query = query.eq('category_id', categoryIds[0]);
+    } else {
+      query = query.in('category_id', categoryIds);
+    }
   }
 
   const q = searchTerm.trim();
@@ -92,15 +97,18 @@ async function fetchMemosPage(
 
 export function useMemos(
   page: number,
-  categoryId: string | null,
+  categoryIds: string[] | null,
   pageSize: number = 10,
   searchTerm: string = ''
 ) {
   const normalizedSearch = searchTerm.trim();
+  // 안정적인 캐시 키 (id 목록 순서 무관)
+  const categoryKey =
+    categoryIds && categoryIds.length > 0 ? [...categoryIds].sort().join(',') : null;
 
   return useQuery({
-    queryKey: [...MEMOS_QUERY_KEY, page, categoryId, pageSize, normalizedSearch],
-    queryFn: () => fetchMemosPage(page, pageSize, categoryId, normalizedSearch),
+    queryKey: [...MEMOS_QUERY_KEY, page, categoryKey, pageSize, normalizedSearch],
+    queryFn: () => fetchMemosPage(page, pageSize, categoryIds, normalizedSearch),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
   });

@@ -16,6 +16,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 export interface MemoEditorCategory {
   id: string;
   name: string;
+  parent_id?: string | null;
 }
 
 export interface MemoEditorProps {
@@ -236,11 +237,25 @@ export default function MemoEditor({
             className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
           >
             <option value="">없음 (미분류)</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
+            {(() => {
+              // 최상위 → 자식 순으로 정렬, 자식은 '— ' 들여쓰기 (부모·자식 모두 선택 가능)
+              const roots = categories.filter((c) => !c.parent_id);
+              const ordered: MemoEditorCategory[] = [];
+              for (const root of roots) {
+                ordered.push(root);
+                for (const child of categories.filter((c) => c.parent_id === root.id)) {
+                  ordered.push(child);
+                }
+              }
+              for (const c of categories) {
+                if (!ordered.some((o) => o.id === c.id)) ordered.push(c);
+              }
+              return ordered.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.parent_id ? `— ${cat.name}` : cat.name}
+                </option>
+              ));
+            })()}
           </select>
         </div>
 
