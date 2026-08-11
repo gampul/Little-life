@@ -3058,6 +3058,7 @@ function RoutineItem({
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
   const [imageDateValues, setImageDateValues] = useState<Record<string, string>>({});
+  const [readingView, setReadingView] = useState<'calendar' | 'photos'>('calendar');
   const [numberInputModal, setNumberInputModal] = useState<{
     open: boolean;
     dateStr: string;
@@ -3077,6 +3078,7 @@ function RoutineItem({
   const [readingMinutes, setReadingMinutes] = useState('');
   const [readingImageUrl, setReadingImageUrl] = useState<string | null>(null);
   const [readingUploading, setReadingUploading] = useState(false);
+  const [readingDiaryId, setReadingDiaryId] = useState<string | null>(null);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -3419,6 +3421,19 @@ function RoutineItem({
     });
     setReadingMinutes(currentValue !== null ? currentValue.toString() : '');
     setReadingImageUrl(imageDateValues[dateStr] ?? null);
+    // 기존 독서 일기 존재 여부 조회 → 버튼 라벨(쓰기/수정하기) + 편집 라우팅
+    setReadingDiaryId(null);
+    if (supabase) {
+      const dObj = new Date(dateStr);
+      const diaryTitle = `📚 ${dObj.getFullYear()}년 ${dObj.getMonth() + 1}월 ${dObj.getDate()}일 ${label} 기록`;
+      supabase
+        .from('memos')
+        .select('id')
+        .eq('title', diaryTitle)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => setReadingDiaryId((data as { id: string } | null)?.id ?? null));
+    }
   };
 
   // 독서 시트 저장
@@ -3444,7 +3459,7 @@ function RoutineItem({
             image_url: readingImageUrl || null,
           },
           {
-            onConflict: 'user_id,routine_id,date',
+            onConflict: 'user_id,date,routine_id',
           }
         );
 
@@ -3499,7 +3514,7 @@ function RoutineItem({
     try {
       const todayStr = readingSheet.dateStr;
       const fileExt = file.name.split('.').pop() || 'jpg';
-      const filePath = `${userId}/${readingSheet.routineId}/${todayStr}.${fileExt}`;
+      const filePath = `${userId}/${readingSheet.routineId}/${todayStr}-${Date.now()}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('reading-images')
@@ -3513,7 +3528,7 @@ function RoutineItem({
 
         if (fallbackError) {
           console.error('이미지 업로드 오류:', fallbackError);
-          alert('이미지 업로드에 실패했습니다.');
+          alert('이미지 업로드에 실패했습니다: ' + (fallbackError?.message || uploadError?.message || '알 수 없는 오류'));
           setReadingUploading(false);
           return;
         }
@@ -3545,19 +3560,24 @@ function RoutineItem({
     
     const targetDate = readingSheet.dateStr;
     const targetLabel = readingSheet.label;
+    const diaryId = readingDiaryId;
     
     // 시트 닫기
     setReadingSheet(null);
     setReadingMinutes('');
     setReadingImageUrl(null);
 
-    // /memo 페이지로 이동
-    const params = new URLSearchParams({
-      date: targetDate,
-      from: 'routine',
-      label: targetLabel
-    });
-    router.push(`/memo?${params.toString()}`);
+    // 기존 일기가 있으면 수정 모드로, 없으면 새 일기 작성
+    if (diaryId) {
+      router.push(`/memo?edit=${diaryId}`);
+    } else {
+      const params = new URLSearchParams({
+        date: targetDate,
+        from: 'routine',
+        label: targetLabel
+      });
+      router.push(`/memo?${params.toString()}`);
+    }
   };
   
   return (
@@ -3770,7 +3790,7 @@ function RoutineItem({
                 style={{ color: '#178CF2' }}
               >
                 <IconPencil size={20} stroke={1.5} />
-                {readingSheet.label} 일기 쓰기
+                {readingDiaryId ? '수정하기' : `${readingSheet.label} 일기 쓰기`}
               </button>
             </div>
 
@@ -3997,6 +4017,14 @@ function RoutineItem({
       {/* 확장된 루틴의 캘린더 표시 */}
       {isExpanded && imageUploadEnabled && routineTemplateData && (
         <div className="mt-2 pb-2 -mx-4 sm:-mx-5">
+          {/* 캘린더 / 사진 탭 전환 */}
+          <div className="flex items-center gap-1 px-2 mb-2">
+            <button type="button" onClick={(e) => { e.stopPropagation(); setReadingView('calendar'); }} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${readingView === 'calendar' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>캘린더</button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setReadingView('photos'); }} className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${readingView === 'photos' ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>사진</button>
+          </div>
+          {readingView === 'photos' ? (
+            <ReadingPhotoFeed images={imageDateValues} values={numberDateValues} unit={unit} />
+          ) : (
           <RoutineCalendar
             userId={userId}
             routineId={routineId}
@@ -4010,9 +4038,75 @@ function RoutineItem({
             onSync={onSync}
             imageUploadEnabled={imageUploadEnabled}
           />
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+// 독서 사진 피드 — 날짜별 원본 사진을 최신순으로, 탭하면 라이트박스
+function ReadingPhotoFeed({
+  images,
+  values,
+  unit,
+}: {
+  images: Record<string, string>;
+  values: Record<string, number>;
+  unit?: string;
+}) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const items = Object.entries(images)
+    .filter(([, url]) => !!url)
+    .sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
+
+  const formatLabel = (dateStr: string): string => {
+    const [y, m, d] = dateStr.split('-');
+    const base = `${y}년 ${Number(m)}월 ${Number(d)}일`;
+    const v = values[dateStr];
+    return v != null ? `${base} · ${Number.isInteger(v) ? v : v.toFixed(1)}${unit || ''}` : base;
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="px-4 py-10 text-center text-sm text-gray-400 dark:text-gray-500">
+        아직 등록된 사진이 없습니다.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="px-3 space-y-4 max-h-[70vh] overflow-y-auto">
+        {items.map(([dateStr, url]) => (
+          <div key={dateStr}>
+            <div className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 px-1">
+              {formatLabel(dateStr)}
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={`${dateStr} 사진`}
+              loading="lazy"
+              decoding="async"
+              onClick={() => setLightbox(url)}
+              className="w-full rounded-xl object-cover cursor-zoom-in bg-gray-100 dark:bg-gray-800"
+            />
+          </div>
+        ))}
+      </div>
+
+      {lightbox && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="사진 크게 보기" className="max-w-full max-h-full object-contain" />
+          <button type="button" onClick={() => setLightbox(null)} className="absolute top-4 right-4 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white" aria-label="닫기">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
