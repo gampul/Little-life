@@ -682,6 +682,9 @@ function MemoPageContent() {
         )}
 
         {showEditor && (
+          <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/50 animate-fade-in">
+            <div className="min-h-full flex items-start justify-center p-3 sm:p-6">
+              <div className="w-full max-w-2xl my-2 sm:my-6">
           <MemoEditor
             title={formData.title || ''}
             content={formData.content || ''}
@@ -697,6 +700,9 @@ function MemoPageContent() {
             isEditing={!!editingId}
             contentKey={editingId ?? (showEditor ? 'new' : null)}
           />
+              </div>
+            </div>
+          </div>
         )}
 
         {/* FAB: 글쓰기 버튼 */}
