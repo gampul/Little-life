@@ -125,6 +125,13 @@ function MemoPageContent() {
   const totalCount = memosPage?.totalCount ?? 0;
   const isSearchActive = debouncedQuery.length > 0;
 
+  // 상세 라우트 prefetch — 카드 탭 시 즉시 열리도록 (RSC + loading.tsx)
+  useEffect(() => {
+    for (const m of displayedMemos) {
+      if (m.id) router.prefetch(`/memo/${m.id}`);
+    }
+  }, [displayedMemos, router]);
+
   const [formData, setFormData] = useState<Memo>({
     title: '',
     content: '',

@@ -179,3 +179,10 @@ input[type="checkbox"]:focus {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+/* 다이어리 상세 본문 (RSC 렌더 — styled-jsx 대신 전역 CSS) */
+.memo-content.prose { font-size: 14px; }
+.memo-content.prose img { border-radius: 0.5rem; margin: 1rem 0; max-width: 100%; height: auto; }
+.memo-content.prose p { margin-bottom: 1rem; }
+.memo-content.prose ul, .memo-content.prose ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+.memo-content.prose li { margin-bottom: 0.25rem; }
