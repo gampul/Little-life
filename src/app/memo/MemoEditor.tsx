@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, useEditorState, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
@@ -156,6 +156,9 @@ export default function MemoEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        // StarterKit v3 에 포함된 underline/link 는 아래에서 별도 설정하므로 중복 등록 방지
+        underline: false,
+        link: false,
       }),
       Underline,
       Link.configure({
@@ -192,6 +195,29 @@ export default function MemoEditor({
       },
     },
     immediatelyRender: false,
+  });
+
+  // v3 useEditor 는 기본적으로 트랜잭션마다 리렌더하지 않음 → 툴바 상태는 useEditorState 로 구독
+  const tb = useEditorState({
+    editor,
+    selector: ({ editor: e }) =>
+      e
+        ? {
+            canUndo: e.can().undo(),
+            canRedo: e.can().redo(),
+            bold: e.isActive('bold'),
+            italic: e.isActive('italic'),
+            underline: e.isActive('underline'),
+            h1: e.isActive('heading', { level: 1 }),
+            h2: e.isActive('heading', { level: 2 }),
+            h3: e.isActive('heading', { level: 3 }),
+            bulletList: e.isActive('bulletList'),
+            taskList: e.isActive('taskList'),
+            blockquote: e.isActive('blockquote'),
+            codeBlock: e.isActive('codeBlock'),
+            link: e.isActive('link'),
+          }
+        : null,
   });
 
   useEffect(() => {
@@ -343,19 +369,62 @@ export default function MemoEditor({
 
         <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
 
-        {/* 서식 툴바 */}
-        <div className="px-5 pt-3 pb-2">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">본문 서식</p>
+        {/* 본문 — 하단 고정 바(툴바+버튼)용 여백은 .ProseMirror padding 으로 확보 */}
+        <div className="px-0">
+          <p className="px-5 pt-3 text-xs font-medium text-gray-500 dark:text-gray-400">본문</p>
+          <EditorContent editor={editor} />
+        </div>
+      </div>
+
+      {/*
+        하단 고정 바 — 서식 툴바 + 취소/저장.
+        스크롤 위치와 무관하게 항상 보이므로 긴 글 아래쪽을 편집할 때도 바로 서식 적용 가능.
+        오버레이(z-[110]) 안에서 렌더되므로 FooterNav(z-[100]) 위에 놓임.
+      */}
+      <div className="fixed bottom-0 left-0 right-0 z-[120] bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-800 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom,0px)]">
+        <div className="max-w-2xl mx-auto">
+          {/* 서식 툴바 (가로 스크롤) */}
           <div
-            className="flex items-center gap-0 overflow-x-auto scrollbar-hide -mx-1 px-1"
+            className="flex items-center gap-0 overflow-x-auto scrollbar-hide px-2 pt-1.5 pb-1"
             style={{ touchAction: 'manipulation' }}
           >
+            <ToolbarGroup label="실행 취소">
+              <button
+                type="button"
+                title="되돌리기 (Ctrl+Z)"
+                aria-label="되돌리기"
+                onClick={() => editor.chain().focus().undo().run()}
+                disabled={!tb?.canUndo}
+                className={`${toolBtnClass(false)} disabled:opacity-30 disabled:pointer-events-none`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M9 14L4 9l5-5" />
+                  <path d="M4 9h11a5 5 0 0 1 0 10h-3" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                title="다시 실행 (Ctrl+Shift+Z)"
+                aria-label="다시 실행"
+                onClick={() => editor.chain().focus().redo().run()}
+                disabled={!tb?.canRedo}
+                className={`${toolBtnClass(false)} disabled:opacity-30 disabled:pointer-events-none`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 14l5-5-5-5" />
+                  <path d="M20 9H9a5 5 0 0 0 0 10h3" />
+                </svg>
+              </button>
+            </ToolbarGroup>
+
+            <ToolbarDivider />
+
             <ToolbarGroup label="텍스트 스타일">
               <button
                 type="button"
                 title="굵게"
                 onClick={() => editor.chain().focus().toggleBold().run()}
-                className={toolBtnClass(editor.isActive('bold'))}
+                className={toolBtnClass(!!tb?.bold)}
               >
                 <strong>B</strong>
               </button>
@@ -363,7 +432,7 @@ export default function MemoEditor({
                 type="button"
                 title="기울임"
                 onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={toolBtnClass(editor.isActive('italic'))}
+                className={toolBtnClass(!!tb?.italic)}
               >
                 <em>I</em>
               </button>
@@ -371,7 +440,7 @@ export default function MemoEditor({
                 type="button"
                 title="밑줄"
                 onClick={() => editor.chain().focus().toggleUnderline().run()}
-                className={toolBtnClass(editor.isActive('underline'))}
+                className={toolBtnClass(!!tb?.underline)}
               >
                 <u>U</u>
               </button>
@@ -384,7 +453,7 @@ export default function MemoEditor({
                 type="button"
                 title="제목 1"
                 onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                className={toolBtnClass(editor.isActive('heading', { level: 1 }))}
+                className={toolBtnClass(!!tb?.h1)}
               >
                 <span className="text-xs font-bold">H1</span>
               </button>
@@ -392,7 +461,7 @@ export default function MemoEditor({
                 type="button"
                 title="제목 2"
                 onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={toolBtnClass(editor.isActive('heading', { level: 2 }))}
+                className={toolBtnClass(!!tb?.h2)}
               >
                 <span className="text-xs font-bold">H2</span>
               </button>
@@ -400,7 +469,7 @@ export default function MemoEditor({
                 type="button"
                 title="제목 3"
                 onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                className={toolBtnClass(editor.isActive('heading', { level: 3 }))}
+                className={toolBtnClass(!!tb?.h3)}
               >
                 <span className="text-xs font-bold">H3</span>
               </button>
@@ -413,7 +482,7 @@ export default function MemoEditor({
                 type="button"
                 title="목록"
                 onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={toolBtnClass(editor.isActive('bulletList'))}
+                className={toolBtnClass(!!tb?.bulletList)}
               >
                 <span className="text-xs">•</span>
               </button>
@@ -421,7 +490,7 @@ export default function MemoEditor({
                 type="button"
                 title="할 일"
                 onClick={() => editor.chain().focus().toggleTaskList().run()}
-                className={toolBtnClass(editor.isActive('taskList'))}
+                className={toolBtnClass(!!tb?.taskList)}
               >
                 <span className="text-xs">☑</span>
               </button>
@@ -429,7 +498,7 @@ export default function MemoEditor({
                 type="button"
                 title="인용"
                 onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                className={toolBtnClass(editor.isActive('blockquote'))}
+                className={toolBtnClass(!!tb?.blockquote)}
               >
                 <span className="text-xs">&quot;</span>
               </button>
@@ -437,7 +506,7 @@ export default function MemoEditor({
                 type="button"
                 title="코드"
                 onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-                className={toolBtnClass(editor.isActive('codeBlock'))}
+                className={toolBtnClass(!!tb?.codeBlock)}
               >
                 <span className="text-[10px] font-mono">{'<>'}</span>
               </button>
@@ -453,7 +522,7 @@ export default function MemoEditor({
                   const url = prompt('링크 URL을 입력하세요:', 'https://');
                   if (url) editor.chain().focus().setLink({ href: url }).run();
                 }}
-                className={toolBtnClass(editor.isActive('link'))}
+                className={toolBtnClass(!!tb?.link)}
               >
                 <span className="text-xs">🔗</span>
               </button>
@@ -475,53 +544,47 @@ export default function MemoEditor({
               </button>
             </ToolbarGroup>
           </div>
-        </div>
 
-        <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
-
-        {/* 본문 — 하단 플로팅 버튼용 여백 */}
-        <div className="px-0">
-          <p className="px-5 pt-3 text-xs font-medium text-gray-500 dark:text-gray-400">본문</p>
-          <EditorContent editor={editor} />
-        </div>
-
-        {displayMessage && (
-          <div
-            className={`px-5 pb-3 text-sm text-center ${
-              displayMessage.includes('✅') ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            {displayMessage}
+          {/* 메시지 + 취소/저장 */}
+          <div className="flex items-center gap-2 px-3 pb-2.5 pt-1 border-t border-gray-100 dark:border-gray-800">
+            <p
+              className={`flex-1 min-w-0 truncate text-xs ${
+                displayMessage
+                  ? displayMessage.includes('✅')
+                    ? 'text-green-600'
+                    : 'text-red-600'
+                  : 'text-gray-400'
+              }`}
+              aria-live="polite"
+            >
+              {displayMessage}
+            </p>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{ touchAction: 'manipulation' }}
+              className="flex-shrink-0 h-10 px-4 rounded-xl text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={isSaving}
+              style={{ touchAction: 'manipulation' }}
+              className="flex-shrink-0 h-10 px-5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors"
+            >
+              {isSaving ? '저장 중...' : isEditing ? '수정 완료' : '저장'}
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* 저장/취소 — FooterNav·FAB(목록용)와 겹치지 않게 bottom-24, z-[60] */}
-      <div className="fixed bottom-24 right-4 z-[60] flex items-center gap-2 pointer-events-none">
-        <button
-          type="button"
-          onClick={onCancel}
-          style={{ touchAction: 'manipulation' }}
-          className="pointer-events-auto h-11 px-4 rounded-xl text-sm font-medium bg-white/95 dark:bg-gray-800/95 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 shadow-lg backdrop-blur-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          취소
-        </button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={isSaving}
-          style={{ touchAction: 'manipulation' }}
-          className="pointer-events-auto h-11 px-5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-lg disabled:opacity-50 transition-colors"
-        >
-          {isSaving ? '저장 중...' : isEditing ? '수정 완료' : '저장'}
-        </button>
+        </div>
       </div>
 
       <style jsx global>{`
         .ProseMirror {
           outline: none;
           min-height: 280px;
-          padding: 0.5rem 1.25rem 6.5rem;
+          padding: 0.5rem 1.25rem 2rem;
           font-size: 0.9375rem;
           line-height: 1.8;
         }

@@ -36,25 +36,35 @@ export function MemoDetailTopBar({ id }: { id: string }) {
         <span className="text-sm">뒤로</span>
       </button>
 
-      <div className="flex items-center gap-2">
+      {/*
+        수정/삭제 — 에디터의 취소/수정완료와 같은 위치(우하단 고정, FooterNav 위 bottom-24).
+        스크롤 위치와 무관하게 항상 접근 가능.
+      */}
+      <div className="fixed bottom-24 right-4 z-[60] flex items-center gap-2 pointer-events-none">
         <button
-          onClick={() => router.push(`/memo?edit=${id}`)}
-          className="p-2 text-gray-500 hover:text-blue-500 transition-colors"
-          title="수정"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </button>
-        <button
+          type="button"
           onClick={handleDelete}
           disabled={isDeleting}
-          className="p-2 text-gray-500 hover:text-red-500 transition-colors disabled:opacity-50"
+          style={{ touchAction: 'manipulation' }}
+          className="pointer-events-auto inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-medium bg-white/95 dark:bg-gray-800/95 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 shadow-lg backdrop-blur-sm hover:text-red-600 hover:border-red-200 dark:hover:text-red-400 disabled:opacity-50 transition-colors"
           title="삭제"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
+          {isDeleting ? '삭제 중...' : '삭제'}
+        </button>
+        <button
+          type="button"
+          onClick={() => router.push(`/memo?edit=${id}`)}
+          style={{ touchAction: 'manipulation' }}
+          className="pointer-events-auto inline-flex items-center gap-1.5 h-11 px-5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-colors"
+          title="수정"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          수정
         </button>
       </div>
     </>

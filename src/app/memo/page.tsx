@@ -511,6 +511,25 @@ function MemoPageContent() {
     .filter((c) => !c.parent_id)
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+
+  // 필터 칩: 현재 선택이 하위면 그 부모, 상위면 자기 자신이 "펼쳐진 상위"
+  const selectedCategory = selectedCategoryFilter
+    ? memoCategories.find((c) => c.id === selectedCategoryFilter) ?? null
+    : null;
+  const activeRootId: string | null = selectedCategory
+    ? selectedCategory.parent_id ?? selectedCategory.id
+    : null;
+  const activeRootChildren = activeRootId
+    ? memoCategories
+        .filter((c) => c.parent_id === activeRootId)
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+    : [];
+  // 부모가 목록에 없는 하위(이상치)는 최상위 칩 줄에 함께 표시
+  const orphanCategories = memoCategories.filter(
+    (c) => c.parent_id && !memoCategories.some((p) => p.id === c.parent_id)
+  );
+  const rootChipCategories = [...rootCategories, ...orphanCategories];
   const categoryTreeRows: { cat: MemoCategory; depth: 0 | 1 }[] = [];
   for (const root of rootCategories) {
     categoryTreeRows.push({ cat: root, depth: 0 });
@@ -583,11 +602,12 @@ function MemoPageContent() {
         {/* 카테고리 필터 탭 + 검색 */}
         {!showEditor && (
           <div className="mb-4 space-y-3">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+            {/* 상위 카테고리 칩 — 화면 폭 안에서 줄바꿈 (가로 스크롤 없음) */}
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => setSelectedCategoryFilter(null)}
                 style={{ touchAction: 'manipulation' }}
-                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
                   !selectedCategoryFilter
                     ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
                     : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
@@ -595,25 +615,47 @@ function MemoPageContent() {
               >
                 전체
               </button>
-              {memoCategories.map(cat => (
-                <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategoryFilter(cat.id)}
-                  style={{ touchAction: 'manipulation' }}
-                  className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    selectedCategoryFilter === cat.id
-                      ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                      : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
-                  }`}
-                >
-                  {cat.name}
-                </button>
-              ))}
+              {rootChipCategories.map((cat) => {
+                const isActive = activeRootId === cat.id;
+                const hasChildren = memoCategories.some((c) => c.parent_id === cat.id);
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategoryFilter(cat.id)}
+                    style={{ touchAction: 'manipulation' }}
+                    aria-expanded={hasChildren ? isActive : undefined}
+                    className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
+                        : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                    }`}
+                  >
+                    {cat.name}
+                    {hasChildren && (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                        className={`transition-transform ${isActive ? 'rotate-180' : ''}`}
+                      >
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    )}
+                  </button>
+                );
+              })}
               <button
                 type="button"
                 onClick={() => setShowCategoryModal(true)}
                 style={{ touchAction: 'manipulation' }}
-                className="flex-shrink-0 ml-auto inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="ml-auto w-8 h-8 inline-flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 title="카테고리 관리"
                 aria-label="카테고리 관리"
               >
@@ -621,9 +663,39 @@ function MemoPageContent() {
                   <path d="M12 20h9" />
                   <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                 </svg>
-                <span>카테고리 관리</span>
               </button>
             </div>
+
+            {/* 하위 카테고리 칩 — 선택된 상위에 하위가 있을 때만 펼침 */}
+            {activeRootId && activeRootChildren.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 pl-3 border-l-2 border-gray-200 dark:border-gray-700 animate-fade-in">
+                <button
+                  onClick={() => setSelectedCategoryFilter(activeRootId)}
+                  style={{ touchAction: 'manipulation' }}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    selectedCategoryFilter === activeRootId
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  전체
+                </button>
+                {activeRootChildren.map((child) => (
+                  <button
+                    key={child.id}
+                    onClick={() => setSelectedCategoryFilter(child.id)}
+                    style={{ touchAction: 'manipulation' }}
+                    className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      selectedCategoryFilter === child.id
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'
+                    }`}
+                  >
+                    {child.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {memoCategories.length === 0 && (
               <button
@@ -683,7 +755,8 @@ function MemoPageContent() {
 
         {showEditor && (
           <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/50 animate-fade-in">
-            <div className="min-h-full flex items-start justify-center p-3 sm:p-6">
+            {/* 하단 고정 바(툴바+취소/저장) 높이만큼 pb 확보 → 본문 끝까지 스크롤 가능 */}
+            <div className="min-h-full flex items-start justify-center px-3 sm:px-6 pt-3 sm:pt-6 pb-36">
               <div className="w-full max-w-2xl my-2 sm:my-6">
           <MemoEditor
             title={formData.title || ''}

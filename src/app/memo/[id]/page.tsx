@@ -81,7 +81,7 @@ export default async function MemoDetailPage({
   const htmlContent = isHtml ? injectLazyImgAttrs(memo.content) : memo.content;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-40">
       <GlobalNav />
 
       {/* 상단 네비게이션 — 인터랙션은 client 섬 */}
