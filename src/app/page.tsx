@@ -60,6 +60,18 @@ interface RoutineTemplate {
   image_upload_enabled?: boolean;
 }
 
+/** daily_routine_checks 행 — Home 에서 전 루틴을 한 번에 로드해 RoutineItem 으로 내려줌 */
+interface RoutineCheckRow {
+  date: string;
+  routine_id: string;
+  checked: boolean;
+  value: number | null;
+  image_url: string | null;
+  book_title?: string | null;
+  memo?: string | null;
+}
+const EMPTY_ROUTINE_CHECKS: RoutineCheckRow[] = [];
+
 interface RoutineCheck {
   routine_id: string;
   checked: boolean;
@@ -382,6 +394,10 @@ export default function Home() {
   // 루틴 숫자/체크 즉시 연동을 위한 동기화 트리거
   const [routineSyncTick, setRoutineSyncTick] = useState(0);
   const bumpRoutineSync = useCallback(() => setRoutineSyncTick(t => t + 1), []);
+
+  // 루틴별 연간 체크 데이터 — 루틴마다 개별 쿼리(N+1)하지 않고 한 번에 로드해 routine_id 로 그룹핑
+  const [routineChecksByRoutine, setRoutineChecksByRoutine] = useState<Record<string, RoutineCheckRow[]>>({});
+  const routineIdsKey = routineTemplates.map((r) => r.id).join(',');
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [editModeRoutine, setEditModeRoutine] = useState<string | null>(null);
   
@@ -832,56 +848,24 @@ export default function Home() {
     }
   }, [supabase, userId]);
 
-  // 식사 기록 로드
-  const loadMealRecords = useCallback(async () => {
-    if (!supabase || !userId) return;
-    try {
-      setDailyRecordsError(null);
-      // meal_images 포함하여 조회 시도
-      let { data, error } = await supabase
-        .from('daily_records')
-        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
-        .eq('user_id', userId)
-        .order('date', { ascending: false })
-        .limit(50);
-
-      // meal_images 컬럼이 없는 경우 재시도
-      if (error && (error.message.includes('column') || error.code === '42703')) {
-        console.warn('⚠️ meal_images 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
-        const result = await supabase
-          .from('daily_records')
-          .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
-          .eq('user_id', userId)
-          .order('date', { ascending: false })
-          .limit(50);
-        
-        data = result.data ? result.data.map(r => ({ ...r, meal_images: [] })) : null;
-        error = result.error;
-      }
-
-      if (error) {
-        console.error('식사 기록 조회 오류:', error);
-        setDailyRecordsError(error.message || 'daily_records(식사 기록) 조회 오류');
-        return;
-      }
-
-      // 식사 관련 데이터가 있는 기록만 필터링 (최근 20개)
-      const filteredRecords = (data || [])
-        .filter(record => 
-          record.meal_breakfast || record.meal_lunch || record.meal_dinner || (record.meal_memo && record.meal_memo.trim() !== '')
-        )
-        .map(record => ({
-          ...record,
-          meal_images: record.meal_images || []
-        }))
-        .slice(0, 20);
-
-      setMealRecords(filteredRecords);
-    } catch (err) {
-      console.error('식사 기록 로드 오류:', err);
-      setDailyRecordsError((err as any)?.message || 'daily_records(식사 기록) 로드 중 오류');
-    }
-  }, [supabase, userId]);
+  // 식사 기록 — 별도 조회하지 않고 allRecords(전체 daily_records)에서 파생 (daily_records 중복 fetch 제거)
+  useEffect(() => {
+    const filteredRecords = [...allRecords]
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+      .filter(
+        (record) =>
+          record.meal_breakfast ||
+          record.meal_lunch ||
+          record.meal_dinner ||
+          (record.meal_memo && record.meal_memo.trim() !== '')
+      )
+      .map((record) => ({
+        ...record,
+        meal_images: record.meal_images || [],
+      }))
+      .slice(0, 20);
+    setMealRecords(filteredRecords);
+  }, [allRecords]);
 
   const loadAllRecords = useCallback(async () => {
     if (!supabase || !userId) {
@@ -940,6 +924,55 @@ export default function Home() {
     loadRoutineTemplates();
   }, [loadRoutineTemplates]);
 
+  // 전 루틴 체크 데이터 단일 쿼리 (올해 + 전년: 연말/연초 연속 체크 계산용). 30초 폴링·syncTick 갱신도 여기서 1회만.
+  useEffect(() => {
+    if (!supabase || !userId || !routineIdsKey) return;
+    const ids = routineIdsKey.split(',');
+    const year = new Date().getFullYear();
+    const rangeStart = `${year - 1}-01-01`;
+    const rangeEnd = `${year}-12-31`;
+    let cancelled = false;
+
+    // PostgREST 기본 max-rows(1000) 초과 대비: 1000행씩 이어서 받음 (전 루틴 합산이라 1000을 넘을 수 있음)
+    const PAGE = 1000;
+    const load = async () => {
+      const rows: RoutineCheckRow[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabase
+          .from('daily_routine_checks')
+          .select('date, routine_id, checked, value, image_url, book_title, memo')
+          .eq('user_id', userId)
+          .in('routine_id', ids)
+          .eq('checked', true)
+          .gte('date', rangeStart)
+          .lte('date', rangeEnd)
+          .order('date', { ascending: true })
+          .order('routine_id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (cancelled) return;
+        if (error) {
+          console.error('루틴 체크 데이터(전체) 로드 오류:', error);
+          return;
+        }
+        const chunk = (data || []) as RoutineCheckRow[];
+        rows.push(...chunk);
+        if (chunk.length < PAGE) break;
+      }
+      const grouped: Record<string, RoutineCheckRow[]> = {};
+      for (const row of rows) {
+        (grouped[row.routine_id] ||= []).push(row);
+      }
+      setRoutineChecksByRoutine(grouped);
+    };
+
+    load();
+    const interval = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [supabase, userId, routineIdsKey, routineSyncTick]);
+
   // 페이지 포커스 시 루틴 템플릿 다시 로드 (설정 페이지에서 변경 시 동기화)
   useEffect(() => {
     const handleFocus = () => {
@@ -963,9 +996,8 @@ export default function Home() {
   useEffect(() => {
     if (!userId) return;
     loadAllRecords();
-    loadMealRecords();
     fetchWeather().catch(() => {});
-  }, [userId, loadAllRecords, loadMealRecords, fetchWeather]);
+  }, [userId, loadAllRecords, fetchWeather]);
 
   // 날짜 변경 시 데이터 로드
   useEffect(() => {
@@ -1319,7 +1351,6 @@ export default function Home() {
       
       // 데이터 새로고침 (백그라운드에서 실행)
       loadAllRecords();
-      loadMealRecords();
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
       console.error('=== 최종 에러 캐치 ===');
@@ -2480,7 +2511,6 @@ export default function Home() {
                               
                               // 데이터 새로고침
                               loadAllRecords();
-                              loadMealRecords();
                               
                               // 수정 모드 종료 (팝업은 유지)
                               setChartPopupEditMode(false);
@@ -2589,6 +2619,7 @@ export default function Home() {
                     onSync={bumpRoutineSync}
                     imageUploadEnabled={!!routine.image_upload_enabled}
                     routineTemplateData={routine}
+                    checks={routineChecksByRoutine[routine.id] ?? EMPTY_ROUTINE_CHECKS}
                   />
                   {/* 확장된 루틴의 캘린더 표시 (이미지 업로드가 아닌 루틴만) */}
                   {expandedRoutineId === routine.id && !routine.image_upload_enabled && (
@@ -3029,6 +3060,7 @@ function RoutineItem({
   imageUploadEnabled = false,
   onPhotoManagementClick,
   routineTemplateData,
+  checks = EMPTY_ROUTINE_CHECKS,
 }: {
   emoji: string;
   label: string;
@@ -3052,6 +3084,8 @@ function RoutineItem({
   imageUploadEnabled?: boolean;
   onPhotoManagementClick?: () => void;
   routineTemplateData?: RoutineTemplate;
+  /** Home 에서 한 번에 로드한 이 루틴의 체크 행(올해+전년, checked=true) */
+  checks?: RoutineCheckRow[];
 }) {
   const router = useRouter();
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
@@ -3084,70 +3118,35 @@ function RoutineItem({
   const currentMonth = currentDate.getMonth() + 1;
   const supabase = getSupabase();
 
-  // Supabase에서 데이터 로드
+  // 부모(Home)가 전 루틴을 단일 쿼리로 로드한 checks 를 이 루틴의 표시용 상태로 변환
+  // (직접 fetch 하지 않음 → 루틴 수만큼 요청이 늘던 N+1 제거. 낙관적 업데이트는 아래 setXxx 로 유지)
   useEffect(() => {
-    const loadData = async () => {
-      if (!supabase) return;
-      
-      try {
-        // 연말/연초(예: 2025-12-31 → 2026-01-01) 연속 체크/최근 5일 표시까지 자연스럽게 하기 위해
-        // "올해 + 전년" 범위를 함께 로드
-        const rangeStart = `${currentYear - 1}-01-01`;
-        const rangeEnd = `${currentYear}-12-31`;
+    const data: Record<string, Set<string>> = {};
+    let totalValue = 0;
+    const valuesByDate: Record<string, number> = {};
+    const imagesByDate: Record<string, string> = {};
 
-        const { data: checks, error } = await supabase
-          .from('daily_routine_checks')
-          .select('date, routine_id, checked, value, image_url')
-          .gte('date', rangeStart)
-          .lte('date', rangeEnd)
-          .eq('user_id', userId)
-          .eq('routine_id', routineId)
-          .eq('checked', true);
-
-        if (error) {
-          console.error('루틴 체크 데이터 로드 오류:', error);
-          return;
-        }
-
-        // 데이터를 Record<string, Set<string>> 형태로 변환
-        const data: Record<string, Set<string>> = {};
-        let totalValue = 0;
-        const valuesByDate: Record<string, number> = {};
-        const imagesByDate: Record<string, string> = {};
-        
-        if (checks && checks.length > 0) {
-          checks.forEach((check: any) => {
-            if (!data[check.date]) {
-              data[check.date] = new Set();
-            }
-            data[check.date].add(check.routine_id);
-            
-            if (check.image_url) imagesByDate[check.date] = check.image_url;
-            // 숫자 타입인 경우: 날짜별 값 저장 + "올해" 누적만 합산
-            if (routineType === 'number' && check.value != null) {
-              if (String(check.date).startsWith(`${currentYear}-`)) {
-                totalValue += check.value;
-              }
-              valuesByDate[check.date] = check.value;
-            }
-          });
-        }
-        
-        setCheckedDates(data);
-        setYearlyTotal(totalValue);
-        setNumberDateValues(valuesByDate);
-        setImageDateValues(imagesByDate);
-      } catch (err) {
-        console.error('데이터 로드 오류:', err);
+    for (const check of checks) {
+      if (!data[check.date]) {
+        data[check.date] = new Set();
       }
-    };
+      data[check.date].add(check.routine_id);
 
-    loadData();
-    
-    // 주기적으로 업데이트 (30초마다)
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
-  }, [supabase, routineId, currentYear, routineType, syncTick]);
+      if (check.image_url) imagesByDate[check.date] = check.image_url;
+      // 숫자 타입인 경우: 날짜별 값 저장 + "올해" 누적만 합산
+      if (routineType === 'number' && check.value != null) {
+        if (String(check.date).startsWith(`${currentYear}-`)) {
+          totalValue += check.value;
+        }
+        valuesByDate[check.date] = check.value;
+      }
+    }
+
+    setCheckedDates(data);
+    setYearlyTotal(totalValue);
+    setNumberDateValues(valuesByDate);
+    setImageDateValues(imagesByDate);
+  }, [checks, currentYear, routineType]);
 
   // 날짜 체크 상태 확인
   const isDateChecked = (date: string, routineId: string) => {
@@ -5501,4 +5500,4 @@ function RoutineCalendar({
       {/* 풀스크린 이미지 뷰어 */}
     </div>
   );
-}
+}
