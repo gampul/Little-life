@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '../lib/supabase';
@@ -87,6 +87,12 @@ interface WeatherData {
   city: string;
 }
 
+
+/** 개발 환경에서만 출력되는 디버그 로그 (프로덕션 콘솔 오염 방지) */
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== 'production') console.log(...args);
+};
+
 const getKstDateString = (): string =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
 
@@ -128,14 +134,14 @@ export default function Home() {
       return;
     }
     
-    console.log('🔍 사용자 인증 정보 확인 중...');
+    devLog('🔍 사용자 인증 정보 확인 중...');
     supabase.auth.getUser()
       .then(({ data, error }) => {
         if (error) {
           console.error('❌ 인증 오류:', error);
           setUserId(null);
         } else {
-          console.log('✅ 사용자 인증 완료:', data.user?.id);
+          devLog('✅ 사용자 인증 완료:', data.user?.id);
           setUserId(data.user?.id ?? null);
         }
       })
@@ -260,7 +266,7 @@ export default function Home() {
         return;
       }
 
-      console.log('✅ [등록] 성공:', id);
+      devLog('✅ [등록] 성공:', id);
       // 3) dequeue
       setPendingQueue((q) => q.filter((p) => p.id !== id));
       setPendingCount((c) => Math.max(0, c - 1));
@@ -282,7 +288,7 @@ export default function Home() {
       const item = q[idx];
       return [...q.slice(0, idx), ...q.slice(idx + 1), item];
     });
-    console.log('⏭️ [나중에] 스킵:', id);
+    devLog('⏭️ [나중에] 스킵:', id);
   }, []);
 
   // ── 임시저장: DB에 현재 편집 내용 저장 + 큐 뒤로 이동 ──
@@ -315,7 +321,7 @@ export default function Home() {
         return;
       }
 
-      console.log('💾 [임시저장] 성공:', id);
+      devLog('💾 [임시저장] 성공:', id);
 
       // 큐에서 해당 아이템 업데이트 + 뒤로 이동 (또는 1개면 팝업 닫기)
       setPendingQueue((q) => {
@@ -360,7 +366,7 @@ export default function Home() {
         return;
       }
 
-      console.log('🗑️ [삭제] 성공:', id);
+      devLog('🗑️ [삭제] 성공:', id);
       setPendingQueue((q) => q.filter((p) => p.id !== id));
       setPendingCount((c) => Math.max(0, c - 1));
     } catch (err) {
@@ -543,10 +549,10 @@ export default function Home() {
   // 이미지 업로드 핸들러
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    console.log('📤 업로드 시작:', files?.length, '개 파일');
+    devLog('📤 업로드 시작:', files?.length, '개 파일');
     
     if (!files || files.length === 0) {
-      console.log('❌ 파일이 선택되지 않음');
+      devLog('❌ 파일이 선택되지 않음');
       return;
     }
     
@@ -563,11 +569,11 @@ export default function Home() {
 
     try {
       // Storage bucket 존재 확인
-      console.log('📤 이미지 업로드 시작...');
+      devLog('📤 이미지 업로드 시작...');
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        console.log(`📁 파일 ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+        devLog(`📁 파일 ${i + 1}/${files.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
         
         // 파일 크기 체크 (5MB 제한)
         if (file.size > 5 * 1024 * 1024) {
@@ -589,7 +595,7 @@ export default function Home() {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${userId}/${formData.date}/${fileName}`;
-        console.log(`📂 업로드 경로: ${filePath}`);
+        devLog(`📂 업로드 경로: ${filePath}`);
 
         // Storage에 업로드
         const { data, error } = await supabase.storage
@@ -616,14 +622,14 @@ export default function Home() {
           continue;
         }
 
-        console.log(`✅ 업로드 성공 (${file.name}):`, data);
+        devLog(`✅ 업로드 성공 (${file.name}):`, data);
 
         // Public URL 가져오기
         const { data: urlData } = supabase.storage
           .from('meal-images')
           .getPublicUrl(filePath);
 
-        console.log('🔗 Public URL:', urlData.publicUrl);
+        devLog('🔗 Public URL:', urlData.publicUrl);
         uploadedUrls.push(urlData.publicUrl);
         successCount++;
       }
@@ -635,7 +641,7 @@ export default function Home() {
           meal_images: [...(prev.meal_images || []), ...uploadedUrls]
         }));
 
-        console.log('✅ 이미지 업로드 완료:', uploadedUrls);
+        devLog('✅ 이미지 업로드 완료:', uploadedUrls);
         alert(`✅ ${successCount}개 이미지 업로드 완료!`);
       } else if (errorCount > 0) {
         alert(`❌ 모든 이미지 업로드 실패 (${errorCount}개)`);
@@ -650,7 +656,7 @@ export default function Home() {
       setIsUploadingImage(false);
       // input 초기화
       e.target.value = '';
-      console.log('🏁 업로드 프로세스 종료');
+      devLog('🏁 업로드 프로세스 종료');
     }
   };
 
@@ -683,7 +689,7 @@ export default function Home() {
         meal_images: (prev.meal_images || []).filter(url => url !== imageUrl)
       }));
 
-      console.log('✅ 이미지 삭제 완료');
+      devLog('✅ 이미지 삭제 완료');
     } catch (err) {
       console.error('이미지 삭제 오류:', err);
       alert('❌ 이미지 삭제 중 오류가 발생했습니다.');
@@ -745,7 +751,7 @@ export default function Home() {
   const loadRoutineChecks = useCallback(async (date: string) => {
     if (!supabase || !userId) return;
     try {
-      console.log('📋 루틴 체크 로드 시작:', date);
+      devLog('📋 루틴 체크 로드 시작:', date);
       const { data, error } = await supabase
         .from('daily_routine_checks')
         .select('routine_id, checked, value')
@@ -755,7 +761,7 @@ export default function Home() {
       if (error) {
         // PGRST116은 "no rows returned" 에러로, 데이터가 없을 때 발생하는 정상적인 상황
         if (error.code === 'PGRST116') {
-          console.log('📋 루틴 체크 데이터 없음 (정상):', date);
+          devLog('📋 루틴 체크 데이터 없음 (정상):', date);
           setRoutineChecks([]);
           return;
         }
@@ -769,7 +775,7 @@ export default function Home() {
         return;
       }
 
-      console.log('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
+      devLog('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
       setRoutineChecks(data || []);
       
       // 루틴 값 추출하여 state에 저장
@@ -1014,7 +1020,7 @@ export default function Home() {
   // 루틴 체크박스 토글
   const handleRoutineCheckChange = (routineId: string) => {
     const isChecked = isRoutineChecked(routineId);
-    console.log('🔄 루틴 체크 변경:', routineId, '현재 상태:', isChecked, '→', !isChecked);
+    devLog('🔄 루틴 체크 변경:', routineId, '현재 상태:', isChecked, '→', !isChecked);
     setRoutineChecks(prev => {
       const existing = prev.find(c => c.routine_id === routineId);
       let newChecks;
@@ -1025,7 +1031,7 @@ export default function Home() {
       } else {
         newChecks = [...prev, { routine_id: routineId, checked: true }];
       }
-      console.log('✅ 업데이트된 routineChecks:', newChecks);
+      devLog('✅ 업데이트된 routineChecks:', newChecks);
       return newChecks;
     });
   };
@@ -1257,7 +1263,7 @@ export default function Home() {
       }
 
       // 2. 루틴 체크 저장 (formData.date 사용)
-      console.log('📋 루틴 체크 저장 시작:', formData.date, 'routineChecks:', routineChecks);
+      devLog('📋 루틴 체크 저장 시작:', formData.date, 'routineChecks:', routineChecks);
       const { error: deleteError } = await supabase
         .from('daily_routine_checks')
         .delete()
@@ -1286,7 +1292,7 @@ export default function Home() {
           value: routineValues[check.routine_id] ?? null,
         }));
 
-      console.log('📋 삽입할 루틴 체크:', checksToInsert);
+      devLog('📋 삽입할 루틴 체크:', checksToInsert);
 
       if (checksToInsert.length > 0) {
         const { error: checkError } = await supabase
@@ -1302,9 +1308,9 @@ export default function Home() {
           console.error('전체:', JSON.stringify(checkError, null, 2));
           throw checkError;
         }
-        console.log('✅ 루틴 체크 저장 완료:', checksToInsert.length, '개');
+        devLog('✅ 루틴 체크 저장 완료:', checksToInsert.length, '개');
       } else {
-        console.log('⚠️ 저장할 루틴 체크 없음 (모두 체크 해제됨)');
+        devLog('⚠️ 저장할 루틴 체크 없음 (모두 체크 해제됨)');
       }
 
       setMessage('✅ 저장되었습니다!');
@@ -1383,8 +1389,8 @@ export default function Home() {
     setIsEditMode(true);
   };
 
-  // 체중 그래프 데이터 필터링
-  const getWeightChartData = () => {
+  // 체중 그래프 데이터 필터링 — allRecords/weightPeriod 가 바뀔 때만 재계산 (렌더마다 재실행 방지)
+  const weightChartData = useMemo(() => {
     const now = new Date();
     let startDate = new Date();
 
@@ -1408,7 +1414,6 @@ export default function Home() {
             date: r.date,
             weight: r.weight,
           }));
-        console.log('전체 데이터 필터링 결과:', allData.length, '개');
         return allData;
     }
 
@@ -1421,9 +1426,8 @@ export default function Home() {
         date: r.date,
         weight: r.weight,
       }));
-    console.log(`${weightPeriod} 필터링 결과:`, filtered.length, '개');
     return filtered;
-  };
+  }, [allRecords, weightPeriod]);
 
 
 
@@ -1683,7 +1687,7 @@ export default function Home() {
                     value={selectedDate}
                     onChange={async (e) => {
                       const newDate = e.target.value;
-                      console.log('📅 상단 날짜 변경:', newDate);
+                      devLog('📅 상단 날짜 변경:', newDate);
                       setSelectedDate(newDate);
                       // formData.date도 함께 업데이트
                       setFormData(prev => ({ ...prev, date: newDate }));
@@ -1914,7 +1918,7 @@ export default function Home() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
                   {(() => {
-                    const rawData = getWeightChartData();
+                    const rawData = weightChartData;
                     const chartData = [...rawData].sort((a, b) => 
                       new Date(a.date).getTime() - new Date(b.date).getTime()
                     );
@@ -2104,8 +2108,8 @@ export default function Home() {
               )}
 
               <div className="h-64">
-                {getWeightChartData().length > 0 ? (() => {
-                  const rawData = getWeightChartData();
+                {weightChartData.length > 0 ? (() => {
+                  const rawData = weightChartData;
                   // 날짜순으로 정렬
                   const chartData = [...rawData].sort((a, b) => 
                     new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -2129,7 +2133,7 @@ export default function Home() {
                       interval={interval}
                       allRecords={allRecords}
                       onDateClick={(date, mealMemo) => {
-                        console.log('🎯 차트 날짜 클릭:', date, '→ 메모:', mealMemo || '없음');
+                        devLog('🎯 차트 날짜 클릭:', date, '→ 메모:', mealMemo || '없음');
                         setSelectedChartDate(date);
                         setSelectedDateMealMemo(mealMemo);
                         
@@ -2333,7 +2337,7 @@ export default function Home() {
                           onChange={async (e) => {
                             const files = e.target.files;
                             if (!files || files.length === 0) {
-                              console.log('파일이 선택되지 않음');
+                              devLog('파일이 선택되지 않음');
                               return;
                             }
                             if (!supabase) {
@@ -2345,7 +2349,7 @@ export default function Home() {
                               return;
                             }
                             
-                            console.log('사진 업로드 시작:', files.length, '개');
+                            devLog('사진 업로드 시작:', files.length, '개');
                             const uploadedUrls: string[] = [];
                             const errors: string[] = [];
                             
@@ -2354,7 +2358,7 @@ export default function Home() {
                                 const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
                                 const fileName = `${userId}/${selectedChartDate}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
                                 
-                                console.log('업로드 중:', fileName);
+                                devLog('업로드 중:', fileName);
                                 
                                 const { data: uploadData, error: uploadError } = await supabase.storage
                                   .from('meal-images')
@@ -2369,14 +2373,14 @@ export default function Home() {
                                   continue;
                                 }
                                 
-                                console.log('업로드 성공:', uploadData);
+                                devLog('업로드 성공:', uploadData);
                                 
                                 const { data: urlData } = supabase.storage
                                   .from('meal-images')
                                   .getPublicUrl(fileName);
                                 
                                 if (urlData?.publicUrl) {
-                                  console.log('공개 URL:', urlData.publicUrl);
+                                  devLog('공개 URL:', urlData.publicUrl);
                                   uploadedUrls.push(urlData.publicUrl);
                                 }
                               } catch (err) {
@@ -2387,7 +2391,7 @@ export default function Home() {
                             
                             if (uploadedUrls.length > 0) {
                               setChartPopupImages(prev => [...prev, ...uploadedUrls]);
-                              console.log('총', uploadedUrls.length, '개 업로드 완료');
+                              devLog('총', uploadedUrls.length, '개 업로드 완료');
                             }
                             
                             if (errors.length > 0) {
@@ -2450,14 +2454,14 @@ export default function Home() {
                         <button
                           onClick={async () => {
                             if (!supabase || !userId || !selectedChartDate) {
-                              console.log('저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
+                              devLog('저장 조건 미충족:', { supabase: !!supabase, userId, selectedChartDate });
                               return;
                             }
                             
                             setChartPopupSaving(true);
                             try {
                               const weightValue = chartPopupWeight ? parseFloat(chartPopupWeight) : null;
-                              console.log('저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
+                              devLog('저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
                               
                               // 기존 레코드 확인 (maybeSingle 사용으로 에러 방지)
                               const { data: existing, error: selectError } = await supabase
@@ -2472,7 +2476,7 @@ export default function Home() {
                               }
                               
                               if (existing) {
-                                console.log('기존 레코드 업데이트:', existing.id);
+                                devLog('기존 레코드 업데이트:', existing.id);
                                 // 업데이트
                                 const { error: updateError } = await supabase
                                   .from('daily_records')
@@ -2489,7 +2493,7 @@ export default function Home() {
                                   throw updateError;
                                 }
                               } else {
-                                console.log('새 레코드 생성');
+                                devLog('새 레코드 생성');
                                 // 새로 생성
                                 const { error: insertError } = await supabase
                                   .from('daily_records')
@@ -2507,7 +2511,7 @@ export default function Home() {
                                 }
                               }
                               
-                              console.log('저장 완료');
+                              devLog('저장 완료');
                               
                               // 데이터 새로고침
                               loadAllRecords();
@@ -2721,7 +2725,7 @@ export default function Home() {
                     value={formData.date}
                     onChange={async (e) => {
                       const newDate = e.target.value;
-                      console.log('📅 식사 날짜 변경:', newDate);
+                      devLog('📅 식사 날짜 변경:', newDate);
                       await loadDailyRecord(newDate);
                       await loadRoutineChecks(newDate);
                       setSelectedDate(newDate);
@@ -2855,7 +2859,7 @@ export default function Home() {
                             key={record.id}
                             className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-3 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
                             onClick={async () => {
-                              console.log('📋 기록 클릭:', record.date);
+                              devLog('📋 기록 클릭:', record.date);
                               await loadDailyRecord(record.date);
                               await loadRoutineChecks(record.date);
                               setSelectedDate(record.date);
@@ -2893,7 +2897,7 @@ export default function Home() {
                                 className="text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1"
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  console.log('✏️ 수정 아이콘 클릭:', record.date);
+                                  devLog('✏️ 수정 아이콘 클릭:', record.date);
                                   await loadDailyRecord(record.date);
                                   await loadRoutineChecks(record.date);
                                   setSelectedDate(record.date);
@@ -3299,7 +3303,7 @@ function RoutineItem({
     }
 
     try {
-      console.log('💾 숫자 입력 저장 시작:', { dateStr, numValue, routineId, userId });
+      devLog('💾 숫자 입력 저장 시작:', { dateStr, numValue, routineId, userId });
 
       if (numValue === null) {
         const { error } = await supabase
@@ -3314,7 +3318,7 @@ function RoutineItem({
           alert(`삭제 실패: ${error.message || '알 수 없는 오류'}`);
           return;
         }
-        console.log('✅ 삭제 완료');
+        devLog('✅ 삭제 완료');
       } else {
         const { data, error } = await supabase
           .from('daily_routine_checks')
@@ -3385,7 +3389,7 @@ function RoutineItem({
           alert(`저장 실패: ${alertMsg}`);
           return;
         }
-        console.log('✅ 저장 완료:', data);
+        devLog('✅ 저장 완료:', data);
       }
 
       // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
@@ -3396,11 +3400,11 @@ function RoutineItem({
         } else {
           next[dateStr] = numValue;
         }
-        console.log('🔄 UI 업데이트:', next);
+        devLog('🔄 UI 업데이트:', next);
         return next;
       });
       onSync();
-      console.log('✅ 동기화 트리거 완료');
+      devLog('✅ 동기화 트리거 완료');
     } catch (err) {
       console.error('❌ 숫자 입력 오류:', err);
       alert(`오류 발생: ${err}`);
@@ -5500,4 +5504,4 @@ function RoutineCalendar({
       {/* 풀스크린 이미지 뷰어 */}
     </div>
   );
-}
+}

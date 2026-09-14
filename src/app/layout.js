@@ -12,9 +12,34 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = "https://little-life.vercel.app";
+const SITE_NAME = "Little Life";
+const SITE_DESCRIPTION =
+  "매일의 루틴·건강 기록, 일기, 가계부, 자산 관리를 한곳에 모으고 AI가 함께 돌아보는 데일리 라이프 앱";
+
 export const metadata = {
-  title: "Little Life - Economic Freedom",
-  description: "경제적 자유를 위한 자산 관리 앱 - Happiness Unlocked",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+    locale: "ko_KR",
+    images: [{ url: "/little-life-logo.png", width: 1086, height: 1086, alt: SITE_NAME }],
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    images: ["/little-life-logo.png"],
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

@@ -10,7 +10,13 @@ import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { SwipeNav } from '../components/SwipeNav';
 import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/container';
-import { useMemos, useInvalidateMemos } from '../../hooks/useMemos';
+import {
+  useMemos,
+  useInvalidateMemos,
+  useMemoCategories,
+  useInvalidateMemoCategories,
+  type MemoCategoryItem,
+} from '../../hooks/useMemos';
 import { MemoListSkeleton } from './MemoListSkeleton';
 import { MemoCard, type MemoCardData } from './MemoCard';
 
@@ -38,12 +44,7 @@ interface Memo {
 
 type MemoListCard = MemoCardData;
 
-interface MemoCategory {
-  id: string;
-  name: string;
-  sort_order: number;
-  parent_id?: string | null;
-}
+type MemoCategory = MemoCategoryItem;
 
 type ViewMode = 'grid' | 'list' | 'compact';
 
@@ -81,7 +82,10 @@ function MemoPageContent() {
   const [copyToast, setCopyToast] = useState(false);
   
   // 카테고리 관련 상태
-  const [memoCategories, setMemoCategories] = useState<MemoCategory[]>([]);
+  // 카테고리 — React Query 단일 캐시 (초기 3회 중복 호출 제거)
+  const { data: memoCategoriesData } = useMemoCategories(user?.id ?? null);
+  const memoCategories: MemoCategory[] = memoCategoriesData ?? [];
+  const invalidateMemoCategories = useInvalidateMemoCategories();
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MemoCategory | null>(null);
@@ -90,6 +94,8 @@ function MemoPageContent() {
   const [newCategoryParentId, setNewCategoryParentId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   
+  const [currentPage, setCurrentPage] = useState(1);
+
   // 검색 (서버 — title/content ilike, 전체 글 대상)
   const [searchInput, setSearchInput] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -97,12 +103,12 @@ function MemoPageContent() {
   useEffect(() => {
     const t = window.setTimeout(() => {
       setDebouncedQuery(searchInput.trim());
+      setCurrentPage(1);
     }, 300);
     return () => window.clearTimeout(t);
   }, [searchInput]);
 
   // 페이지네이션 — React Query (카테고리 + 검색은 서버 조건, count/range 동일 기준)
-  const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
   // 대분류 선택 시 자식 글까지 포함 (소분류/단독은 자기 자신만)
   const effectiveCategoryIds: string[] | null = selectedCategoryFilter
@@ -139,35 +145,15 @@ function MemoPageContent() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // 카테고리 로드 (auth는 AuthProvider 공유 user 사용)
-  const loadCategories = useCallback(async () => {
-    if (!supabase) return;
-    const { data } = await supabase
-      .from('memo_categories')
-      .select('*')
-      .order('sort_order', { ascending: true });
+  // 카테고리 변경(추가/수정/삭제/순서) 후 캐시 갱신
+  const loadCategories = () => invalidateMemoCategories();
 
-    if (data) {
-      if (data.length === 0 && user) {
-        const defaults = ['에세이', '투자', '북스'];
-        await supabase.from('memo_categories').insert(
-          defaults.map((name, i) => ({ name, sort_order: i, user_id: user.id }))
-        );
-        loadCategories();
-        return;
-      }
-      setMemoCategories(data);
-    }
-  }, [supabase, user]);
-
-  useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
-
-  // 카테고리·검색어 변경 시 1페이지로
-  useEffect(() => {
+  // 카테고리 변경은 selectCategory 에서 페이지를 함께 리셋(같은 렌더에 배치 → memos 1회 요청).
+  // 검색어는 디바운스 콜백에서 함께 리셋.
+  const selectCategory = useCallback((id: string | null) => {
+    setSelectedCategoryFilter(id);
     setCurrentPage(1);
-  }, [selectedCategoryFilter, debouncedQuery]);
+  }, []);
 
   // 설정/햄버거에서 ?manageCategories=1 로 진입 시 기존 모달만 연다 (로직 동일)
   useEffect(() => {
@@ -605,7 +591,7 @@ function MemoPageContent() {
             {/* 상위 카테고리 칩 — 화면 폭 안에서 줄바꿈 (가로 스크롤 없음) */}
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => setSelectedCategoryFilter(null)}
+                onClick={() => selectCategory(null)}
                 style={{ touchAction: 'manipulation' }}
                 className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
                   !selectedCategoryFilter
@@ -621,7 +607,7 @@ function MemoPageContent() {
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setSelectedCategoryFilter(cat.id)}
+                    onClick={() => selectCategory(cat.id)}
                     style={{ touchAction: 'manipulation' }}
                     aria-expanded={hasChildren ? isActive : undefined}
                     className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -670,7 +656,7 @@ function MemoPageContent() {
             {activeRootId && activeRootChildren.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 pl-3 border-l-2 border-gray-200 dark:border-gray-700 animate-fade-in">
                 <button
-                  onClick={() => setSelectedCategoryFilter(activeRootId)}
+                  onClick={() => selectCategory(activeRootId)}
                   style={{ touchAction: 'manipulation' }}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     selectedCategoryFilter === activeRootId
@@ -683,7 +669,7 @@ function MemoPageContent() {
                 {activeRootChildren.map((child) => (
                   <button
                     key={child.id}
-                    onClick={() => setSelectedCategoryFilter(child.id)}
+                    onClick={() => selectCategory(child.id)}
                     style={{ touchAction: 'manipulation' }}
                     className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                       selectedCategoryFilter === child.id

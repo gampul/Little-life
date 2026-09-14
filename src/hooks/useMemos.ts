@@ -135,3 +135,69 @@ export function usePatchMemoInCache() {
     });
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* memo_categories — 필터 칩·에디터 select·카테고리 관리가 한 캐시를 공유 */
+/* ------------------------------------------------------------------ */
+
+export interface MemoCategoryItem {
+  id: string;
+  name: string;
+  sort_order: number;
+  parent_id?: string | null;
+}
+
+export const MEMO_CATEGORIES_QUERY_KEY = ['memo_categories'] as const;
+
+const DEFAULT_MEMO_CATEGORIES = ['에세이', '투자', '북스'];
+
+async function fetchMemoCategories(userId: string | null): Promise<MemoCategoryItem[]> {
+  const supabase = getSupabase();
+  if (!supabase) {
+    throw new Error('Supabase 클라이언트가 없습니다.');
+  }
+
+  const { data, error } = await supabase
+    .from('memo_categories')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  if (error) throw error;
+
+  // 최초 사용자: 기본 카테고리 생성 후 다시 조회 (기존 동작 유지)
+  if ((data ?? []).length === 0 && userId) {
+    const { error: insertError } = await supabase.from('memo_categories').insert(
+      DEFAULT_MEMO_CATEGORIES.map((name, i) => ({ name, sort_order: i, user_id: userId }))
+    );
+    if (!insertError) {
+      const retry = await supabase
+        .from('memo_categories')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (retry.error) throw retry.error;
+      return (retry.data ?? []) as MemoCategoryItem[];
+    }
+  }
+
+  return (data ?? []) as MemoCategoryItem[];
+}
+
+/**
+ * 카테고리 목록 — 컴포넌트가 여러 곳에서 써도 요청은 1회.
+ * 카테고리는 거의 바뀌지 않으므로 staleTime 을 길게 두고, 추가/수정/삭제 시 invalidate 로 갱신.
+ */
+export function useMemoCategories(userId: string | null | undefined) {
+  return useQuery({
+    queryKey: MEMO_CATEGORIES_QUERY_KEY,
+    queryFn: () => fetchMemoCategories(userId ?? null),
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+  });
+}
+
+export function useInvalidateMemoCategories() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    () => queryClient.invalidateQueries({ queryKey: MEMO_CATEGORIES_QUERY_KEY }),
+    [queryClient]
+  );
+}

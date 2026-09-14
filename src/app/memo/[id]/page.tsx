@@ -41,6 +41,36 @@ function injectLazyImgAttrs(html: string): string {
   });
 }
 
+/** 링크 공유 미리보기용 — 글 제목·요약·커버를 OG 로 노출 */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const supabase = await createSupabaseServer();
+  const { data } = await supabase
+    .from('memos')
+    .select('title, excerpt, cover_image')
+    .eq('id', id)
+    .maybeSingle<{ title: string | null; excerpt: string | null; cover_image: string | null }>();
+
+  if (!data) {
+    return { title: '다이어리' };
+  }
+
+  const title = data.title || '제목 없음';
+  const description = (data.excerpt || '').slice(0, 120) || undefined;
+  const images = data.cover_image ? [data.cover_image] : undefined;
+
+  return {
+    title,
+    description,
+    openGraph: { title, description, type: 'article', images },
+    twitter: { card: images ? 'summary_large_image' : 'summary', title, description, images },
+  };
+}
+
 export default async function MemoDetailPage({
   params,
 }: {
