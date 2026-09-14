@@ -4,7 +4,27 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '../../../lib/supabase';
 
-export function MemoDetailTopBar({ id }: { id: string }) {
+/** 상단 sticky 바 안의 뒤로가기 — sticky+backdrop-blur 는 fixed 의 기준이 되므로 액션 버튼은 여기 두지 않음 */
+export function MemoDetailTopBar() {
+  const router = useRouter();
+  return (
+    <button
+      onClick={() => router.back()}
+      className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+    >
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+      </svg>
+      <span className="text-sm">뒤로</span>
+    </button>
+  );
+}
+
+/**
+ * 수정/삭제 — 에디터의 취소/수정완료와 같은 위치(우하단 고정, FooterNav 위 bottom-24).
+ * 반드시 sticky/backdrop-filter 컨테이너 바깥에서 렌더해야 뷰포트 기준으로 고정됨.
+ */
+export function MemoDetailActions({ id }: { id: string }) {
   const router = useRouter();
   const supabase = getSupabase();
   const [isDeleting, setIsDeleting] = useState(false);
@@ -26,16 +46,6 @@ export function MemoDetailTopBar({ id }: { id: string }) {
 
   return (
     <>
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        <span className="text-sm">뒤로</span>
-      </button>
-
       {/*
         수정/삭제 — 에디터의 취소/수정완료와 같은 위치(우하단 고정, FooterNav 위 bottom-24).
         스크롤 위치와 무관하게 항상 접근 가능.

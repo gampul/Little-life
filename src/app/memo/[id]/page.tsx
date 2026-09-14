@@ -5,7 +5,7 @@ import { createSupabaseServer } from '../../../lib/supabase_ssr';
 import { GlobalNav } from '../../components/GlobalNav';
 import { FooterNav } from '../../components/FooterNav';
 import { APP_HORIZONTAL_CONTAINER } from '../../components/container';
-import { MemoDetailTopBar, MemoDetailFooter } from './MemoDetailClient';
+import { MemoDetailTopBar, MemoDetailFooter, MemoDetailActions } from './MemoDetailClient';
 
 interface MemoDetail {
   id: string;
@@ -87,7 +87,7 @@ export default async function MemoDetailPage({
       {/* 상단 네비게이션 — 인터랙션은 client 섬 */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
         <div className={`${APP_HORIZONTAL_CONTAINER} py-3 flex items-center justify-between`}>
-          <MemoDetailTopBar id={memo.id} />
+          <MemoDetailTopBar />
         </div>
       </div>
 
@@ -127,6 +127,9 @@ export default async function MemoDetailPage({
 
         <MemoDetailFooter id={memo.id} title={memo.title} />
       </div>
+
+      {/* 수정/삭제 고정 버튼 — sticky 바 바깥(뷰포트 기준 fixed) */}
+      <MemoDetailActions id={memo.id} />
 
       <FooterNav />
     </div>
