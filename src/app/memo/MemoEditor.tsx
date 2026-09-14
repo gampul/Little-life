@@ -12,6 +12,8 @@ import TaskItem from '@tiptap/extension-task-item';
 import { getSupabase } from '../../lib/supabase';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+/** 한 번에 첨부할 수 있는 최대 장수 */
+const MAX_IMAGES_PER_UPLOAD = 10;
 const MAX_IMAGE_EDGE = 1600;
 
 type PreparedUpload = {
@@ -237,54 +239,96 @@ export default function MemoEditor({
     }
   }, [editor]);
 
+  /** 한 번에 최대 10장. 파일 검사 → 순서대로 리사이즈·업로드 → 본문에 순서대로 삽입 */
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !supabase || !editor) return;
+    const picked = Array.from(e.target.files ?? []);
+    if (picked.length === 0 || !supabase || !editor) return;
 
-    if (file.size > MAX_IMAGE_SIZE) {
-      setUploadMessage('❌ 이미지 크기는 5MB 이하만 가능합니다.');
-      setTimeout(() => setUploadMessage(''), 3000);
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
+    const files = picked.slice(0, MAX_IMAGES_PER_UPLOAD);
+    const skippedByCount = picked.length - files.length;
+
+    const invalid = files.find((f) => !f.type.startsWith('image/'));
+    if (invalid) {
       setUploadMessage('❌ 이미지 파일만 업로드 가능합니다.');
       setTimeout(() => setUploadMessage(''), 3000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    const tooBig = files.find((f) => f.size > MAX_IMAGE_SIZE);
+    if (tooBig) {
+      setUploadMessage(
+        `❌ 이미지 크기는 장당 5MB 이하만 가능합니다. (${tooBig.name})`
+      );
+      setTimeout(() => setUploadMessage(''), 3000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
     setIsUploading(true);
-    setUploadMessage('📷 이미지 업로드 중...');
+    const total = files.length;
+    let done = 0;
+    let failed = 0;
 
     try {
-      const prepared = await prepareImageForUpload(file);
-      const timestamp = Date.now();
-      const randomStr = Math.random().toString(36).substring(2, 8);
-      const fileName = `${timestamp}_${randomStr}.${prepared.extension}`;
+      for (let i = 0; i < total; i++) {
+        setUploadMessage(
+          total > 1 ? `📷 이미지 업로드 중... (${i + 1}/${total})` : '📷 이미지 업로드 중...'
+        );
+        const file = files[i];
+        try {
+          const prepared = await prepareImageForUpload(file);
+          const timestamp = Date.now();
+          const randomStr = Math.random().toString(36).substring(2, 8);
+          const fileName = `${timestamp}_${randomStr}.${prepared.extension}`;
 
-      const { error } = await supabase.storage
-        .from('diary-images')
-        .upload(fileName, prepared.blob, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: prepared.contentType,
-        });
+          const { error } = await supabase.storage
+            .from('diary-images')
+            .upload(fileName, prepared.blob, {
+              cacheControl: '3600',
+              upsert: false,
+              contentType: prepared.contentType,
+            });
 
-      if (error) throw error;
+          if (error) throw error;
 
-      const { data: urlData } = supabase.storage
-        .from('diary-images')
-        .getPublicUrl(fileName);
+          const { data: urlData } = supabase.storage
+            .from('diary-images')
+            .getPublicUrl(fileName);
 
-      const imageAttrs: { src: string; width?: number; height?: number } = {
-        src: urlData.publicUrl,
-      };
-      if (prepared.width > 0 && prepared.height > 0) {
-        imageAttrs.width = prepared.width;
-        imageAttrs.height = prepared.height;
+          const imageAttrs: { src: string; width?: number; height?: number } = {
+            src: urlData.publicUrl,
+          };
+          if (prepared.width > 0 && prepared.height > 0) {
+            imageAttrs.width = prepared.width;
+            imageAttrs.height = prepared.height;
+          }
+          // 선택한 순서대로 커서 위치에 이어서 삽입
+          editor.chain().focus().setImage(imageAttrs).run();
+          done += 1;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : '';
+          if (msg.includes('bucket')) {
+            // 버킷 자체가 없으면 나머지도 전부 실패하므로 즉시 중단
+            throw err;
+          }
+          failed += 1;
+        }
       }
-      editor.chain().focus().setImage(imageAttrs).run();
-      setUploadMessage('✅ 이미지가 추가되었습니다!');
-      setTimeout(() => setUploadMessage(''), 2000);
+
+      if (failed === 0) {
+        setUploadMessage(
+          total > 1 ? `✅ 이미지 ${done}장이 추가되었습니다!` : '✅ 이미지가 추가되었습니다!'
+        );
+      } else {
+        setUploadMessage(`⚠️ ${done}장 추가, ${failed}장 실패했습니다.`);
+      }
+      if (skippedByCount > 0) {
+        setUploadMessage(
+          (prev) =>
+            `${prev} (최대 ${MAX_IMAGES_PER_UPLOAD}장까지만 업로드되어 ${skippedByCount}장은 제외됨)`
+        );
+      }
+      setTimeout(() => setUploadMessage(''), skippedByCount > 0 || failed > 0 ? 5000 : 2000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       let errorMessage = '이미지 업로드에 실패했습니다.';
@@ -530,12 +574,13 @@ export default function MemoEditor({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handleImageUpload}
                 className="hidden"
               />
               <button
                 type="button"
-                title="이미지"
+                title="이미지 (최대 10장)"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
                 className={`${toolBtnClass(false)} disabled:opacity-50`}
