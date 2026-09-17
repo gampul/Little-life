@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
 import { getSupabase } from '../lib/supabase';
 import { GlobalNav } from './components/GlobalNav';
 import { PendingSmsPopup } from './components/PendingSmsPopup';
 import type { PendingTransaction, TransactionType } from '../types/pending_transaction';
 import { FooterNav } from './components/FooterNav';
-import RoutineMonthCalendar from './components/RoutineMonthCalendar';
+import DailyLogFeed from './components/DailyLogFeed';
+import { useLongPress } from '../hooks/useLongPress';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from './components/container';
@@ -25,7 +25,6 @@ import {
   IconDeviceLaptop,
   IconCheckbox,
   IconCamera,
-  IconPencil,
   IconX,
 } from '@tabler/icons-react';
 
@@ -400,6 +399,19 @@ export default function Home() {
   // 루틴 숫자/체크 즉시 연동을 위한 동기화 트리거
   const [routineSyncTick, setRoutineSyncTick] = useState(0);
   const bumpRoutineSync = useCallback(() => setRoutineSyncTick(t => t + 1), []);
+  // 저장 직후 재조회 없이 매트릭스·루틴 기록 피드에 즉시 반영 (row=null 이면 해당 날짜 기록 제거)
+  const patchRoutineCheck = useCallback((routineId: string, dateStr: string, row: RoutineCheckRow | null) => {
+    setRoutineChecksByRoutine(prev => {
+      const rest = (prev[routineId] ?? []).filter(r => r.date !== dateStr);
+      const nextRows = row ? [...rest, row].sort((a, b) => (a.date < b.date ? -1 : 1)) : rest;
+      return { ...prev, [routineId]: nextRows };
+    });
+  }, []);
+  // 루틴 기록 피드에서 줄을 탭했을 때 해당 루틴의 입력 시트를 열기 위한 요청
+  const [entryRequest, setEntryRequest] = useState<{ routineId: string; dateStr: string; nonce: number } | null>(null);
+  const handleFeedEntryClick = useCallback((routineId: string, dateStr: string) => {
+    setEntryRequest({ routineId, dateStr, nonce: Date.now() });
+  }, []);
 
   // 루틴별 연간 체크 데이터 — 루틴마다 개별 쿼리(N+1)하지 않고 한 번에 로드해 routine_id 로 그룹핑
   const [routineChecksByRoutine, setRoutineChecksByRoutine] = useState<Record<string, RoutineCheckRow[]>>({});
@@ -2624,6 +2636,8 @@ export default function Home() {
                     imageUploadEnabled={!!routine.image_upload_enabled}
                     routineTemplateData={routine}
                     checks={routineChecksByRoutine[routine.id] ?? EMPTY_ROUTINE_CHECKS}
+                    onLocalPatch={patchRoutineCheck}
+                    openRequest={entryRequest?.routineId === routine.id ? entryRequest : null}
                   />
                   {/* 확장된 루틴의 캘린더 표시 (이미지 업로드가 아닌 루틴만) */}
                   {expandedRoutineId === routine.id && !routine.image_upload_enabled && (
@@ -2968,8 +2982,14 @@ export default function Home() {
             </div>
             </div>
 
-            {/* 월간 루틴 캘린더 */}
-            <RoutineMonthCalendar userId={userId} routineTemplates={routineTemplates} />
+            {/* 날짜별 루틴 기록 (하루 = 글 1개) — 기존 월간 캘린더 대체 */}
+            <DailyLogFeed
+              routineTemplates={routineTemplates}
+              checksByRoutine={routineChecksByRoutine}
+              records={allRecords}
+              onEntryClick={handleFeedEntryClick}
+              onImageClick={setFullImageUrl}
+            />
           </div>
         </div>
         
@@ -3065,6 +3085,8 @@ function RoutineItem({
   onPhotoManagementClick,
   routineTemplateData,
   checks = EMPTY_ROUTINE_CHECKS,
+  onLocalPatch,
+  openRequest,
 }: {
   emoji: string;
   label: string;
@@ -3090,19 +3112,17 @@ function RoutineItem({
   routineTemplateData?: RoutineTemplate;
   /** Home 에서 한 번에 로드한 이 루틴의 체크 행(올해+전년, checked=true) */
   checks?: RoutineCheckRow[];
+  /** 저장/삭제 결과를 Home 의 체크 데이터에 즉시 반영 */
+  onLocalPatch?: (routineId: string, dateStr: string, row: RoutineCheckRow | null) => void;
+  /** 루틴 기록 피드에서 온 "이 날짜 입력 시트 열기" 요청 */
+  openRequest?: { dateStr: string; nonce: number } | null;
 }) {
-  const router = useRouter();
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
   const [imageDateValues, setImageDateValues] = useState<Record<string, string>>({});
+  const [memoDateValues, setMemoDateValues] = useState<Record<string, string>>({});
   const [readingView, setReadingView] = useState<'calendar' | 'photos'>('calendar');
-  const [numberInputModal, setNumberInputModal] = useState<{
-    open: boolean;
-    dateStr: string;
-    valueText: string;
-  }>({ open: false, dateStr: '', valueText: '' });
-  
   // 독서 루틴 통합 바텀시트
   // 독서 루틴 통합 바텀시트 state
   const [readingSheet, setReadingSheet] = useState<{
@@ -3116,7 +3136,8 @@ function RoutineItem({
   const [readingMinutes, setReadingMinutes] = useState('');
   const [readingImageUrl, setReadingImageUrl] = useState<string | null>(null);
   const [readingUploading, setReadingUploading] = useState(false);
-  const [readingDiaryId, setReadingDiaryId] = useState<string | null>(null);
+  const [readingMemo, setReadingMemo] = useState('');
+  const [sheetChecked, setSheetChecked] = useState(true);
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -3129,6 +3150,7 @@ function RoutineItem({
     let totalValue = 0;
     const valuesByDate: Record<string, number> = {};
     const imagesByDate: Record<string, string> = {};
+    const memosByDate: Record<string, string> = {};
 
     for (const check of checks) {
       if (!data[check.date]) {
@@ -3137,6 +3159,7 @@ function RoutineItem({
       data[check.date].add(check.routine_id);
 
       if (check.image_url) imagesByDate[check.date] = check.image_url;
+      if (check.memo) memosByDate[check.date] = check.memo;
       // 숫자 타입인 경우: 날짜별 값 저장 + "올해" 누적만 합산
       if (routineType === 'number' && check.value != null) {
         if (String(check.date).startsWith(`${currentYear}-`)) {
@@ -3150,6 +3173,7 @@ function RoutineItem({
     setYearlyTotal(totalValue);
     setNumberDateValues(valuesByDate);
     setImageDateValues(imagesByDate);
+    setMemoDateValues(memosByDate);
   }, [checks, currentYear, routineType]);
 
   // 날짜 체크 상태 확인
@@ -3284,134 +3308,7 @@ function RoutineItem({
     return `${year}-${month}-${day}`;
   };
 
-  // 숫자 입력 저장/삭제 (prompt 대신 모달에서 호출)
-  const saveNumberValueForDate = async (dateStr: string, valueText: string) => {
-    if (!supabase) return;
-
-    const trimmed = String(valueText ?? '').trim();
-    const isEmpty = trimmed === '';
-
-    let numValue: number | null = null;
-    if (!isEmpty) {
-      const parsed = parseFloat(trimmed);
-      if (Number.isNaN(parsed)) {
-        alert('올바른 숫자를 입력해주세요.');
-        return;
-      }
-      // 소수점 1자리로 반올림
-      numValue = Math.round(parsed * 10) / 10;
-    }
-
-    try {
-      devLog('💾 숫자 입력 저장 시작:', { dateStr, numValue, routineId, userId });
-
-      if (numValue === null) {
-        const { error } = await supabase
-          .from('daily_routine_checks')
-          .delete()
-          .eq('date', dateStr)
-          .eq('routine_id', routineId)
-          .eq('user_id', userId);
-
-        if (error) {
-          console.error('❌ 삭제 오류(raw):', error);
-          alert(`삭제 실패: ${error.message || '알 수 없는 오류'}`);
-          return;
-        }
-        devLog('✅ 삭제 완료');
-      } else {
-        const { data, error } = await supabase
-          .from('daily_routine_checks')
-          .upsert(
-            {
-              user_id: userId,
-              date: dateStr,
-              routine_id: routineId,
-              checked: true,
-              value: numValue,
-            },
-            {
-              onConflict: 'user_id,date,routine_id',
-            }
-          );
-
-        if (error) {
-          // Next/Turbopack 콘솔 오버레이에서 Error 객체가 `{}`로 보이는 경우가 있어,
-          // 실제 정보(키/프로퍼티/문자열 표현)를 강제로 펼쳐서 로깅합니다.
-          const errAny: any = error as any;
-          const errInfo = {
-            typeof: typeof errAny,
-            isError: errAny instanceof Error,
-            name: errAny?.name,
-            message: errAny?.message,
-            code: errAny?.code,
-            details: errAny?.details,
-            hint: errAny?.hint,
-            status: errAny?.status,
-            statusCode: errAny?.statusCode,
-            toString: (() => {
-              try {
-                return String(errAny);
-              } catch {
-                return '[toString failed]';
-              }
-            })(),
-            keys: (() => {
-              try {
-                return Object.keys(errAny ?? {});
-              } catch {
-                return ['[Object.keys failed]'];
-              }
-            })(),
-            props: (() => {
-              try {
-                return Object.getOwnPropertyNames(errAny ?? {});
-              } catch {
-                return ['[getOwnPropertyNames failed]'];
-              }
-            })(),
-          };
-
-          console.error('❌ 저장 오류(raw):', error);
-          console.error('❌ 저장 오류(info):', errInfo);
-          try {
-            console.error('❌ 저장 오류(JSON):', JSON.stringify(error, null, 2));
-          } catch (e) {
-            console.error('❌ 저장 오류(JSON stringify 실패):', e);
-          }
-
-          const alertMsg =
-            errAny?.message ||
-            errAny?.details ||
-            errAny?.hint ||
-            (errInfo.toString && errInfo.toString !== '[object Object]' ? errInfo.toString : '') ||
-            `저장에 실패했습니다. (에러 객체가 비어있습니다)`;
-          alert(`저장 실패: ${alertMsg}`);
-          return;
-        }
-        devLog('✅ 저장 완료:', data);
-      }
-
-      // 즉시 UI 반영 (최근 5일) + 캘린더와 연동 트리거
-      setNumberDateValues(prev => {
-        const next = { ...prev };
-        if (numValue == null) {
-          delete next[dateStr];
-        } else {
-          next[dateStr] = numValue;
-        }
-        devLog('🔄 UI 업데이트:', next);
-        return next;
-      });
-      onSync();
-      devLog('✅ 동기화 트리거 완료');
-    } catch (err) {
-      console.error('❌ 숫자 입력 오류:', err);
-      alert(`오류 발생: ${err}`);
-    }
-  };
-
-  // 독서 시트 열기 (특정 날짜)
+  // 루틴 입력 시트 열기 (모든 루틴 공용: 체크/값 + 사진(선택 루틴) + 한 줄 메모)
   const openReadingSheet = (dateStr: string) => {
     const currentValue = numberDateValues[dateStr] ?? null;
     setReadingSheet({
@@ -3424,82 +3321,109 @@ function RoutineItem({
     });
     setReadingMinutes(currentValue !== null ? currentValue.toString() : '');
     setReadingImageUrl(imageDateValues[dateStr] ?? null);
-    // 기존 독서 일기 존재 여부 조회 → 버튼 라벨(쓰기/수정하기) + 편집 라우팅
-    setReadingDiaryId(null);
-    if (supabase) {
-      const dObj = new Date(dateStr);
-      const diaryTitle = `📚 ${dObj.getFullYear()}년 ${dObj.getMonth() + 1}월 ${dObj.getDate()}일 ${label} 기록`;
-      supabase
-        .from('memos')
-        .select('id')
-        .eq('title', diaryTitle)
-        .limit(1)
-        .maybeSingle()
-        .then(({ data }) => setReadingDiaryId((data as { id: string } | null)?.id ?? null));
-    }
+    setReadingMemo(memoDateValues[dateStr] ?? '');
+    // 체크형은 시트를 열면 "완료"가 기본값 → 메모 없이 저장만 눌러도 체크됨
+    setSheetChecked(true);
   };
 
-  // 독서 시트 저장
+  const closeReadingSheet = () => {
+    setReadingSheet(null);
+    setReadingMinutes('');
+    setReadingImageUrl(null);
+    setReadingMemo('');
+  };
+
+  // 루틴 기록 피드에서 온 열기 요청 처리
+  const lastOpenNonceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!openRequest || lastOpenNonceRef.current === openRequest.nonce) return;
+    lastOpenNonceRef.current = openRequest.nonce;
+    openReadingSheet(openRequest.dateStr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
+
+  // 루틴 입력 시트 저장
   const saveReadingSheet = async () => {
     if (!supabase || !readingSheet) return;
 
-    const todayStr = readingSheet.dateStr;
-    const numValue: number | null = parseFloat(readingMinutes) || null;
+    const targetDate = readingSheet.dateStr;
+    const memoText = readingMemo.trim().slice(0, 200);
+    const isNumber = routineType === 'number';
+
+    let numValue: number | null = null;
+    if (isNumber) {
+      const trimmed = readingMinutes.trim();
+      if (trimmed !== '') {
+        const parsed = parseFloat(trimmed);
+        if (Number.isNaN(parsed)) {
+          alert('올바른 숫자를 입력해주세요.');
+          return;
+        }
+        // 소수점 1자리로 반올림
+        numValue = Math.round(parsed * 10) / 10;
+      }
+    }
+
+    // 기록을 지우는 경우: 체크형에서 완료 해제 / 숫자형에서 값·사진·메모가 모두 비어 있음
+    const shouldDelete = isNumber
+      ? numValue === null && !readingImageUrl && memoText === ''
+      : !sheetChecked;
 
     setReadingUploading(true);
 
     try {
-      // DB에 저장
-      const { error: dbError } = await supabase
-        .from('daily_routine_checks')
-        .upsert(
-          {
-            user_id: userId,
-            routine_id: readingSheet.routineId,
-            date: todayStr,
-            checked: true,
-            value: numValue,
-            image_url: readingImageUrl || null,
-          },
-          {
-            onConflict: 'user_id,date,routine_id',
-          }
-        );
-
-      if (dbError) {
-        console.error('DB 저장 오류:', dbError);
-        alert('저장 중 오류가 발생했습니다.');
-        setReadingUploading(false);
-        return;
-      }
-
-      // UI 업데이트
-      if (numValue !== null) {
-        setNumberDateValues(prev => ({ ...prev, [todayStr]: numValue! }));
-      }
-      setImageDateValues(prev => {
-        const next = { ...prev };
-        if (readingImageUrl) next[todayStr] = readingImageUrl;
-        else delete next[todayStr];
-        return next;
-      });
-      
-      setCheckedDates(prev => {
-        const newData = { ...prev };
-        if (!newData[todayStr]) {
-          newData[todayStr] = new Set();
+      if (shouldDelete) {
+        const { error } = await supabase
+          .from('daily_routine_checks')
+          .delete()
+          .eq('date', targetDate)
+          .eq('routine_id', readingSheet.routineId)
+          .eq('user_id', userId);
+        if (error) {
+          console.error('DB 삭제 오류:', error);
+          alert(`삭제 실패: ${error.message || '알 수 없는 오류'}`);
+          setReadingUploading(false);
+          return;
         }
-        newData[todayStr].add(readingSheet.routineId);
-        return newData;
-      });
+        onLocalPatch?.(readingSheet.routineId, targetDate, null);
+      } else {
+        const payload: Record<string, unknown> = {
+          user_id: userId,
+          routine_id: readingSheet.routineId,
+          date: targetDate,
+          checked: true,
+          memo: memoText || null,
+        };
+        if (isNumber) payload.value = numValue;
+        if (imageUploadEnabled) payload.image_url = readingImageUrl || null;
 
+        const { error: dbError } = await supabase
+          .from('daily_routine_checks')
+          .upsert(payload, { onConflict: 'user_id,date,routine_id' });
+
+        if (dbError) {
+          console.error('DB 저장 오류:', dbError);
+          alert(`저장 실패: ${dbError.message || '알 수 없는 오류'}`);
+          setReadingUploading(false);
+          return;
+        }
+
+        const existing = checks.find(c => c.date === targetDate);
+        onLocalPatch?.(readingSheet.routineId, targetDate, {
+          date: targetDate,
+          routine_id: readingSheet.routineId,
+          checked: true,
+          value: isNumber ? numValue : existing?.value ?? null,
+          image_url: imageUploadEnabled ? readingImageUrl || null : existing?.image_url ?? null,
+          book_title: existing?.book_title ?? null,
+          memo: memoText || null,
+        });
+      }
+
+      // 펼친 루틴 캘린더 등 다른 뷰도 다시 읽도록 동기화
       onSync();
-      onChange();
 
-      // 시트 닫기
-      setReadingSheet(null);
-      setReadingMinutes('');
-      setReadingImageUrl(null);
+      closeReadingSheet();
       setReadingUploading(false);
     } catch (err) {
       console.error('저장 오류:', err);
@@ -3557,108 +3481,8 @@ function RoutineItem({
     }
   };
 
-  // 독서 일기 쓰기 버튼 클릭 핸들러
-  const handleWriteDiary = () => {
-    if (!readingSheet) return;
-    
-    const targetDate = readingSheet.dateStr;
-    const targetLabel = readingSheet.label;
-    const diaryId = readingDiaryId;
-    
-    // 시트 닫기
-    setReadingSheet(null);
-    setReadingMinutes('');
-    setReadingImageUrl(null);
-
-    // 기존 일기가 있으면 수정 모드로, 없으면 새 일기 작성
-    if (diaryId) {
-      router.push(`/memo?edit=${diaryId}`);
-    } else {
-      const params = new URLSearchParams({
-        date: targetDate,
-        from: 'routine',
-        label: targetLabel
-      });
-      router.push(`/memo?${params.toString()}`);
-    }
-  };
-  
   return (
     <div>
-      {/* 숫자 입력 모달 (prompt 대신 사용) */}
-      {numberInputModal.open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="숫자 입력"
-        >
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setNumberInputModal({ open: false, dateStr: '', valueText: '' })}
-          />
-          <div className="relative w-full max-w-[412px] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
-            <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-              <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                {numberInputModal.dateStr} 값 입력
-              </div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                {label} {unit ? `(${unit})` : ''}
-              </div>
-            </div>
-
-            <div className="px-4 py-4">
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.1"
-                autoFocus
-                value={numberInputModal.valueText}
-                onChange={(e) =>
-                  setNumberInputModal((prev) => ({ ...prev, valueText: e.target.value }))
-                }
-                onFocus={(e) => e.target.select()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setNumberInputModal({ open: false, dateStr: '', valueText: '' });
-                    return;
-                  }
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    saveNumberValueForDate(numberInputModal.dateStr, numberInputModal.valueText).then(
-                      () => setNumberInputModal({ open: false, dateStr: '', valueText: '' })
-                    );
-                  }
-                }}
-                placeholder="예: 7.6"
-                className="w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-              <div className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">
-                소수점 1자리까지 저장됩니다. (예: 7.64 → 7.6)
-              </div>
-            </div>
-
-            <div className="px-4 pb-4 flex gap-2 justify-end">
-              <button
-                className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                onClick={() => setNumberInputModal({ open: false, dateStr: '', valueText: '' })}
-              >
-                취소
-              </button>
-              <button
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                onClick={async () => {
-                  await saveNumberValueForDate(numberInputModal.dateStr, numberInputModal.valueText);
-                  setNumberInputModal({ open: false, dateStr: '', valueText: '' });
-                }}
-              >
-                저장
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 독서 루틴 통합 바텀시트 */}
       {readingSheet && (
         <div
@@ -3670,11 +3494,7 @@ function RoutineItem({
           <div
             className="absolute inset-0 bg-black/50 transition-opacity"
             onClick={() => {
-              if (!readingUploading) {
-                setReadingSheet(null);
-                setReadingMinutes('');
-                setReadingImageUrl(null);
-              }
+              if (!readingUploading) closeReadingSheet();
             }}
           />
           <div className="relative w-[90%] max-w-[400px] mx-auto rounded-2xl bg-white dark:bg-gray-900 shadow-xl animate-fade-in overflow-hidden flex flex-col max-h-[90vh]">
@@ -3695,11 +3515,7 @@ function RoutineItem({
                 </div>
                 <button
                   onClick={() => {
-                    if (!readingUploading) {
-                      setReadingSheet(null);
-                      setReadingMinutes('');
-                      setReadingImageUrl(null);
-                    }
+                    if (!readingUploading) closeReadingSheet();
                   }}
                   disabled={readingUploading}
                   className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -3711,15 +3527,46 @@ function RoutineItem({
 
             {/* 컨텐츠 영역 */}
             <div className="px-5 py-4 flex-1 overflow-y-auto">
+              {/* 체크형: 완료 토글 */}
+              {routineType === 'checkbox' && (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={sheetChecked}
+                  onClick={() => setSheetChecked(v => !v)}
+                  disabled={readingUploading}
+                  className="mb-5 w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 disabled:opacity-50"
+                >
+                  <span
+                    className={`w-6 h-6 rounded-md flex items-center justify-center ${
+                      sheetChecked
+                        ? 'bg-gray-900 dark:bg-gray-600'
+                        : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
+                    }`}
+                  >
+                    {sheetChecked && (
+                      <svg width="14" height="11" viewBox="0 0 12 9" fill="none">
+                        <path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {sheetChecked ? '완료' : '미완료 (저장하면 이 날 기록이 지워져요)'}
+                  </span>
+                </button>
+              )}
+
               {/* 숫자 입력 */}
-              <div className="mb-6">
+              {routineType === 'number' && (
+              <div className="mb-5">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  오늘 {readingSheet.label} 시간
+                  {readingSheet.label} ({readingSheet.unit})
                 </label>
                 <div className="relative">
                   <input
                     type="number"
                     inputMode="decimal"
+                    step="0.1"
                     autoFocus
                     value={readingMinutes}
                     onChange={(e) => setReadingMinutes(e.target.value)}
@@ -3733,11 +3580,37 @@ function RoutineItem({
                   </span>
                 </div>
               </div>
+              )}
 
-              {/* 사진 업로드 */}
+              {/* 한 줄 메모 (모든 루틴 공통) → 루틴 기록 글에 합쳐져 보임 */}
+              <div className="mb-5">
+                <label htmlFor={`routine-memo-${routineId}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  한 줄 메모 (선택)
+                </label>
+                <input
+                  id={`routine-memo-${routineId}`}
+                  type="text"
+                  maxLength={200}
+                  autoFocus={routineType === 'checkbox'}
+                  value={readingMemo}
+                  onChange={(e) => setReadingMemo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing && !readingUploading) {
+                      e.preventDefault();
+                      saveReadingSheet();
+                    }
+                  }}
+                  placeholder="오늘 어땠는지 짧게 남겨보세요"
+                  disabled={readingUploading}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
+                />
+              </div>
+
+              {/* 사진 업로드 (사진 사용 루틴만) */}
+              {imageUploadEnabled && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  오늘 사진 (선택)
+                  사진 (선택)
                 </label>
                 
                 {readingUploading ? (
@@ -3782,29 +3655,13 @@ function RoutineItem({
                   </label>
                 )}
               </div>
-            </div>
-
-            {/* 독서 일기 쓰기 버튼 */}
-            <div className="px-5 py-3 border-t border-gray-200 dark:border-gray-700">
-              <button
-                onClick={handleWriteDiary}
-                disabled={readingUploading}
-                className="w-full flex items-center justify-center gap-2 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors font-medium disabled:opacity-50"
-                style={{ color: '#178CF2' }}
-              >
-                <IconPencil size={20} stroke={1.5} />
-                {readingDiaryId ? '수정하기' : `${readingSheet.label} 일기 쓰기`}
-              </button>
+              )}
             </div>
 
             {/* 액션 버튼 */}
             <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex gap-3 flex-shrink-0">
               <button
-                onClick={() => {
-                  setReadingSheet(null);
-                  setReadingMinutes('');
-                  setReadingImageUrl(null);
-                }}
+                onClick={closeReadingSheet}
                 disabled={readingUploading}
                 className="flex-1 px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium disabled:opacity-50"
               >
@@ -3879,28 +3736,22 @@ function RoutineItem({
                       key={dateStr}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (imageUploadEnabled) {
-                          // 이미지 업로드 루틴: 통합 바텀시트 열기
-                          openReadingSheet(dateStr);
-                        } else {
-                          setNumberInputModal({
-                            open: true,
-                            dateStr,
-                            valueText: dayValue !== null ? dayValue.toFixed(1) : '0.0',
-                          });
-                        }
+                        // 모든 숫자 루틴: 값 + 메모(+사진) 통합 시트
+                        openReadingSheet(dateStr);
                       }}
-                      className="flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
+                      aria-label={`${label} ${dateStr} 값 입력${memoDateValues[dateStr] ? ' (메모 있음)' : ''}`}
+                      className="relative flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
                     >
                       <span 
                         className={`font-bold ${dayValue !== null && dayValue !== 0 ? 'text-gray-900 dark:text-gray-200' : 'text-gray-300 dark:text-gray-600'}`} 
-                        style={{ fontSize: '14px' }}
+                        style={{ fontSize: dayValue !== null && !Number.isInteger(dayValue) ? '10px' : '14px' }}
                       >
-                        {dayValue !== null ? Math.round(dayValue) : '0'}
+                        {dayValue !== null ? (Number.isInteger(dayValue) ? dayValue : dayValue.toFixed(1)) : '0'}
                       </span>
                       <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
+                      {memoDateValues[dateStr] && <MemoDot />}
                     </button>
                   );
                 }
@@ -3922,6 +3773,12 @@ function RoutineItem({
                   
                   const isCurrentlyChecked = checkedDates[dateStr]?.has(routineId) || false;
                   const newChecked = !isCurrentlyChecked;
+
+                  // 체크 해제 = 행 삭제 → 메모가 있으면 함께 사라지므로 확인
+                  if (!newChecked && memoDateValues[dateStr]) {
+                    const ok = window.confirm('이 날 남긴 메모도 함께 삭제됩니다. 체크를 해제할까요?');
+                    if (!ok) return;
+                  }
                   
                   try {
                     if (newChecked) {
@@ -3944,6 +3801,15 @@ function RoutineItem({
                         .eq('user_id', userId);
                     }
                     
+                    // Home 의 체크 데이터(루틴 기록 피드 포함)에 즉시 반영
+                    onLocalPatch?.(
+                      routineId,
+                      dateStr,
+                      newChecked
+                        ? { date: dateStr, routine_id: routineId, checked: true, value: null, image_url: null, book_title: null, memo: null }
+                        : null
+                    );
+
                     // 상태 업데이트
                     setCheckedDates(prev => {
                       const newData = { ...prev };
@@ -3982,30 +3848,14 @@ function RoutineItem({
                   const isToday = i === 0;
                   
                   checkboxes.push(
-                    <div
+                    <CheckCell
                       key={dateStr}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCheckboxToggle(dateStr);
-                      }}
-                      className={`w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer ${
-                        isChecked
-                          ? 'bg-gray-900 dark:bg-gray-700 border-gray-900 dark:border-gray-700'
-                          : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
-                      }`}
-                    >
-                      {isChecked && (
-                        <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
-                          <path
-                            d="M1 4L4.5 7.5L11 1"
-                            stroke="white"
-                            strokeWidth="1.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
-                    </div>
+                      checked={isChecked}
+                      hasMemo={!!memoDateValues[dateStr]}
+                      ariaLabel={`${label} ${dateStr}${isToday ? ' (오늘)' : ''}`}
+                      onToggle={() => handleCheckboxToggle(dateStr)}
+                      onOpenMemo={() => openReadingSheet(dateStr)}
+                    />
                   );
                 }
                 
@@ -4044,6 +3894,66 @@ function RoutineItem({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// 메모가 있는 칸 표시용 점
+function MemoDot() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-blue-500 ring-1 ring-white dark:ring-gray-800 pointer-events-none"
+    />
+  );
+}
+
+// 체크형 루틴의 날짜 칸: 탭 = 즉시 토글, 길게 누르기/우클릭/Shift+Enter = 체크+메모 시트
+function CheckCell({
+  checked,
+  hasMemo,
+  ariaLabel,
+  onToggle,
+  onOpenMemo,
+}: {
+  checked: boolean;
+  hasMemo: boolean;
+  ariaLabel: string;
+  onToggle: () => void;
+  onOpenMemo: () => void;
+}) {
+  const press = useLongPress({ onClick: onToggle, onLongPress: onOpenMemo });
+  return (
+    <div
+      {...press}
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={`${ariaLabel}${hasMemo ? ', 메모 있음' : ''}. 길게 누르면 메모 입력`}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          onOpenMemo();
+        } else if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          onToggle();
+        }
+      }}
+      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', touchAction: 'manipulation' }}
+      className={`relative w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+        checked
+          ? 'bg-gray-900 dark:bg-gray-700 border-gray-900 dark:border-gray-700'
+          : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
+      }`}
+    >
+      {checked && (
+        <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
+          <path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+      {hasMemo && <MemoDot />}
     </div>
   );
 }
