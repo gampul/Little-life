@@ -19,6 +19,7 @@ interface RoutineCheckRow {
   checked: boolean;
   value: number | null;
   image_url: string | null;
+  image_urls?: string[] | null;
   book_title?: string | null;
   memo?: string | null;
 }
@@ -70,6 +71,14 @@ const getKstTodayString = (): string => {
 const formatValue = (value: number): string =>
   Number.isInteger(value) ? String(value) : value.toFixed(1);
 
+/** 행의 사진 목록 (image_urls 우선, 없으면 기존 단일 image_url) */
+const getRowImages = (row: RoutineCheckRow): string[] => {
+  const list = Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean) : [];
+  // 루틴별 캘린더(기존 단일 업로드)에서 사진을 바꾼 경우 image_url 만 갱신되므로 맨 앞에 합친다
+  if (row.image_url && !list.includes(row.image_url)) return [row.image_url, ...list].slice(0, 5);
+  return list;
+};
+
 const hasRecordContent = (r: DailyRecord): boolean =>
   r.weight != null ||
   !!r.meal_breakfast ||
@@ -106,7 +115,7 @@ export default function DailyLogFeed({
           routine.type === 'number' &&
           (row.value == null || row.value === 0) &&
           !row.memo &&
-          !row.image_url
+          getRowImages(row).length === 0
         ) {
           continue;
         }
@@ -285,21 +294,26 @@ export default function DailyLogFeed({
                               </p>
                             )}
                           </button>
-                          {row.image_url && (
-                            <button
-                              type="button"
-                              onClick={() => onImageClick?.(row.image_url!)}
-                              className="ml-[26px] mt-1 block"
-                              aria-label={`${routine.label} 사진 크게 보기`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={row.image_url}
-                                alt={`${routine.label} 사진`}
-                                loading="lazy"
-                                className="h-24 w-24 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
-                              />
-                            </button>
+                          {getRowImages(row).length > 0 && (
+                            <div className="ml-[26px] mt-1 flex gap-1.5 overflow-x-auto">
+                              {getRowImages(row).map((url, i) => (
+                                <button
+                                  key={url + i}
+                                  type="button"
+                                  onClick={() => onImageClick?.(url)}
+                                  className="shrink-0"
+                                  aria-label={`${routine.label} 사진 ${i + 1} 크게 보기`}
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={url}
+                                    alt={`${routine.label} 사진 ${i + 1}`}
+                                    loading="lazy"
+                                    className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                                  />
+                                </button>
+                              ))}
+                            </div>
                           )}
                         </li>
                       ))}

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   LineChart,
   Line,
@@ -34,7 +34,8 @@ interface WeightChartProps {
 const CustomTooltip = ({ 
   active, 
   payload,
-  allRecords 
+  allRecords,
+  onClose,
 }: {
   active?: boolean;
   payload?: Array<{
@@ -42,6 +43,7 @@ const CustomTooltip = ({
     value?: number;
   }>;
   allRecords: DailyRecord[];
+  onClose?: () => void;
 }) => {
   if (!active || !payload || payload.length === 0) return null;
 
@@ -74,15 +76,36 @@ const CustomTooltip = ({
 
   return (
     <div 
-      className="bg-gray-900 dark:bg-gray-800 text-white rounded-xl shadow-2xl border-2 border-gray-700"
+      className="relative bg-gray-900 dark:bg-gray-800 text-white rounded-xl shadow-2xl border-2 border-gray-700"
       style={{ 
         padding: '14px 18px',
         minWidth: '180px',
         maxWidth: '280px'
       }}
     >
+      {/* 닫기 버튼 — 터치 기기(hover 없음)에서만 노출. 터치에서는 툴팁이 자동으로 사라지지 않기 때문 */}
+      {onClose && (
+        <button
+          type="button"
+          aria-label="닫기"
+          onClick={(e) => {
+            // 차트의 onClick(날짜 팝업 열기)으로 전파되지 않게 막는다
+            e.stopPropagation();
+            onClose();
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="hidden [@media(hover:none)]:flex absolute top-1 right-1 w-8 h-8 items-center justify-center rounded-full text-gray-300 hover:text-white active:bg-white/10"
+          style={{ pointerEvents: 'auto', touchAction: 'manipulation' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      )}
       {/* 날짜 & 체중 */}
-      <p className="font-bold text-sm text-gray-300 mb-1">{formattedDate}</p>
+      <p className="font-bold text-sm text-gray-300 mb-1 [@media(hover:none)]:pr-7">{formattedDate}</p>
       <p className="font-bold text-red-400" style={{ fontSize: '16px' }}>{weight} kg</p>
       
       {/* 사진 썸네일 (2배 크기) */}
@@ -121,6 +144,22 @@ export default function WeightChart({
   allRecords,
   onDateClick,
 }: WeightChartProps) {
+  // 터치 기기에서는 툴팁이 한 번 뜨면 계속 남으므로 직접 닫을 수 있게 한다
+  const [tooltipDismissed, setTooltipDismissed] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // 차트를 다시 터치/호버하면 툴팁 다시 표시
+  const reopenTooltip = useCallback(() => setTooltipDismissed(false), []);
+
+  // 차트 바깥을 터치해도 닫힘
+  useEffect(() => {
+    const handleOutside = (e: TouchEvent) => {
+      const el = containerRef.current;
+      if (el && e.target instanceof Node && !el.contains(e.target)) setTooltipDismissed(true);
+    };
+    document.addEventListener('touchstart', handleOutside, { passive: true });
+    return () => document.removeEventListener('touchstart', handleOutside);
+  }, []);
+
   // 클릭한 날짜의 meal_memo 찾기
   const getMealMemo = (date: string): string | null => {
     const record = allRecords.find((r: DailyRecord) => {
@@ -144,10 +183,14 @@ export default function WeightChart({
   };
 
   return (
+    <div ref={containerRef} className="w-full h-full">
     <ResponsiveContainer width="100%" height="100%">
       <LineChart 
         data={chartData}
         margin={{ top: 10, right: 10, left: 0, bottom: 25 }}
+        onMouseMove={reopenTooltip}
+        onTouchStart={reopenTooltip}
+        onTouchMove={reopenTooltip}
         onClick={(data) => {
           console.log('📊 차트 클릭됨:', data);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -206,7 +249,8 @@ export default function WeightChart({
           width={45}
         />
         <Tooltip 
-          content={<CustomTooltip allRecords={allRecords} />}
+          active={tooltipDismissed ? false : undefined}
+          content={<CustomTooltip allRecords={allRecords} onClose={() => setTooltipDismissed(true)} />}
           cursor={{ stroke: '#EF4444', strokeWidth: 2, strokeDasharray: '5 5' }}
           wrapperStyle={{ zIndex: 1000 }}
         />
@@ -227,6 +271,7 @@ export default function WeightChart({
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   );
 }
 
