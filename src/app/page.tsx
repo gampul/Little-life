@@ -9,6 +9,7 @@ import type { PendingTransaction, TransactionType } from '../types/pending_trans
 import { FooterNav } from './components/FooterNav';
 import DailyLogFeed from './components/DailyLogFeed';
 import { useLongPress } from '../hooks/useLongPress';
+import { compressImage } from '../lib/compressImage';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from './components/container';
@@ -66,10 +67,22 @@ interface RoutineCheckRow {
   checked: boolean;
   value: number | null;
   image_url: string | null;
+  /** 다중 사진(최대 5장). 컬럼이 아직 없으면 undefined → image_url 로 대체 */
+  image_urls?: string[] | null;
   book_title?: string | null;
   memo?: string | null;
 }
 const EMPTY_ROUTINE_CHECKS: RoutineCheckRow[] = [];
+const MAX_ROUTINE_PHOTOS = 5;
+/** 행의 사진 목록 (image_urls 우선, 없으면 기존 단일 image_url) */
+const getRowImages = (row: { image_url?: string | null; image_urls?: string[] | null }): string[] => {
+  const list = Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean) : [];
+  // 루틴별 캘린더(기존 단일 업로드)에서 사진을 바꾼 경우 image_url 만 갱신되므로 맨 앞에 합친다
+  if (row.image_url && !list.includes(row.image_url)) return [row.image_url, ...list].slice(0, 5);
+  return list;
+};
+const isMissingColumnError = (error: { message?: string; code?: string } | null | undefined) =>
+  !!error && (error.code === '42703' || error.code === 'PGRST204' || /column/i.test(error.message || ''));
 
 interface RoutineCheck {
   routine_id: string;
@@ -953,12 +966,15 @@ export default function Home() {
 
     // PostgREST 기본 max-rows(1000) 초과 대비: 1000행씩 이어서 받음 (전 루틴 합산이라 1000을 넘을 수 있음)
     const PAGE = 1000;
+    const BASE_COLS = 'date, routine_id, checked, value, image_url, book_title, memo';
     const load = async () => {
       const rows: RoutineCheckRow[] = [];
+      // image_urls 컬럼이 없는(마이그레이션 전) DB 에서도 동작하도록 실패 시 기존 컬럼만으로 재시도
+      let cols = `${BASE_COLS}, image_urls`;
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from('daily_routine_checks')
-          .select('date, routine_id, checked, value, image_url, book_title, memo')
+          .select(cols)
           .eq('user_id', userId)
           .in('routine_id', ids)
           .eq('checked', true)
@@ -968,11 +984,18 @@ export default function Home() {
           .order('routine_id', { ascending: true })
           .range(from, from + PAGE - 1);
         if (cancelled) return;
+        if (error && cols !== BASE_COLS && isMissingColumnError(error)) {
+          console.warn('⚠️ image_urls 컬럼이 없습니다. add_routine_image_urls.sql 실행 전까지 사진은 1장만 저장됩니다.');
+          cols = BASE_COLS;
+          rows.length = 0;
+          from = -PAGE;
+          continue;
+        }
         if (error) {
           console.error('루틴 체크 데이터(전체) 로드 오류:', error);
           return;
         }
-        const chunk = (data || []) as RoutineCheckRow[];
+        const chunk = (data || []) as unknown as RoutineCheckRow[];
         rows.push(...chunk);
         if (chunk.length < PAGE) break;
       }
@@ -3122,6 +3145,7 @@ function RoutineItem({
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
   const [imageDateValues, setImageDateValues] = useState<Record<string, string>>({});
+  const [photoCountByDate, setPhotoCountByDate] = useState<Record<string, number>>({});
   const [memoDateValues, setMemoDateValues] = useState<Record<string, string>>({});
   const [readingView, setReadingView] = useState<'calendar' | 'photos'>('calendar');
   // 독서 루틴 통합 바텀시트
@@ -3135,7 +3159,8 @@ function RoutineItem({
     dateStr: string;
   } | null>(null);
   const [readingMinutes, setReadingMinutes] = useState('');
-  const [readingImageUrl, setReadingImageUrl] = useState<string | null>(null);
+  const [readingImages, setReadingImages] = useState<string[]>([]);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [readingUploading, setReadingUploading] = useState(false);
   const [readingMemo, setReadingMemo] = useState('');
   const [sheetChecked, setSheetChecked] = useState(true);
@@ -3152,6 +3177,7 @@ function RoutineItem({
     const valuesByDate: Record<string, number> = {};
     const imagesByDate: Record<string, string> = {};
     const memosByDate: Record<string, string> = {};
+    const photoCounts: Record<string, number> = {};
 
     for (const check of checks) {
       if (!data[check.date]) {
@@ -3159,7 +3185,11 @@ function RoutineItem({
       }
       data[check.date].add(check.routine_id);
 
-      if (check.image_url) imagesByDate[check.date] = check.image_url;
+      const rowImages = getRowImages(check);
+      if (rowImages.length > 0) {
+        imagesByDate[check.date] = rowImages[0];
+        photoCounts[check.date] = rowImages.length;
+      }
       if (check.memo) memosByDate[check.date] = check.memo;
       // 숫자 타입인 경우: 날짜별 값 저장 + "올해" 누적만 합산
       if (routineType === 'number' && check.value != null) {
@@ -3175,6 +3205,7 @@ function RoutineItem({
     setNumberDateValues(valuesByDate);
     setImageDateValues(imagesByDate);
     setMemoDateValues(memosByDate);
+    setPhotoCountByDate(photoCounts);
   }, [checks, currentYear, routineType]);
 
   // 날짜 체크 상태 확인
@@ -3321,7 +3352,8 @@ function RoutineItem({
       dateStr,
     });
     setReadingMinutes(currentValue !== null ? currentValue.toString() : '');
-    setReadingImageUrl(imageDateValues[dateStr] ?? null);
+    const existingRow = checks.find(c => c.date === dateStr);
+    setReadingImages(existingRow ? getRowImages(existingRow) : []);
     setReadingMemo(memoDateValues[dateStr] ?? '');
     // 체크형은 시트를 열면 "완료"가 기본값 → 메모 없이 저장만 눌러도 체크됨
     setSheetChecked(true);
@@ -3330,7 +3362,7 @@ function RoutineItem({
   const closeReadingSheet = () => {
     setReadingSheet(null);
     setReadingMinutes('');
-    setReadingImageUrl(null);
+    setReadingImages([]);
     setReadingMemo('');
   };
 
@@ -3367,7 +3399,7 @@ function RoutineItem({
 
     // 기록을 지우는 경우: 체크형에서 완료 해제 / 숫자형에서 값·사진·메모가 모두 비어 있음
     const shouldDelete = isNumber
-      ? numValue === null && !readingImageUrl && memoText === ''
+      ? numValue === null && readingImages.length === 0 && memoText === ''
       : !sheetChecked;
 
     setReadingUploading(true);
@@ -3396,11 +3428,26 @@ function RoutineItem({
           memo: memoText || null,
         };
         if (isNumber) payload.value = numValue;
-        if (imageUploadEnabled) payload.image_url = readingImageUrl || null;
+        const images = readingImages.slice(0, MAX_ROUTINE_PHOTOS);
+        // image_url 은 첫 장(기존 화면·사진 피드 호환), image_urls 는 전체
+        payload.image_url = images[0] ?? null;
 
-        const { error: dbError } = await supabase
+        let { error: dbError } = await supabase
           .from('daily_routine_checks')
-          .upsert(payload, { onConflict: 'user_id,date,routine_id' });
+          .upsert({ ...payload, image_urls: images }, { onConflict: 'user_id,date,routine_id' });
+
+        let savedImages = images;
+        if (dbError && isMissingColumnError(dbError)) {
+          // image_urls 컬럼이 아직 없음 → 첫 장만 저장
+          const retry = await supabase
+            .from('daily_routine_checks')
+            .upsert(payload, { onConflict: 'user_id,date,routine_id' });
+          dbError = retry.error;
+          savedImages = images.slice(0, 1);
+          if (!dbError && images.length > 1) {
+            alert('사진 여러 장 저장용 DB 컬럼(image_urls)이 아직 없어 첫 번째 사진만 저장했습니다. add_routine_image_urls.sql 을 Supabase 에서 실행해 주세요.');
+          }
+        }
 
         if (dbError) {
           console.error('DB 저장 오류:', dbError);
@@ -3415,7 +3462,8 @@ function RoutineItem({
           routine_id: readingSheet.routineId,
           checked: true,
           value: isNumber ? numValue : existing?.value ?? null,
-          image_url: imageUploadEnabled ? readingImageUrl || null : existing?.image_url ?? null,
+          image_url: savedImages[0] ?? null,
+          image_urls: savedImages,
           book_title: existing?.book_title ?? null,
           memo: memoText || null,
         });
@@ -3434,51 +3482,52 @@ function RoutineItem({
   };
 
   // 독서 시트 이미지 업로드
-  const handleReadingImageUpload = async (file: File) => {
+  const handleReadingImageUpload = async (fileList: FileList | File[]) => {
     if (!supabase || !readingSheet) return;
 
+    const picked = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    const remaining = MAX_ROUTINE_PHOTOS - readingImages.length;
+    if (picked.length === 0 || remaining <= 0) return;
+    const files = picked.slice(0, remaining);
+    if (picked.length > remaining) {
+      alert(`사진은 최대 ${MAX_ROUTINE_PHOTOS}장까지 올릴 수 있어요. 앞의 ${remaining}장만 추가합니다.`);
+    }
+
     setReadingUploading(true);
+    setUploadingCount(files.length);
+
+    const dateStr = readingSheet.dateStr;
+    const targetRoutineId = readingSheet.routineId;
+
+    const uploadOne = async (file: File, index: number): Promise<string> => {
+      const { blob, extension, contentType } = await compressImage(file);
+      const filePath = `${userId}/${targetRoutineId}/${dateStr}-${Date.now()}-${index}.${extension}`;
+      // reading-images 버킷이 없으면 routine-images 시도
+      let lastError: { message?: string } | null = null;
+      for (const bucket of ['reading-images', 'routine-images']) {
+        const { error } = await supabase.storage.from(bucket).upload(filePath, blob, { upsert: true, contentType });
+        if (!error) return supabase.storage.from(bucket).getPublicUrl(filePath).data.publicUrl;
+        lastError = error;
+      }
+      throw new Error(lastError?.message || '알 수 없는 오류');
+    };
 
     try {
-      const todayStr = readingSheet.dateStr;
-      const fileExt = file.name.split('.').pop() || 'jpg';
-      const filePath = `${userId}/${readingSheet.routineId}/${todayStr}-${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('reading-images')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) {
-        // reading-images 버킷이 없으면 routine-images 시도
-        const { error: fallbackError } = await supabase.storage
-          .from('routine-images')
-          .upload(filePath, file, { upsert: true });
-
-        if (fallbackError) {
-          console.error('이미지 업로드 오류:', fallbackError);
-          alert('이미지 업로드에 실패했습니다: ' + (fallbackError?.message || uploadError?.message || '알 수 없는 오류'));
-          setReadingUploading(false);
-          return;
-        }
-
-        const { data: urlData } = supabase.storage
-          .from('routine-images')
-          .getPublicUrl(filePath);
-
-        setReadingImageUrl(urlData.publicUrl);
-      } else {
-        const { data: urlData } = supabase.storage
-          .from('reading-images')
-          .getPublicUrl(filePath);
-
-        setReadingImageUrl(urlData.publicUrl);
+      // 동시 업로드, 선택한 순서 유지. 일부만 실패해도 성공한 사진은 추가
+      const results = await Promise.allSettled(files.map((f, i) => uploadOne(f, i)));
+      const urls = results.flatMap(r => (r.status === 'fulfilled' ? [r.value] : []));
+      const failed = results.length - urls.length;
+      if (urls.length > 0) {
+        setReadingImages(prev => [...prev, ...urls].slice(0, MAX_ROUTINE_PHOTOS));
       }
-
+      if (failed > 0) {
+        const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
+        console.error('이미지 업로드 오류:', firstError?.reason);
+        alert(`사진 ${failed}장 업로드에 실패했습니다: ${firstError?.reason?.message || '알 수 없는 오류'}`);
+      }
+    } finally {
       setReadingUploading(false);
-    } catch (err) {
-      console.error('업로드 오류:', err);
-      alert(`업로드 실패: ${err}`);
-      setReadingUploading(false);
+      setUploadingCount(0);
     }
   };
 
@@ -3607,56 +3656,82 @@ function RoutineItem({
                 />
               </div>
 
-              {/* 사진 업로드 (사진 사용 루틴만) */}
-              {imageUploadEnabled && (
+              {/* 사진 (모든 루틴 공통, 최대 5장 동시 업로드) */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  사진 (선택)
-                </label>
-                
-                {readingUploading ? (
-                  <div className="flex items-center justify-center h-24 bg-gray-100 dark:bg-gray-800 rounded-xl">
-                    <svg className="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                  </div>
-                ) : readingImageUrl ? (
-                  <div className="relative mb-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={readingImageUrl}
-                      alt="업로드된 사진"
-                      className="w-full h-48 object-cover rounded-xl"
-                    />
-                    <button
-                      onClick={() => setReadingImageUrl(null)}
-                      className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">사진 (선택)</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500" aria-live="polite">
+                    {readingImages.length}/{MAX_ROUTINE_PHOTOS}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {readingImages.map((url, idx) => (
+                    <div key={url} className="relative aspect-square">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`사진 ${idx + 1}`}
+                        className="w-full h-full object-cover rounded-xl border border-gray-200 dark:border-gray-700"
+                      />
+                      {idx === 0 && readingImages.length > 1 && (
+                        <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[10px]">대표</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setReadingImages(prev => prev.filter((_, i) => i !== idx))}
+                        disabled={readingUploading}
+                        aria-label={`사진 ${idx + 1} 삭제`}
+                        className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors disabled:opacity-50"
+                      >
+                        <IconX size={14} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* 업로드 중 자리 표시 */}
+                  {Array.from({ length: uploadingCount }).map((_, i) => (
+                    <div key={`uploading-${i}`} className="aspect-square rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <svg className="animate-spin h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" aria-label="업로드 중">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex items-center justify-center gap-2 px-4 py-4 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleReadingImageUpload(file);
-                        }
-                      }}
-                      className="hidden"
-                    />
-                    <IconCamera size={22} stroke={1.5} className="text-gray-400" />
-                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">사진 추가</span>
-                  </label>
-                )}
+                    </div>
+                  ))}
+
+                  {/* 추가 타일 */}
+                  {readingImages.length + uploadingCount < MAX_ROUTINE_PHOTOS && (
+                    <label
+                      className={`flex items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
+                        readingUploading ? 'opacity-50 pointer-events-none' : ''
+                      } ${
+                        readingImages.length === 0 && uploadingCount === 0
+                          ? 'col-span-3 flex-row gap-2 py-4'
+                          : 'aspect-square flex-col gap-1'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={readingUploading}
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleReadingImageUpload(e.target.files);
+                          }
+                          // 같은 파일을 다시 고를 수 있도록 초기화
+                          e.target.value = '';
+                        }}
+                        className="hidden"
+                      />
+                      <IconCamera size={22} stroke={1.5} className="text-gray-400" />
+                      <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                        {readingImages.length === 0 ? `사진 추가 (최대 ${MAX_ROUTINE_PHOTOS}장)` : '추가'}
+                      </span>
+                    </label>
+                  )}
+                </div>
               </div>
-              )}
             </div>
 
             {/* 액션 버튼 */}
@@ -3740,7 +3815,7 @@ function RoutineItem({
                         // 모든 숫자 루틴: 값 + 메모(+사진) 통합 시트
                         openReadingSheet(dateStr);
                       }}
-                      aria-label={`${label} ${dateStr} 값 입력${memoDateValues[dateStr] ? ' (메모 있음)' : ''}`}
+                      aria-label={`${label} ${dateStr} 값 입력${memoDateValues[dateStr] ? ' (메모 있음)' : ''}${photoCountByDate[dateStr] ? ` (사진 ${photoCountByDate[dateStr]}장)` : ''}`}
                       className="relative flex flex-col items-center justify-center font-medium text-gray-700 dark:text-gray-300 bg-[rgb(254,252,247)] dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden"
                       title={`${dateStr} 값 입력`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', maxWidth: '20px', fontSize: '8px', padding: '1px', lineHeight: '1' }}
@@ -3752,7 +3827,7 @@ function RoutineItem({
                         {dayValue !== null ? (Number.isInteger(dayValue) ? dayValue : dayValue.toFixed(1)) : '0'}
                       </span>
                       <span className="text-gray-600 dark:text-gray-300" style={{ fontSize: '7px' }}>{unit}</span>
-                      {memoDateValues[dateStr] && <MemoDot />}
+                      {(memoDateValues[dateStr] || photoCountByDate[dateStr]) && <MemoDot />}
                     </button>
                   );
                 }
@@ -3776,8 +3851,8 @@ function RoutineItem({
                   const newChecked = !isCurrentlyChecked;
 
                   // 체크 해제 = 행 삭제 → 메모가 있으면 함께 사라지므로 확인
-                  if (!newChecked && memoDateValues[dateStr]) {
-                    const ok = window.confirm('이 날 남긴 메모도 함께 삭제됩니다. 체크를 해제할까요?');
+                  if (!newChecked && (memoDateValues[dateStr] || photoCountByDate[dateStr])) {
+                    const ok = window.confirm('이 날 남긴 메모·사진 기록도 함께 삭제됩니다. 체크를 해제할까요?');
                     if (!ok) return;
                   }
                   
@@ -3807,7 +3882,7 @@ function RoutineItem({
                       routineId,
                       dateStr,
                       newChecked
-                        ? { date: dateStr, routine_id: routineId, checked: true, value: null, image_url: null, book_title: null, memo: null }
+                        ? { date: dateStr, routine_id: routineId, checked: true, value: null, image_url: null, image_urls: [], book_title: null, memo: null }
                         : null
                     );
 
@@ -3852,7 +3927,7 @@ function RoutineItem({
                     <CheckCell
                       key={dateStr}
                       checked={isChecked}
-                      hasMemo={!!memoDateValues[dateStr]}
+                      hasMemo={!!memoDateValues[dateStr] || !!photoCountByDate[dateStr]}
                       ariaLabel={`${label} ${dateStr}${isToday ? ' (오늘)' : ''}`}
                       onToggle={() => handleCheckboxToggle(dateStr)}
                       onOpenMemo={() => openReadingSheet(dateStr)}
