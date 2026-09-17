@@ -2989,6 +2989,7 @@ export default function Home() {
               records={allRecords}
               onEntryClick={handleFeedEntryClick}
               onImageClick={setFullImageUrl}
+              renderIcon={getRoutineIcon}
             />
           </div>
         </div>

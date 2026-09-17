@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline } from '@tabler/icons-react';
 
 interface RoutineTemplate {
   id: string;
@@ -41,6 +43,8 @@ interface Props {
   /** 루틴 줄을 탭하면 해당 날짜의 입력 시트를 연다 */
   onEntryClick: (routineId: string, dateStr: string) => void;
   onImageClick?: (url: string) => void;
+  /** 매트릭스와 같은 라인 아이콘 (없으면 아이콘 생략) */
+  renderIcon?: (label: string) => ReactNode;
 }
 
 interface DayEntry {
@@ -56,7 +60,6 @@ interface DayLog {
 }
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
-const MONTHS_PER_PAGE = 2;
 
 const getKstTodayString = (): string => {
   const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
@@ -82,10 +85,12 @@ export default function DailyLogFeed({
   records,
   onEntryClick,
   onImageClick,
+  renderIcon,
 }: Props) {
-  const [visibleMonths, setVisibleMonths] = useState(MONTHS_PER_PAGE);
+  // 월 단위 페이지: 0 = 기록이 있는 가장 최근 달
+  const [monthIndex, setMonthIndex] = useState(0);
+  const topRef = useRef<HTMLDivElement | null>(null);
   const [expandedMissed, setExpandedMissed] = useState<Record<string, boolean>>({});
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // 날짜별로 루틴 체크 + daily_records 를 머지 → 월 단위 그룹 (최신순)
   const months = useMemo(() => {
@@ -147,28 +152,29 @@ export default function DailyLogFeed({
     return grouped;
   }, [routineTemplates, checksByRoutine, records]);
 
-  const hasMore = visibleMonths < months.length;
-
-  // 맨 아래 도달 시 이전 달 이어서 표시
+  // 데이터가 바뀌어 달 수가 줄어든 경우 범위 보정
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setVisibleMonths((n) => n + MONTHS_PER_PAGE);
-        }
-      },
-      { rootMargin: '300px' }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [hasMore, visibleMonths]);
+    if (monthIndex > 0 && monthIndex >= months.length) setMonthIndex(Math.max(0, months.length - 1));
+  }, [monthIndex, months.length]);
+
+  const current = months[Math.min(monthIndex, Math.max(0, months.length - 1))];
+  const hasOlder = monthIndex < months.length - 1;
+  const hasNewer = monthIndex > 0;
+  const goMonth = (next: number) => {
+    setMonthIndex(next);
+    // 새 달의 첫 글이 보이도록 섹션 상단으로 이동 (상단 고정 네비 높이만큼 여유)
+    requestAnimationFrame(() => {
+      const el = topRef.current;
+      if (!el) return;
+      const y = el.getBoundingClientRect().top + window.scrollY - 72;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    });
+  };
 
   const totalRoutines = routineTemplates.length;
 
   return (
-    <section aria-label="루틴 기록" className="mb-2">
+    <section aria-label="루틴 기록" className="mb-2" ref={topRef}>
       <div className="flex items-baseline justify-between px-1 mt-4 mb-2">
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">루틴 기록</h3>
         <span className="text-[11px] text-gray-400 dark:text-gray-500">길게 눌러 메모 남기기</span>
@@ -180,11 +186,31 @@ export default function DailyLogFeed({
         </div>
       )}
 
-      {months.slice(0, visibleMonths).map((month) => (
+      {current && [current].map((month) => (
         <div key={month.key}>
-          <div className="sticky top-16 z-10 -mx-1 px-2 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 bg-[rgb(254,252,247)]/90 dark:bg-gray-900/90 backdrop-blur">
-            {month.label}
-            <span className="ml-1.5 font-normal text-gray-400 dark:text-gray-500">{month.days.length}일 기록</span>
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => goMonth(monthIndex + 1)}
+              disabled={!hasOlder}
+              aria-label="이전 달 기록"
+              className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            >
+              <IconChevronLeft size={18} stroke={1.5} />
+            </button>
+            <div className="text-sm font-semibold text-gray-900 dark:text-white">
+              {month.label}
+              <span className="ml-1.5 text-xs font-normal text-gray-400 dark:text-gray-500">{month.days.length}일 기록</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => goMonth(monthIndex - 1)}
+              disabled={!hasNewer}
+              aria-label="다음 달 기록"
+              className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+            >
+              <IconChevronRight size={18} stroke={1.5} />
+            </button>
           </div>
 
           <div className="space-y-2 mb-3">
@@ -212,7 +238,12 @@ export default function DailyLogFeed({
                       </span>
                     </h4>
                     <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                      {rec?.weight != null && <span>{rec.weight}kg</span>}
+                      {rec?.weight != null && (
+                        <span className="inline-flex items-center gap-0.5">
+                          <IconScaleOutline size={14} stroke={1.5} aria-hidden="true" />
+                          {rec.weight}kg
+                        </span>
+                      )}
                       {totalRoutines > 0 && (
                         <span className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 font-medium text-gray-700 dark:text-gray-200">
                           {day.entries.length}/{totalRoutines}
@@ -231,8 +262,12 @@ export default function DailyLogFeed({
                             className="w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
                             aria-label={`${routine.label} ${day.date} 기록 수정`}
                           >
-                            <div className="flex items-baseline gap-1.5 text-sm">
-                              <span aria-hidden="true">{routine.emoji || '✅'}</span>
+                            <div className="flex items-center gap-2 text-sm">
+                              {renderIcon && (
+                                <span aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500">
+                                  {renderIcon(routine.label)}
+                                </span>
+                              )}
                               <span className="text-gray-800 dark:text-gray-100 break-words min-w-0">{routine.label}</span>
                               {routine.type === 'number' && row.value != null && row.value !== 0 && (
                                 <span className="shrink-0 font-semibold text-gray-900 dark:text-white">
@@ -245,7 +280,7 @@ export default function DailyLogFeed({
                               )}
                             </div>
                             {row.memo && (
-                              <p className="ml-6 mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-words">
+                              <p className="ml-[26px] mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-words">
                                 {row.memo}
                               </p>
                             )}
@@ -254,7 +289,7 @@ export default function DailyLogFeed({
                             <button
                               type="button"
                               onClick={() => onImageClick?.(row.image_url!)}
-                              className="ml-6 mt-1 block"
+                              className="ml-[26px] mt-1 block"
                               aria-label={`${routine.label} 사진 크게 보기`}
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -274,15 +309,17 @@ export default function DailyLogFeed({
                   {rec && (meals.length > 0 || rec.meal_memo?.trim() || rec.daily_memo?.trim() || (rec.meal_images?.length ?? 0) > 0) && (
                     <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1 text-[13px] text-gray-600 dark:text-gray-300">
                       {(meals.length > 0 || rec.meal_memo?.trim()) && (
-                        <p className="whitespace-pre-wrap break-words">
-                          <span aria-hidden="true">🍽️ </span>
+                        <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
+                          <IconToolsKitchen2 size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
+                          <span className="min-w-0">
                           {meals.length > 0 && <span className="font-medium">{meals.join(' · ')}</span>}
                           {meals.length > 0 && rec.meal_memo?.trim() ? ' — ' : ''}
                           {rec.meal_memo?.trim()}
+                          </span>
                         </p>
                       )}
                       {(rec.meal_images?.length ?? 0) > 0 && (
-                        <div className="flex gap-1.5 overflow-x-auto">
+                        <div className="ml-[26px] flex gap-1.5 overflow-x-auto">
                           {rec.meal_images!.map((url, i) => (
                             <button key={url + i} type="button" onClick={() => onImageClick?.(url)} className="shrink-0" aria-label="식사 사진 크게 보기">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -292,9 +329,9 @@ export default function DailyLogFeed({
                         </div>
                       )}
                       {rec.daily_memo?.trim() && (
-                        <p className="whitespace-pre-wrap break-words">
-                          <span aria-hidden="true">📝 </span>
-                          {rec.daily_memo.trim()}
+                        <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
+                          <IconNotes size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
+                          <span className="min-w-0">{rec.daily_memo.trim()}</span>
                         </p>
                       )}
                     </div>
@@ -319,7 +356,7 @@ export default function DailyLogFeed({
                               onClick={() => onEntryClick(routine.id, day.date)}
                               className="px-2 py-0.5 rounded-full text-[11px] border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
                             >
-                              {routine.emoji} {routine.label}
+                              {routine.label}
                             </button>
                           ))}
                         </div>
@@ -333,9 +370,27 @@ export default function DailyLogFeed({
         </div>
       ))}
 
-      {hasMore && <div ref={sentinelRef} className="h-8" aria-hidden="true" />}
-      {!hasMore && months.length > 0 && (
-        <p className="py-3 text-center text-[11px] text-gray-400 dark:text-gray-500">올해·작년 기록을 모두 불러왔습니다.</p>
+      {months.length > 1 && (
+        <div className="flex items-center justify-between gap-2 pt-1 pb-2">
+          <button
+            type="button"
+            onClick={() => goMonth(monthIndex + 1)}
+            disabled={!hasOlder}
+            className="flex-1 inline-flex items-center justify-center gap-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 bg-[rgb(254,252,247)] dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+          >
+            <IconChevronLeft size={16} stroke={1.5} />
+            {hasOlder ? months[monthIndex + 1].label : '이전 달 없음'}
+          </button>
+          <button
+            type="button"
+            onClick={() => goMonth(monthIndex - 1)}
+            disabled={!hasNewer}
+            className="flex-1 inline-flex items-center justify-center gap-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-200 bg-[rgb(254,252,247)] dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 transition-colors"
+          >
+            {hasNewer ? months[monthIndex - 1].label : '최신 달'}
+            <IconChevronRight size={16} stroke={1.5} />
+          </button>
+        </div>
       )}
     </section>
   );
