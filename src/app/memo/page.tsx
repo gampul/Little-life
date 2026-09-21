@@ -19,6 +19,7 @@ import {
 } from '../../hooks/useMemos';
 import { MemoListSkeleton } from './MemoListSkeleton';
 import { MemoCard, type MemoCardData } from './MemoCard';
+import { useScrollDirection } from '../../hooks/useScrollDirection';
 
 const MemoEditor = dynamic(() => import('./MemoEditor'), {
   ssr: false,
@@ -297,6 +298,9 @@ function MemoPageContent() {
       setIsSaving(false);
     }
   };
+
+  // 카드 액션과 동일: 아래로 스크롤 중엔 FAB 숨김, 위로 올리면 표시
+  const fabVisible = useScrollDirection() === 'up';
 
   const handleWrite = () => {
     setShowEditor(true);
@@ -740,7 +744,12 @@ function MemoPageContent() {
         {!showEditor && (
           <button
             onClick={handleWrite}
-            className="fixed bottom-24 right-4 z-50 w-14 h-14 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all"
+            className={`fixed bottom-24 right-4 z-50 w-14 h-14 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 ease-out ${
+              fabVisible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-90 pointer-events-none'
+            }`}
+            aria-hidden={!fabVisible}
+            tabIndex={fabVisible ? 0 : -1}
+            aria-label="글쓰기"
             style={{ touchAction: 'manipulation' }}
           >
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
