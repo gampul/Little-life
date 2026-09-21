@@ -2,6 +2,7 @@
 
 import { memo, type MouseEvent } from 'react';
 import NextImage from 'next/image';
+import { useScrollDirection } from '../../hooks/useScrollDirection';
 
 export type MemoCardVariant = 'grid' | 'list' | 'compact';
 
@@ -31,18 +32,41 @@ export interface MemoCardProps {
   onOpen: (memoId: string) => void;
 }
 
+const ICON = {
+  width: 15,
+  height: 15,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.75,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true,
+};
+
+const IconLink = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" {...ICON}>
+    <path d="M9 15l6 -6" />
+    <path d="M11 6l.463 -.536a5 5 0 0 1 7.072 7.072l-.535 .464" />
+    <path d="M13 18l-.464 .536a5 5 0 0 1 -7.071 -7.071l.535 -.465" />
+  </svg>
+);
+
+const IconCheck = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" {...ICON} strokeWidth={2.25}>
+    <path d="M5 12l5 5l10 -10" />
+  </svg>
+);
+
 const IconEdit = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-    fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M7 7H6a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1" />
-    <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z" />
-    <path d="M16 5l3 3" />
+  <svg xmlns="http://www.w3.org/2000/svg" {...ICON}>
+    <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+    <path d="M13.5 6.5l4 4" />
   </svg>
 );
 
 const IconTrash = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-    fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg xmlns="http://www.w3.org/2000/svg" {...ICON}>
     <path d="M4 7l16 0" />
     <path d="M10 11l0 6" />
     <path d="M14 11l0 6" />
@@ -86,6 +110,9 @@ function MemoCardComponent({
   onCopyLink,
   onOpen,
 }: MemoCardProps) {
+  // 아래로 스크롤 중엔 액션(링크·수정·삭제)을 숨기고, 위로 올리면 다시 표시
+  const actionsVisible = useScrollDirection() === 'up';
+
   // excerpt/cover 컬럼이 없는 환경에서는 content 로 폴백
   const textPreview = memo.excerpt || previewFromContent(memo.content);
   const thumbnail = memo.cover_image || firstImageFromContent(memo.content);
@@ -227,8 +254,9 @@ function MemoCardComponent({
               </button>
               <span>💬 {memo.comments || 0}</span>
             </div>
-            <div className={variant === 'grid' ? 'flex items-center gap-1' : 'flex items-center gap-1 ml-auto'}>
+            <div className={variant === 'grid' ? 'flex items-center' : 'flex items-center ml-auto'}>
               <CopyEditDelete
+                visible={actionsVisible}
                 copied={copied}
                 memo={memo}
                 onCopyLink={onCopyLink}
@@ -248,6 +276,7 @@ function MemoCardComponent({
           }
         >
           <CopyEditDelete
+            visible={actionsVisible}
             copied={copied}
             memo={memo}
             onCopyLink={onCopyLink}
@@ -260,13 +289,20 @@ function MemoCardComponent({
   );
 }
 
+const ACTION_BTN =
+  'w-7 h-7 inline-flex items-center justify-center rounded-full transition-colors ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400';
+
 function CopyEditDelete({
+  visible,
   copied,
   memo,
   onCopyLink,
   onEdit,
   onDelete,
 }: {
+  /** false 면 페이드아웃 + 클릭 차단 (자리는 유지해 레이아웃 흔들림 없음) */
+  visible: boolean;
   copied: boolean;
   memo: MemoCardData;
   onCopyLink: MemoCardProps['onCopyLink'];
@@ -274,29 +310,32 @@ function CopyEditDelete({
   onDelete: MemoCardProps['onDelete'];
 }) {
   return (
-    <>
+    <div
+      role="group"
+      aria-label="글 액션"
+      aria-hidden={!visible}
+      className={`inline-flex items-center gap-0.5 p-0.5 rounded-full bg-gray-100 dark:bg-gray-800 transition-all duration-200 ease-out ${
+        visible
+          ? 'opacity-100 translate-y-0'
+          : 'opacity-0 translate-y-1 pointer-events-none'
+      }`}
+    >
       <button
         type="button"
         onClick={(e) => {
           if (memo.id) onCopyLink(e, memo.id);
         }}
-        className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+        tabIndex={visible ? 0 : -1}
+        className={`${ACTION_BTN} ${
+          copied
+            ? 'text-blue-600 bg-white dark:bg-gray-700 shadow-sm'
+            : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm'
+        }`}
         style={{ touchAction: 'manipulation' }}
-        title="링크 복사"
+        title={copied ? '복사됨' : '링크 복사'}
+        aria-label={copied ? '링크 복사됨' : '링크 복사'}
       >
-        {copied ? (
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-            fill="none" stroke="#2563EB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12l5 5l10 -10" />
-          </svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-            fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 15l6 -6" />
-            <path d="M11 6l.463 -.536a5 5 0 0 1 7.072 7.072l-.535 .464" />
-            <path d="M13 18l-.464 .536a5 5 0 0 1 -7.071 -7.071l.535 -.465" />
-          </svg>
-        )}
+        {copied ? <IconCheck /> : <IconLink />}
       </button>
       <button
         type="button"
@@ -304,8 +343,11 @@ function CopyEditDelete({
           e.stopPropagation();
           onEdit(memo);
         }}
-        className="p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+        tabIndex={visible ? 0 : -1}
+        className={`${ACTION_BTN} text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
         style={{ touchAction: 'manipulation' }}
+        title="수정"
+        aria-label="수정"
       >
         <IconEdit />
       </button>
@@ -315,12 +357,15 @@ function CopyEditDelete({
           e.stopPropagation();
           onDelete(memo);
         }}
-        className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+        tabIndex={visible ? 0 : -1}
+        className={`${ACTION_BTN} text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
         style={{ touchAction: 'manipulation' }}
+        title="삭제"
+        aria-label="삭제"
       >
         <IconTrash />
       </button>
-    </>
+    </div>
   );
 }
 
