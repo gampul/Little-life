@@ -129,7 +129,7 @@ function MemoCardComponent({
   const bodyWrapClass =
     variant === 'grid'
       ? 'flex flex-col'
-      : 'flex flex-row gap-3 items-stretch';
+      : 'flex flex-row gap-3 items-stretch w-full';
 
   const mediaClass =
     variant === 'compact'
@@ -235,11 +235,11 @@ function MemoCardComponent({
               variant === 'compact'
                 ? 'hidden'
                 : variant === 'grid'
-                  ? 'flex items-center justify-between'
+                  ? 'flex items-center justify-between flex-wrap gap-x-1 gap-y-1'
                   : 'flex items-center gap-4 text-xs sm:text-sm text-gray-500 dark:text-gray-400'
             }
           >
-            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
               <button
                 type="button"
                 onClick={(e) => {
@@ -257,6 +257,7 @@ function MemoCardComponent({
             <div className={variant === 'grid' ? 'flex items-center' : 'flex items-center ml-auto'}>
               <CopyEditDelete
                 visible={actionsVisible}
+                size={variant === 'grid' ? 'sm' : 'md'}
                 copied={copied}
                 memo={memo}
                 onCopyLink={onCopyLink}
@@ -290,11 +291,12 @@ function MemoCardComponent({
 }
 
 const ACTION_BTN =
-  'w-7 h-7 inline-flex items-center justify-center rounded-full transition-colors ' +
+  'inline-flex items-center justify-center rounded-full transition-colors ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400';
 
 function CopyEditDelete({
   visible,
+  size = 'md',
   copied,
   memo,
   onCopyLink,
@@ -303,12 +305,15 @@ function CopyEditDelete({
 }: {
   /** false 면 페이드아웃 + 클릭 차단 (자리는 유지해 레이아웃 흔들림 없음) */
   visible: boolean;
+  /** grid(좁은 카드)에서는 sm — 좋아요·댓글 카운트와 한 줄에 들어가도록 */
+  size?: 'sm' | 'md';
   copied: boolean;
   memo: MemoCardData;
   onCopyLink: MemoCardProps['onCopyLink'];
   onEdit: MemoCardProps['onEdit'];
   onDelete: MemoCardProps['onDelete'];
 }) {
+  const btnSize = size === 'sm' ? 'w-6 h-6' : 'w-7 h-7';
   return (
     <div
       role="group"
@@ -326,7 +331,7 @@ function CopyEditDelete({
           if (memo.id) onCopyLink(e, memo.id);
         }}
         tabIndex={visible ? 0 : -1}
-        className={`${ACTION_BTN} ${
+        className={`${ACTION_BTN} ${btnSize} ${
           copied
             ? 'text-blue-600 bg-white dark:bg-gray-700 shadow-sm'
             : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm'
@@ -344,7 +349,7 @@ function CopyEditDelete({
           onEdit(memo);
         }}
         tabIndex={visible ? 0 : -1}
-        className={`${ACTION_BTN} text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
+        className={`${ACTION_BTN} ${btnSize} text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
         style={{ touchAction: 'manipulation' }}
         title="수정"
         aria-label="수정"
@@ -358,7 +363,7 @@ function CopyEditDelete({
           onDelete(memo);
         }}
         tabIndex={visible ? 0 : -1}
-        className={`${ACTION_BTN} text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
+        className={`${ACTION_BTN} ${btnSize} text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
         style={{ touchAction: 'manipulation' }}
         title="삭제"
         aria-label="삭제"
