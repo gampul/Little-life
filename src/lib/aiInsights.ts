@@ -31,14 +31,14 @@ export const kstDate = (d: Date = new Date()): string => {
   return `${k.getUTCFullYear()}-${String(k.getUTCMonth() + 1).padStart(2, '0')}-${String(k.getUTCDate()).padStart(2, '0')}`;
 };
 
-const addDays = (dateStr: string, n: number): string => {
+export const addDays = (dateStr: string, n: number): string => {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + n));
   return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 };
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
-const weekdayOf = (dateStr: string): string => {
+export const weekdayOf = (dateStr: string): string => {
   const [y, m, d] = dateStr.split('-').map(Number);
   return WEEKDAY[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
 };
@@ -97,7 +97,7 @@ export interface InsightData {
   dailyCompletion: { date: string; done: number; total: number }[];
 }
 
-const stripHtml = (html: string): string =>
+export const stripHtml = (html: string): string =>
   html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|li|h[1-6])>/gi, '\n')
@@ -114,14 +114,14 @@ export async function collectInsightData(
   supabase: SupabaseClient,
   userId: string,
   kind: ReportKind,
-  opts?: { diaryCharLimit?: number }
+  opts?: { diaryCharLimit?: number; /** 임의 기간 (채팅 도구용). 없으면 kind 기본 기간 */ range?: { from: string; to: string } }
 ): Promise<InsightData> {
-  const days = REPORT_DAYS[kind];
   const today = kstDate();
-  const to = today;
-  const from = addDays(today, -(days - 1));
+  const to = opts?.range?.to ?? today;
+  const from = opts?.range?.from ?? addDays(today, -(REPORT_DAYS[kind] - 1));
+  const days = Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1);
   // 연속일 계산용으로 더 이전 데이터도 읽음 (PostgREST 기본 max-rows 1000 안에 들도록 최근순·상한)
-  const streakFrom = addDays(today, -120);
+  const streakFrom = from < addDays(today, -120) ? from : addDays(today, -120);
   const diaryCharLimit = opts?.diaryCharLimit ?? (kind === 'monthly' ? 700 : 1500);
 
   // ---- 루틴 템플릿
@@ -277,7 +277,7 @@ export async function collectInsightData(
     .gte('created_at', `${from}T00:00:00+09:00`)
     .lte('created_at', `${to}T23:59:59+09:00`)
     .order('created_at', { ascending: true })
-    .limit(kind === 'monthly' ? 60 : 30);
+    .limit(days > 31 ? 120 : days > 7 ? 60 : 30);
   if (memoErr) console.error('memos load error:', memoErr.message);
   const diary: DiaryEntry[] = (memos || []).map((m: any) => {
     const text = stripHtml(m.content || '');
