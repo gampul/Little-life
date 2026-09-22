@@ -3,14 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline } from '@tabler/icons-react';
+import { summarizeSubValues, type RoutineSubItem, type RoutineType, type SubValues } from '../../lib/routineSubItems';
 
 interface RoutineTemplate {
   id: string;
   emoji: string;
   label: string;
   sort_order: number;
-  type: 'checkbox' | 'number';
+  type: RoutineType;
   unit?: string;
+  sub_items?: RoutineSubItem[];
 }
 
 interface RoutineCheckRow {
@@ -22,6 +24,7 @@ interface RoutineCheckRow {
   image_urls?: string[] | null;
   book_title?: string | null;
   memo?: string | null;
+  sub_values?: SubValues | null;
 }
 
 interface DailyRecord {
@@ -284,6 +287,14 @@ export default function DailyLogFeed({
                                   {routine.unit || ''}
                                 </span>
                               )}
+                              {routine.type === 'multi' && (() => {
+                                const summary = summarizeSubValues(row.sub_values, routine.sub_items ?? []);
+                                return summary ? (
+                                  <span className="min-w-0 font-semibold text-gray-900 dark:text-white break-words">
+                                    {summary}
+                                  </span>
+                                ) : null;
+                              })()}
                               {row.book_title && (
                                 <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">《{row.book_title}》</span>
                               )}
