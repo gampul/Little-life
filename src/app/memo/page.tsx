@@ -62,6 +62,26 @@ const extractFirstImage = (html: string): string | null => {
   return imgMatch ? imgMatch[1] : null;
 };
 
+// 작성일자 — 로컬 기준 YYYY-MM-DD
+const toLocalDateInput = (iso?: string | null): string => {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return toLocalDateInput();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/**
+ * 사용자가 고른 작성일(YYYY-MM-DD)을 created_at ISO 로.
+ * 시각은 기준 시각(원본 created_at 또는 지금)의 시:분:초를 그대로 써서
+ * 날짜만 바꾸고 하루 안 정렬 순서는 유지한다.
+ */
+const composeCreatedAt = (dateStr: string, baseIso?: string | null): string => {
+  const base = baseIso ? new Date(baseIso) : new Date();
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const out = new Date(base);
+  if (y && m && d) out.setFullYear(y, m - 1, d);
+  return out.toISOString();
+};
+
 function MemoPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -145,6 +165,10 @@ function MemoPageContent() {
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** 작성일자 (YYYY-MM-DD, 로컬). 새 글은 오늘, 편집은 원본 created_at */
+  const [createdDate, setCreatedDate] = useState<string>(() => toLocalDateInput());
+  /** 편집 중인 글의 원본 created_at (시각 유지·변경 여부 판단용) */
+  const [originalCreatedAt, setOriginalCreatedAt] = useState<string | null>(null);
 
   // 카테고리 변경(추가/수정/삭제/순서) 후 캐시 갱신
   const loadCategories = () => invalidateMemoCategories();
@@ -182,6 +206,8 @@ function MemoPageContent() {
             content: data.content || '',
           });
           setEditingId(data.id);
+          setOriginalCreatedAt(data.created_at ?? null);
+          setCreatedDate(toLocalDateInput(data.created_at));
           // 편집 진입 시 카테고리 폼 상태를 원본 category_id 로 초기화 (미설정 시 null)
           setSelectedCategoryId(data.category_id ?? null);
           setShowEditor(true);
@@ -259,6 +285,10 @@ function MemoPageContent() {
             cover_image,
             updated_at: new Date().toISOString(),
             category_id: categoryIdForSave,
+            // 작성일을 바꾼 경우에만 created_at 갱신 (시각은 원본 유지)
+            ...(createdDate !== toLocalDateInput(originalCreatedAt)
+              ? { created_at: composeCreatedAt(createdDate, originalCreatedAt) }
+              : {}),
           })
           .eq('id', editingId);
 
@@ -273,6 +303,8 @@ function MemoPageContent() {
             excerpt,
             cover_image,
             category_id: categoryIdForSave,
+            // 오늘이면 DB 기본값(now) 그대로, 다른 날짜를 골랐으면 그 날짜(시각은 지금)
+            ...(createdDate !== toLocalDateInput() ? { created_at: composeCreatedAt(createdDate) } : {}),
           }]);
 
         if (error) throw error;
@@ -283,6 +315,8 @@ function MemoPageContent() {
       setFormData({ title: '', content: '' });
       setEditingId(null);
       setSelectedCategoryId(null);
+      setOriginalCreatedAt(null);
+      setCreatedDate(toLocalDateInput());
       setCurrentPage(1);
       
       await invalidateMemos();
@@ -307,6 +341,8 @@ function MemoPageContent() {
     setEditingId(null);
     setFormData({ title: '', content: '' });
     setSelectedCategoryId(null);
+    setOriginalCreatedAt(null);
+    setCreatedDate(toLocalDateInput());
   };
 
   const handleCancelEditor = () => {
@@ -343,6 +379,8 @@ function MemoPageContent() {
         content: data.content || '',
       });
       setSelectedCategoryId(data.category_id ?? null);
+      setOriginalCreatedAt(data.created_at ?? null);
+      setCreatedDate(toLocalDateInput(data.created_at));
       setTimeout(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       }, 100);
@@ -728,6 +766,8 @@ function MemoPageContent() {
             categories={memoCategories}
             selectedCategoryId={selectedCategoryId}
             onCategoryChange={setSelectedCategoryId}
+            createdDate={createdDate}
+            onCreatedDateChange={setCreatedDate}
             onSave={handleSave}
             onCancel={handleCancelEditor}
             isSaving={isSaving}
