@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createSupabaseServer } from '../../../../lib/supabase_ssr';
+import { collectInsightData, summarizeRoutinesForChat } from '../../../../lib/aiInsights';
 
 // OpenAI 클라이언트
 const openai = new OpenAI({
@@ -22,7 +23,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'getDailyData',
-      description: '사용자의 일상 기록을 조회합니다 (체중, 운동, 수면, 기분 등). 건강, 루틴, 체중, 운동, 수면 관련 질문에 사용하세요.',
+      description: '사용자의 Daily 기록을 조회합니다: 루틴별 달성률·연속일·하위 항목(800km 등) 합계, 오늘 미완료 루틴, 체중 추세, 식사·메모. 건강, 루틴, 습관, 체중, 운동, 오늘 할 일 관련 질문에 사용하세요.',
       parameters: {
         type: 'object',
         properties: {
@@ -138,11 +139,20 @@ async function getDailyData(days: number = 7) {
     return { error: error.message };
   }
 
-  if (!data || data.length === 0) {
+  // 루틴 달성률·연속일·체중 추세 (리포트와 같은 집계)
+  let routineStats: Record<string, unknown> | null = null;
+  try {
+    const insight = await collectInsightData(supabase, userId, days > 7 ? 'monthly' : 'weekly', { diaryCharLimit: 0 });
+    routineStats = summarizeRoutinesForChat(insight);
+  } catch (e) {
+    console.error('routine stats error:', e);
+  }
+
+  if ((!data || data.length === 0) && !routineStats) {
     return { message: '일상 기록이 없습니다.' };
   }
 
-  const summary = data.map(d => {
+  const summary = (data || []).map(d => {
     const parts = [];
     if (d.date) parts.push(`날짜: ${d.date}`);
     if (d.weight) parts.push(`체중: ${d.weight}kg`);
@@ -159,8 +169,9 @@ async function getDailyData(days: number = 7) {
   });
 
   return {
-    count: data.length,
+    count: (data || []).length,
     period: `최근 ${days}일`,
+    routineStats,
     records: summary
   };
 }
