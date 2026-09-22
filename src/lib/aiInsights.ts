@@ -120,8 +120,8 @@ export async function collectInsightData(
   const today = kstDate();
   const to = today;
   const from = addDays(today, -(days - 1));
-  // 연속일 계산용으로 더 이전 데이터도 읽음
-  const streakFrom = addDays(today, -400);
+  // 연속일 계산용으로 더 이전 데이터도 읽음 (PostgREST 기본 max-rows 1000 안에 들도록 최근순·상한)
+  const streakFrom = addDays(today, -120);
   const diaryCharLimit = opts?.diaryCharLimit ?? (kind === 'monthly' ? 700 : 1500);
 
   // ---- 루틴 템플릿
@@ -157,8 +157,8 @@ export async function collectInsightData(
       .eq('checked', true)
       .gte('date', streakFrom)
       .lte('date', to)
-      .order('date', { ascending: true })
-      .limit(5000);
+      .order('date', { ascending: false })
+      .limit(1000);
     if (r.error && /sub_values/i.test(r.error.message || '')) {
       r = await supabase
         .from('daily_routine_checks')
@@ -167,9 +167,10 @@ export async function collectInsightData(
         .eq('checked', true)
         .gte('date', streakFrom)
         .lte('date', to)
-        .order('date', { ascending: true })
-        .limit(5000);
+        .order('date', { ascending: false })
+        .limit(1000);
     }
+    if (r.error) console.error('daily_routine_checks load error:', r.error.message);
     checks = r.data || [];
   }
 
@@ -193,7 +194,7 @@ export async function collectInsightData(
     // 연속일: 오늘 체크됐으면 오늘부터, 아니면 어제부터
     let streak = 0;
     let cursor = rows.has(today) ? today : addDays(today, -1);
-    while (rows.has(cursor) && streak < 400) {
+    while (rows.has(cursor) && streak < 120) {
       streak++;
       cursor = addDays(cursor, -1);
     }
@@ -269,14 +270,15 @@ export async function collectInsightData(
   };
 
   // ---- 일기 (기간 내, created_at 기준)
-  const { data: memos } = await supabase
+  // memos 테이블에는 user_id 컬럼이 없음(RLS 로 사용자 스코프) — 앱의 useMemos 와 동일하게 필터 없이 조회
+  const { data: memos, error: memoErr } = await supabase
     .from('memos')
     .select('title, content, created_at, memo_categories(name)')
-    .eq('user_id', userId)
     .gte('created_at', `${from}T00:00:00+09:00`)
     .lte('created_at', `${to}T23:59:59+09:00`)
     .order('created_at', { ascending: true })
     .limit(kind === 'monthly' ? 60 : 30);
+  if (memoErr) console.error('memos load error:', memoErr.message);
   const diary: DiaryEntry[] = (memos || []).map((m: any) => {
     const text = stripHtml(m.content || '');
     return {
