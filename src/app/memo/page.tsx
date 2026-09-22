@@ -4,6 +4,20 @@ import { useState, useEffect, useCallback, Suspense, type MouseEvent } from 'rea
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
+
+/** 저장 직후 AI 의미검색용 임베딩 갱신 (백그라운드, 실패해도 무시) */
+const requestMemoEmbedding = (memoId: string) => {
+  try {
+    fetch('/api/ai/embed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memoId }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+};
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
@@ -294,8 +308,9 @@ function MemoPageContent() {
 
         if (error) throw error;
         setMessage('✅ 수정되었습니다!');
+        requestMemoEmbedding(editingId);
       } else {
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from('memos')
           .insert([{
             title: formData.title,
@@ -305,10 +320,13 @@ function MemoPageContent() {
             category_id: categoryIdForSave,
             // 오늘이면 DB 기본값(now) 그대로, 다른 날짜를 골랐으면 그 날짜(시각은 지금)
             ...(createdDate !== toLocalDateInput() ? { created_at: composeCreatedAt(createdDate) } : {}),
-          }]);
+          }])
+          .select('id');
 
         if (error) throw error;
         setMessage('✅ 저장되었습니다!');
+        const newId = inserted?.[0]?.id;
+        if (newId) requestMemoEmbedding(newId);
       }
 
       setShowEditor(false);
