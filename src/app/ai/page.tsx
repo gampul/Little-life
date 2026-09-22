@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { SwipeNav } from '../components/SwipeNav';
@@ -13,12 +14,27 @@ interface Message {
   timestamp: Date;
 }
 
-interface ReportSummary {
-  totalAsset: number;
-  monthlyExpense: number;
-  monthlyIncome: number;
-  savingRate: number;
+type ReportKind = 'coach' | 'weekly' | 'monthly';
+
+interface SavedReport {
+  id: string;
+  kind: ReportKind;
+  period_from: string;
+  period_to: string;
+  content: string;
+  created_at: string;
 }
+
+const REPORT_TYPES: { id: ReportKind; label: string; icon: string; desc: string }[] = [
+  { id: 'coach', label: '오늘의 코칭', icon: '☀️', desc: '오늘 할 것 + 한 줄 응원' },
+  { id: 'weekly', label: '주간 리포트', icon: '📈', desc: '지난 7일 루틴·체중·일기' },
+  { id: 'monthly', label: '월간 리포트', icon: '🗓️', desc: '지난 30일 흐름과 제안' },
+];
+
+const KIND_LABEL: Record<ReportKind, string> = { coach: '오늘의 코칭', weekly: '주간', monthly: '월간' };
+
+const fmtPeriod = (r: SavedReport) =>
+  r.kind === 'coach' ? r.period_to.replace(/-/g, '.') : `${r.period_from.slice(5).replace('-', '.')} ~ ${r.period_to.slice(5).replace('-', '.')}`;
 
 export default function AIPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -26,9 +42,11 @@ export default function AIPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'report'>('chat');
   const [report, setReport] = useState<string>('');
-  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
-  const [reportType, setReportType] = useState<string>('daily');
+  const [reportType, setReportType] = useState<ReportKind>('weekly');
+  const [reportMeta, setReportMeta] = useState<{ period?: { from: string; to: string }; cached?: boolean; createdAt?: string; tableMissing?: boolean } | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -47,7 +65,7 @@ export default function AIPage() {
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: '안녕하세요! 👋 저는 Little Life AI 어시스턴트입니다.\n\n당신의 일상, 일기, 가계부, 자산 데이터를 분석하여 맞춤형 조언을 드릴 수 있어요.\n\n예시 질문:\n• "이번 달 지출 분석해줘"\n• "내 자산 현황이 어때?"\n• "저축률을 높이려면 어떻게 해야 할까?"\n• "오늘 하루 조언 해줘"\n\n무엇이든 물어보세요! 😊',
+        content: '안녕하세요! 👋 저는 Little Life AI 코치예요.\n\nDaily 루틴 체크, 체중, Diary 일기를 읽고 요약·분석·제안을 드릴 수 있어요. 정리된 리포트가 필요하면 위의 📊 리포트 탭을 눌러 보세요.\n\n예시 질문:\n• "이번 주 루틴 어땠어?"\n• "요즘 일기에서 내가 자주 말한 고민이 뭐야?"\n• "오늘 뭐부터 하면 좋을까?"\n• "한 달 전보다 체중이 얼마나 변했어?"',
         timestamp: new Date(),
       }]);
     }
@@ -115,31 +133,57 @@ export default function AIPage() {
     }
   };
 
-  // 리포트 생성
-  const generateReport = async (type: string) => {
+  // 저장된 리포트 목록
+  const loadSavedReports = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/report', { cache: 'no-store' });
+      const data = await res.json();
+      if (Array.isArray(data.reports)) setSavedReports(data.reports);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'report') loadSavedReports();
+  }, [activeTab, loadSavedReports]);
+
+  // 리포트 생성 (같은 기간에 이미 있으면 저장본을 보여주고, force 면 새로 생성)
+  const generateReport = async (type: ReportKind, force = false) => {
     setIsGeneratingReport(true);
     setReportType(type);
+    setShowHistory(false);
 
     try {
       const response = await fetch('/api/ai/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportType: type }),
+        body: JSON.stringify({ reportType: type, force }),
       });
-
       const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      if (data.error) throw new Error(data.error);
 
       setReport(data.report);
-      setReportSummary(data.summary);
+      setReportMeta({
+        period: data.period ?? (data.saved ? { from: data.saved.period_from, to: data.saved.period_to } : undefined),
+        cached: !!data.cached,
+        createdAt: data.saved?.created_at,
+        tableMissing: !!data.tableMissing,
+      });
+      loadSavedReports();
     } catch (error: any) {
       setReport(`⚠️ 리포트 생성 중 오류가 발생했습니다: ${error.message}`);
+      setReportMeta(null);
     } finally {
       setIsGeneratingReport(false);
     }
+  };
+
+  const openSaved = (r: SavedReport) => {
+    setReportType(r.kind);
+    setReport(r.content);
+    setReportMeta({ period: { from: r.period_from, to: r.period_to }, cached: true, createdAt: r.created_at });
+    setShowHistory(false);
   };
 
   // Enter 키 처리
@@ -152,10 +196,10 @@ export default function AIPage() {
 
   // 빠른 질문 버튼
   const quickQuestions = [
-    '이번 달 지출 분석해줘',
-    '자산 현황 알려줘',
-    '저축 조언 해줘',
-    '오늘 하루 조언',
+    '이번 주 루틴 어땠어?',
+    '오늘 뭐부터 하면 좋을까?',
+    '요즘 일기 주제 정리해줘',
+    '체중 추세 알려줘',
   ];
 
   return (
@@ -281,54 +325,58 @@ export default function AIPage() {
 
         {/* 리포트 탭 */}
         {activeTab === 'report' && (
-          <div className="px-4 py-6">
+          <div className="px-4 py-5">
             {/* 리포트 타입 선택 */}
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {[
-                { id: 'daily', label: '오늘의 리포트', icon: '📅', desc: '종합 분석' },
-                { id: 'financial', label: '재정 리포트', icon: '💰', desc: '수입/지출 분석' },
-                { id: 'lifestyle', label: '라이프스타일', icon: '🌟', desc: '일상 분석' },
-                { id: 'weekly', label: '주간 리포트', icon: '📈', desc: '주간 요약' },
-              ].map((type) => (
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {REPORT_TYPES.map((type) => (
                 <button
                   key={type.id}
                   onClick={() => generateReport(type.id)}
                   disabled={isGeneratingReport}
-                  className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  className={`p-3 rounded-xl border-2 transition-all text-left ${
                     reportType === type.id && report
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                       : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700'
                   } disabled:opacity-50`}
                 >
-                  <div className="text-2xl mb-1">{type.icon}</div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-white">{type.label}</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">{type.desc}</div>
+                  <div className="text-xl mb-1">{type.icon}</div>
+                  <div className="text-[13px] font-semibold text-gray-900 dark:text-white leading-tight">{type.label}</div>
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{type.desc}</div>
                 </button>
               ))}
             </div>
 
-            {/* 요약 카드 */}
-            {reportSummary && (
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-5 mb-6 text-white">
-                <div className="text-sm opacity-80 mb-2">📊 현재 현황</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-xs opacity-70">총 자산</div>
-                    <div className="text-lg font-bold">{reportSummary.totalAsset.toLocaleString()}원</div>
-                  </div>
-                  <div>
-                    <div className="text-xs opacity-70">저축률</div>
-                    <div className="text-lg font-bold">{reportSummary.savingRate}%</div>
-                  </div>
-                  <div>
-                    <div className="text-xs opacity-70">월 수입</div>
-                    <div className="text-sm font-medium text-green-300">+{reportSummary.monthlyIncome.toLocaleString()}원</div>
-                  </div>
-                  <div>
-                    <div className="text-xs opacity-70">월 지출</div>
-                    <div className="text-sm font-medium text-red-300">-{reportSummary.monthlyExpense.toLocaleString()}원</div>
-                  </div>
-                </div>
+            {/* 지난 리포트 토글 */}
+            {savedReports.length > 0 && (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => setShowHistory((v) => !v)}
+                  className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                >
+                  {showHistory ? '지난 리포트 접기' : `지난 리포트 ${savedReports.length}개 보기`}
+                </button>
+                {showHistory && (
+                  <ul className="mt-2 divide-y divide-gray-100 dark:divide-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+                    {savedReports.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => openSaved(r)}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                        >
+                          <span className="shrink-0 px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 text-[11px] font-medium text-gray-600 dark:text-gray-300">
+                            {KIND_LABEL[r.kind]}
+                          </span>
+                          <span className="text-sm text-gray-800 dark:text-gray-100">{fmtPeriod(r)}</span>
+                          <span className="ml-auto text-[11px] text-gray-400">
+                            {new Date(r.created_at).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 
@@ -336,17 +384,34 @@ export default function AIPage() {
             {isGeneratingReport && (
               <div className="flex flex-col items-center justify-center py-12">
                 <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
-                <div className="text-sm text-gray-500 dark:text-gray-400">AI가 데이터를 분석하고 있어요...</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">루틴·체중·일기를 읽고 있어요...</div>
               </div>
             )}
 
             {/* 리포트 내용 */}
             {!isGeneratingReport && report && (
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <div className="whitespace-pre-wrap text-gray-900 dark:text-white text-sm leading-relaxed">
-                    {report}
+                <div className="flex items-center justify-between gap-2 mb-3 text-[11px] text-gray-400 dark:text-gray-500">
+                  <span>
+                    {KIND_LABEL[reportType]}
+                    {reportMeta?.period && ` · ${reportMeta.period.from.replace(/-/g, '.')} ~ ${reportMeta.period.to.replace(/-/g, '.')}`}
+                    {reportMeta?.createdAt && ` · ${new Date(reportMeta.createdAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 생성`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => generateReport(reportType, true)}
+                    className="shrink-0 text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    다시 생성
+                  </button>
+                </div>
+                {reportMeta?.tableMissing && (
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-[12px] text-amber-700 dark:text-amber-300">
+                    리포트 저장 테이블이 아직 없어 이번 리포트는 저장되지 않았어요. <code>add_ai_reports.sql</code> 을 Supabase에서 실행하면 지난 리포트를 다시 볼 수 있어요.
                   </div>
+                )}
+                <div className="prose prose-sm dark:prose-invert max-w-none text-gray-900 dark:text-white leading-relaxed [&_table]:text-[13px] [&_h2]:text-base [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_ul]:my-2 [&_li]:my-0.5">
+                  <ReactMarkdown>{report}</ReactMarkdown>
                 </div>
               </div>
             )}
@@ -355,8 +420,10 @@ export default function AIPage() {
             {!report && !isGeneratingReport && (
               <div className="text-center py-12">
                 <div className="text-4xl mb-4">🤖</div>
-                <div className="text-gray-500 dark:text-gray-400 text-sm">
-                  위 버튼을 눌러 AI 리포트를 생성해보세요!
+                <div className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                  위 버튼을 누르면 Daily 루틴·체중과 Diary 일기를 읽고
+                  <br />
+                  요약 · 분석 · 제안을 만들어 드려요.
                 </div>
               </div>
             )}

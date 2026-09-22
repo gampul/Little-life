@@ -1,272 +1,179 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { createSupabaseServer } from '../../../../lib/supabase_ssr';
+import {
+  buildInsightContext,
+  collectInsightData,
+  REPORT_LABEL,
+  type ReportKind,
+} from '../../../../lib/aiInsights';
 
-// OpenAI 클라이언트
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
-// 상세 사용자 데이터 수집
-async function collectDetailedData() {
+const KINDS: ReportKind[] = ['coach', 'weekly', 'monthly'];
+const normalizeKind = (v: unknown): ReportKind => {
+  if (v === 'daily' || v === 'lifestyle') return 'coach'; // 구버전 호환
+  return KINDS.includes(v as ReportKind) ? (v as ReportKind) : 'weekly';
+};
+
+const SYSTEM_PROMPT = `# 역할
+너는 "Little Life" 앱 사용자의 개인 라이프 코치다. 사용자가 매일 기록한 루틴 체크, 체중, 일기를 읽고
+그 사람만을 위한 요약·분석·제안을 한국어로 쓴다. 따뜻하지만 솔직하게, 친구가 조언하듯 존댓말로.
+
+# 절대 규칙
+1. 아래 [데이터]에 있는 사실과 숫자만 사용한다. 없는 수치·사건은 절대 지어내지 않는다.
+2. 수치를 인용할 때는 데이터의 값을 그대로 쓴다 (예: "글쓰기 5/7일(71%)").
+3. 일기는 사용자가 쓴 글이다. 내용을 근거로 감정·관심사·고민을 짚되, 과잉 해석·진단은 하지 않는다.
+4. 데이터가 없는 영역은 한 줄로 "기록이 없어요"라고만 말하고 넘어간다.
+5. 제안은 구체적이고 작아야 한다 (내일/이번 주에 바로 할 수 있는 것). 뻔한 일반론("꾸준히 하세요") 금지.
+6. 마크다운 사용. 이모지는 섹션 제목에만 최소한으로.`;
+
+const KIND_PROMPTS: Record<ReportKind, string> = {
+  coach: `오늘의 코칭을 써줘. 매일 아침에 읽는 짧은 글이다. 250~400자.
+구성:
+1. 한 줄 인사 + 최근 7일 흐름 중 가장 눈에 띄는 것 하나 (연속일 기록, 무너진 루틴, 체중 변화, 일기에서 드러난 마음 중 택1)
+2. **오늘 할 것**: 오늘 미완료 루틴 중 우선순위 1~2개를 이유와 함께 (연속일이 끊길 위험이 있는 것을 우선)
+3. 마지막 한 문장 응원 (일기 내용과 연결되면 더 좋음)`,
+
+  weekly: `주간 리포트를 써줘. 600~900자.
+구성:
+## 📊 이번 주 요약
+- 전체 달성 흐름 (날짜별 완료/전체 데이터로 잘된 날·무너진 날, 요일 패턴)
+- 루틴별 하이라이트: 잘 지킨 것(연속일 포함) 2~3개, 흔들린 것 1~2개 — 숫자로
+- 체중: 시작→최근, 변화량, 추이 해석 (기록 없으면 한 줄)
+## 📝 일기에서
+- 이번 주 일기 전체를 읽고 반복된 주제·감정·고민 2~3개를 사용자의 표현을 인용해 정리 (없으면 한 줄)
+- 루틴 데이터와 일기 사이의 연결점이 있으면 짚기 (예: 일기에서 피곤함을 자주 말한 주에 운동이 빠짐)
+## ✅ 다음 주 제안
+- 딱 3개. 각각 "무엇을, 언제, 어떻게" + 근거가 되는 데이터 한 줄`,
+
+  monthly: `월간 리포트를 써줘. 900~1300자.
+구성:
+## 📊 이번 달 요약
+- 루틴별 달성률 표 (마크다운 표: 루틴 | 달성 | 연속 | 비고). 숫자형·복합형은 합계 포함
+- 날짜별 완료/전체 데이터로 상반기·하반기 흐름, 주말/평일 차이
+- 체중: 시작→최근, 최저/최고, 추이 해석
+## 📝 한 달의 일기
+- 일기를 시간순으로 읽고 이 달의 큰 흐름(사건, 관심사, 감정 변화)을 3~5문장으로. 사용자의 표현 인용
+- 자주 등장한 주제 3개
+## 💡 발견
+- 루틴·체중·일기를 교차해서 보이는 패턴 2~3개 (근거 데이터 명시)
+## ✅ 다음 달 제안
+- 3개. 하나는 "줄이거나 그만둘 것"이어도 좋다. 각각 근거 한 줄`,
+};
+
+const isMissingTable = (e: { message?: string; code?: string } | null | undefined) =>
+  !!e && (e.code === '42P01' || e.code === 'PGRST205' || /relation .* does not exist|Could not find the table/i.test(e.message || ''));
+
+/** 저장된 리포트 목록 (최근 20개) */
+export async function GET() {
   const supabase = await createSupabaseServer();
-  const { data: authData } = await supabase.auth.getUser();
-  const userId = authData.user?.id;
-  if (!userId) {
-    return { daily: [], diary: [], expense: [], property: [] };
-  }
-  const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  
-  // Daily 루틴 데이터 (최근 7일 상세)
-  const { data: dailyData } = await supabase
-    .from('daily_records')
-    .select('date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
-    .eq('user_id', userId)
-    .gte('date', sevenDaysAgo.toISOString().split('T')[0])
-    .order('date', { ascending: false });
+  const { data: auth } = await supabase.auth.getUser();
+  const userId = auth.user?.id;
+  if (!userId) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
 
-  // Diary 메모 데이터 (최근 5개)
-  const { data: diaryData } = await supabase
-    .from('memos')
-    .select('title, content, created_at')
+  const { data, error } = await supabase
+    .from('ai_reports')
+    .select('id, kind, period_from, period_to, content, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(20);
 
-  // Expense 가계부 데이터 (최근 30일)
-  const { data: expenseData } = await supabase
-    .from('expense_records')
-    .select('*')
-    .eq('user_id', userId)
-    .gte('date', thirtyDaysAgo.toISOString().split('T')[0])
-    .order('date', { ascending: false });
-
-  // [투자현황 기능 초기화] finance_records 테이블 제거로 자산 데이터 조회 비활성화 - 재개발 시 복구
-  // const { data: propertyData } = await supabase
-  //   .from('finance_records')
-  //   .select('*')
-  //   .eq('user_id', userId)
-  //   .order('period', { ascending: false })
-  //   .limit(300);
-  const propertyData: any[] = [];
-
-  return {
-    daily: dailyData || [],
-    diary: diaryData || [],
-    expense: expenseData || [],
-    property: propertyData || [],
-  };
-}
-
-// 상세 데이터 분석
-function analyzeData(data: {
-  daily: any[];
-  diary: any[];
-  expense: any[];
-  property: any[];
-}) {
-  // Daily 분석
-  const dailyAnalysis = {
-    totalDays: data.daily.length,
-    records: data.daily.map(d => ({
-      date: d.date,
-      weight: d.weight ?? null,
-      mealMemo: d.meal_memo ?? null,
-      dailyMemo: d.daily_memo ?? null,
-    })),
-  };
-
-  // Diary 분석
-  const diaryAnalysis = data.diary.map(d => ({
-    title: d.title || '제목없음',
-    content: d.content?.replace(/<[^>]*>/g, '').slice(0, 200) || '',
-    date: d.created_at,
-  }));
-
-  // Expense 분석
-  let totalIncome = 0;
-  let totalExpense = 0;
-  const categoryExpense: { [key: string]: number } = {};
-  const dailySpending: { [key: string]: number } = {};
-  
-  data.expense.forEach(e => {
-    const amount = Number(e.amount) || 0;
-    if (e.type === 'income') {
-      totalIncome += amount;
-    } else {
-      totalExpense += amount;
-      const category = e.category || '기타';
-      categoryExpense[category] = (categoryExpense[category] || 0) + amount;
-      
-      const date = e.date?.split('T')[0] || '';
-      dailySpending[date] = (dailySpending[date] || 0) + amount;
-    }
-  });
-
-  const expenseAnalysis = {
-    totalIncome,
-    totalExpense,
-    balance: totalIncome - totalExpense,
-    categoryBreakdown: categoryExpense,
-    avgDailySpending: Object.values(dailySpending).length > 0 
-      ? Object.values(dailySpending).reduce((a, b) => a + b, 0) / Object.values(dailySpending).length 
-      : 0,
-    topCategories: Object.entries(categoryExpense)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5),
-  };
-
-  // Property 분석
-  const latestPeriod = data.property[0]?.period;
-  const latestRecords = data.property.filter(p => p.period === latestPeriod);
-  
-  let totalAsset = 0;
-  let totalDividend = 0;
-  let totalInOut = 0;
-  const assetByCategory: { [key: string]: number } = {};
-  const assetByOwner: { [key: string]: number } = {};
-  
-  latestRecords.forEach(p => {
-    const value = Number(p.value) || 0;
-    totalAsset += value;
-    totalDividend += Number(p.dividend) || 0;
-    totalInOut += Number(p.in_out) || 0;
-    const category = p.category || '기타';
-    assetByCategory[category] = (assetByCategory[category] || 0) + value;
-    const owner = p.owner || '미지정';
-    assetByOwner[owner] = (assetByOwner[owner] || 0) + value;
-  });
-
-  const propertyAnalysis = {
-    totalAsset,
-    totalDividend,
-    totalInOut,
-    assetByCategory,
-    assetByOwner,
-    accountCount: latestRecords.length,
-    latestPeriod,
-    stocks: latestRecords.slice(0, 20).map(p => ({
-      owner: p.owner,
-      division: p.division,
-      category: p.category,
-      stock: p.stock,
-      qty: p.qty,
-      value: p.value,
-      dividend: p.dividend,
-      inOut: p.in_out,
-      growthRate: p.growth_rate,
-    })),
-  };
-
-  return {
-    daily: dailyAnalysis,
-    diary: diaryAnalysis,
-    expense: expenseAnalysis,
-    property: propertyAnalysis,
-  };
+  if (error) {
+    if (isMissingTable(error)) return NextResponse.json({ reports: [], tableMissing: true });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ reports: data ?? [] });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { reportType = 'daily' } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const kind = normalizeKind(body.reportType ?? body.kind);
+    const force = !!body.force;
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: 'API 키가 설정되지 않았습니다.' }, { status: 500 });
     }
 
-    // 데이터 수집 및 분석
-    const userData = await collectDetailedData();
-    const analysis = analyzeData(userData);
+    const supabase = await createSupabaseServer();
+    const { data: auth } = await supabase.auth.getUser();
+    const userId = auth.user?.id;
+    if (!userId) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
 
-    // 리포트 타입별 프롬프트
-    const reportPrompts: { [key: string]: string } = {
-      daily: `오늘의 종합 리포트를 작성해줘. 일상, 감정, 지출, 자산 현황을 모두 분석해서 간단한 인사이트와 내일을 위한 조언을 해줘.`,
-      financial: `재정 건강도 리포트를 작성해줘. 수입/지출 패턴, 저축률, 자산 구성을 분석하고 개선점을 제안해줘.`,
-      lifestyle: `라이프스타일 리포트를 작성해줘. 일상 루틴, 수면 패턴, 운동, 감정 변화를 분석하고 더 나은 하루를 위한 조언을 해줘.`,
-      weekly: `주간 종합 리포트를 작성해줘. 이번 주의 하이라이트, 개선점, 다음 주 목표를 제안해줘.`,
-    };
+    const data = await collectInsightData(supabase, userId, kind);
 
-    const systemPrompt = `# 역할
-너는 "Little Life" 앱의 데이터 분석 전문가야. 사용자 데이터를 기반으로 정확한 리포트를 작성해.
+    // 같은 기간에 이미 만든 리포트가 있으면 재사용 (force 면 새로 생성)
+    if (!force) {
+      const { data: existing, error } = await supabase
+        .from('ai_reports')
+        .select('id, kind, period_from, period_to, content, created_at')
+        .eq('user_id', userId)
+        .eq('kind', kind)
+        .eq('period_to', data.to)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!error && existing) {
+        return NextResponse.json({ success: true, report: existing.content, reportType: kind, kind, cached: true, saved: existing });
+      }
+    }
 
-# 핵심 규칙
-1. 반드시 제공된 데이터만 사용해서 리포트 작성
-2. 데이터에 없는 내용은 절대 추측하거나 지어내지 마
-3. 모든 수치는 제공된 데이터에서 인용
-4. 데이터가 부족하면 솔직하게 "데이터 부족"이라고 표시
-
-# 리포트 형식
-1. 📊 핵심 요약 (데이터 기반 지표 2-3개)
-2. 💡 인사이트 (데이터에서 발견한 패턴)
-3. ✅ 실천 제안 (구체적 행동 1-2개)
-
-# 금지 사항
-- 거짓 정보나 추측 금지
-- 데이터에 없는 숫자 생성 금지
-- 과장된 표현 금지
-
-# 형식
-- 한국어로 작성
-- 마크다운 사용
-- 300-500자 이내`;
-
-    // 데이터 컨텍스트
-    const dataContext = `
-[사용자 데이터 분석 결과]
-
-📅 일상 기록 (최근 ${analysis.daily.totalDays}일):
-${JSON.stringify(analysis.daily.records.slice(0, 3), null, 2)}
-
-📝 최근 일기:
-${analysis.diary.map(d => `- ${d.title}: ${d.content.slice(0, 100)}...`).join('\n')}
-
-💰 가계부 (최근 30일):
-- 총 수입: ${analysis.expense.totalIncome.toLocaleString()}원
-- 총 지출: ${analysis.expense.totalExpense.toLocaleString()}원
-- 잔액: ${analysis.expense.balance.toLocaleString()}원
-- 일평균 지출: ${Math.round(analysis.expense.avgDailySpending).toLocaleString()}원
-- 카테고리별: ${analysis.expense.topCategories.map(([k, v]) => `${k}: ${v.toLocaleString()}원`).join(', ')}
-
-🏦 자산 현황: 투자현황 기능 준비 중 (집계 데이터 없음)
-`;
-
-    // OpenAI API 호출
+    const context = buildInsightContext(data);
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: systemPrompt },
-        { 
-          role: 'user', 
-          content: `${dataContext}\n\n---\n\n${reportPrompts[reportType] || reportPrompts.daily}`
-        },
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `[데이터]\n${context}\n\n---\n\n${KIND_PROMPTS[kind]}` },
       ],
-      max_tokens: 1500,
-      temperature: 0.3,
+      max_tokens: kind === 'monthly' ? 2200 : 1400,
+      temperature: 0.4,
     });
+    const report = completion.choices[0]?.message?.content?.trim() || '';
+    if (!report) return NextResponse.json({ error: '리포트가 비어 있습니다. 다시 시도해 주세요.' }, { status: 500 });
 
-    const report = completion.choices[0]?.message?.content || '';
+    // 저장 (테이블이 없으면 건너뛰고 안내)
+    let saved: any = null;
+    let tableMissing = false;
+    const { data: inserted, error: insErr } = await supabase
+      .from('ai_reports')
+      .insert({
+        user_id: userId,
+        kind,
+        period_from: data.from,
+        period_to: data.to,
+        content: report,
+        stats: {
+          routines: data.routines.map((r) => ({ label: r.label, rate: r.rate, streak: r.streak })),
+          weight: { first: data.weight.first, last: data.weight.last, delta: data.weight.delta },
+          diaryCount: data.diary.length,
+        },
+      })
+      .select('id, kind, period_from, period_to, content, created_at')
+      .single();
+    if (insErr) {
+      if (isMissingTable(insErr)) tableMissing = true;
+      else console.error('ai_reports insert error:', insErr.message);
+    } else saved = inserted;
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       report,
-      reportType,
-      generatedAt: new Date().toISOString(),
-      summary: {
-        totalAsset: analysis.property.totalAsset,
-        monthlyExpense: analysis.expense.totalExpense,
-        monthlyIncome: analysis.expense.totalIncome,
-        savingRate: analysis.expense.totalIncome > 0 
-          ? Math.round((1 - analysis.expense.totalExpense / analysis.expense.totalIncome) * 100)
-          : 0,
+      reportType: kind,
+      kind,
+      label: REPORT_LABEL[kind],
+      period: { from: data.from, to: data.to },
+      cached: false,
+      saved,
+      tableMissing,
+      meta: {
+        routineCount: data.routines.length,
+        diaryCount: data.diary.length,
+        weightCount: data.weight.count,
       },
     });
-
   } catch (error: any) {
     console.error('AI Report Error:', error);
-    return NextResponse.json({ 
-      error: error.message || '리포트 생성 중 오류가 발생했습니다.' 
-    }, { status: 500 });
+    return NextResponse.json({ error: error.message || '리포트 생성 중 오류가 발생했습니다.' }, { status: 500 });
   }
 }
