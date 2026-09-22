@@ -181,10 +181,10 @@ async function getDiaryData(limit: number = 5, keyword?: string) {
   const { supabase, userId } = await getSupabaseWithUserId();
   if (!userId) return { message: '로그인이 필요합니다.' };
 
+  // memos 에는 user_id 컬럼이 없음(RLS 로 스코프) — 필터를 걸면 42703 에러로 항상 빈 결과였음
   let query = supabase
     .from('memos')
     .select('title, content, created_at')
-    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -523,9 +523,7 @@ export async function GET() {
       userId
         ? supabase.from('daily_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
         : supabase.from('daily_records').select('id', { count: 'exact', head: true }),
-      userId
-        ? supabase.from('memos').select('id', { count: 'exact', head: true }).eq('user_id', userId)
-        : supabase.from('memos').select('id', { count: 'exact', head: true }),
+      supabase.from('memos').select('id', { count: 'exact', head: true }),
       userId
         ? supabase.from('expense_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
         : supabase.from('expense_records').select('id', { count: 'exact', head: true }),
