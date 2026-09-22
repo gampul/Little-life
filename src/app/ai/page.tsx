@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { ReportMarkdown } from './ReportMarkdown';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { SwipeNav } from '../components/SwipeNav';
@@ -268,9 +268,7 @@ export default function AIPage() {
                     }`}
                   >
                     {message.role === 'assistant' ? (
-                      <div className="text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_strong]:font-semibold">
-                        <ReactMarkdown>{message.content}</ReactMarkdown>
-                      </div>
+                      <ReportMarkdown compact>{message.content}</ReportMarkdown>
                     ) : (
                       <div className="text-sm whitespace-pre-wrap">{message.content}</div>
                     )}
@@ -457,9 +455,7 @@ export default function AIPage() {
                     리포트 저장 테이블이 아직 없어 이번 리포트는 저장되지 않았어요. <code>add_ai_reports.sql</code> 을 Supabase에서 실행하면 지난 리포트를 다시 볼 수 있어요.
                   </div>
                 )}
-                <div className="prose prose-sm dark:prose-invert max-w-none text-gray-900 dark:text-white leading-relaxed [&_table]:text-[13px] [&_h2]:text-base [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:text-sm [&_ul]:my-2 [&_li]:my-0.5">
-                  <ReactMarkdown>{report}</ReactMarkdown>
-                </div>
+                <ReportMarkdown>{report}</ReportMarkdown>
               </div>
             )}
 
