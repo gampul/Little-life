@@ -8,7 +8,7 @@ import { PendingSmsPopup } from './components/PendingSmsPopup';
 import type { PendingTransaction, TransactionType } from '../types/pending_transaction';
 import { FooterNav } from './components/FooterNav';
 import DailyLogFeed from './components/DailyLogFeed';
-import { useLongPress } from '../hooks/useLongPress';
+import CheckCell from './components/CheckCell';
 import { compressImage } from '../lib/compressImage';
 import SubItemsInput from './components/SubItemsInput';
 import {
@@ -4132,55 +4132,6 @@ function MemoDot() {
 }
 
 // 체크형 루틴의 날짜 칸: 탭 = 즉시 토글, 길게 누르기/우클릭/Shift+Enter = 체크+메모 시트
-function CheckCell({
-  checked,
-  hasMemo,
-  ariaLabel,
-  onToggle,
-  onOpenMemo,
-}: {
-  checked: boolean;
-  hasMemo: boolean;
-  ariaLabel: string;
-  onToggle: () => void;
-  onOpenMemo: () => void;
-}) {
-  const press = useLongPress({ onClick: onToggle, onLongPress: onOpenMemo });
-  return (
-    <div
-      {...press}
-      role="checkbox"
-      aria-checked={checked}
-      aria-label={`${ariaLabel}${hasMemo ? ', 메모 있음' : ''}. 길게 누르면 메모 입력`}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && e.shiftKey) {
-          e.preventDefault();
-          e.stopPropagation();
-          onOpenMemo();
-        } else if (e.key === ' ' || e.key === 'Enter') {
-          e.preventDefault();
-          e.stopPropagation();
-          onToggle();
-        }
-      }}
-      style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none', touchAction: 'manipulation' }}
-      className={`relative w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-        checked
-          ? 'bg-gray-900 dark:bg-gray-700 border-gray-900 dark:border-gray-700'
-          : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
-      }`}
-    >
-      {checked && (
-        <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
-          <path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-      {hasMemo && <MemoDot />}
-    </div>
-  );
-}
-
 // 독서 사진 피드 — 날짜별 원본 사진을 최신순으로, 탭하면 라이트박스
 function ReadingPhotoFeed({
   images,
