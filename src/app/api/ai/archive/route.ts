@@ -161,6 +161,7 @@ ${blocks.join('\n\n')}`,
             role: 'user',
             content: `아래는 ${from} ~ ${to} (${span}개월, 글 ${total}편${category ? `, 카테고리 "${category}"` : ''}) 의 월별 요약이다.
 이걸 바탕으로 "전체 글 분석" 리포트를 ${span > 6 ? '1200~1800자' : '900~1400자'}로 써라. 월별 요약에 있는 사실·인용만 사용한다.
+문서 제목(H1)은 쓰지 말고 바로 아래 구성의 ## 섹션부터 시작한다.
 
 구성:
 ## 🧭 큰 흐름
@@ -180,7 +181,8 @@ ${valid.map((m) => `## ${monthLabel(m.month)} (${m.count}편)\n${m.summary}`).jo
           },
         ],
       });
-      const report = completion.choices[0]?.message?.content?.trim() || '';
+      // 모델이 H1 제목을 붙이면 제거 (UI 헤더와 중복)
+      const report = (completion.choices[0]?.message?.content?.trim() || '').replace(/^#\s+[^\n]*\n+/, '');
       if (!report) return NextResponse.json({ error: '리포트가 비어 있습니다.' }, { status: 500 });
 
       let saved: any = null;
