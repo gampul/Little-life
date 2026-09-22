@@ -82,6 +82,12 @@ export default function AIPage() {
       timestamp: new Date(),
     };
 
+    // 최근 대화(환영 메시지·오류 메시지 제외)를 함께 보내 앞뒤 문맥을 잇는다
+    const history = messages
+      .filter((m) => m.id !== 'welcome' && !m.content.startsWith('⚠️'))
+      .slice(-16)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
@@ -90,32 +96,18 @@ export default function AIPage() {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: input.trim(), includeData: true }),
+        body: JSON.stringify({ message: userMessage.content, history }),
       });
 
       const data = await response.json();
-
-      // 디버그: Function Calling 정보 콘솔에 출력
-      if (data.debug) {
-        console.log('🔧 AI 모드:', data.debug.mode);
-        if (data.functionsUsed?.length > 0) {
-          console.log('📊 호출된 함수:', data.functionsUsed);
-        }
-      }
-
       if (data.error) {
         throw new Error(data.error);
       }
 
-      // 디버그 정보를 응답에 추가 (개발용)
-      const debugText = data.functionsUsed?.length > 0
-        ? `\n\n---\n🔧 [Function Calling] ${data.functionsUsed.join(', ')}`
-        : '';
-
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.response + debugText,
+        content: data.response,
         timestamp: new Date(),
       };
 
@@ -198,8 +190,8 @@ export default function AIPage() {
   const quickQuestions = [
     '이번 주 루틴 어땠어?',
     '오늘 뭐부터 하면 좋을까?',
-    '요즘 일기 주제 정리해줘',
-    '체중 추세 알려줘',
+    '요즘 일기에서 자주 나온 고민은?',
+    '한 달 전보다 체중이 어때?',
   ];
 
   return (
@@ -251,7 +243,13 @@ export default function AIPage() {
                         : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700 rounded-bl-md'
                     }`}
                   >
-                    <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    {message.role === 'assistant' ? (
+                      <div className="text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_strong]:font-semibold">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                    )}
                     <div className={`text-xs mt-1 ${
                       message.role === 'user' ? 'text-indigo-200' : 'text-gray-400'
                     }`}>
