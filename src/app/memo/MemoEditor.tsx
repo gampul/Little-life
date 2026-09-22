@@ -100,6 +100,9 @@ export interface MemoEditorProps {
   categories: MemoEditorCategory[];
   selectedCategoryId: string | null;
   onCategoryChange: (id: string | null) => void;
+  /** 작성일자 (YYYY-MM-DD). 새 글은 오늘, 편집은 원본 날짜 — 목록 정렬·표시에 쓰이는 created_at */
+  createdDate?: string;
+  onCreatedDateChange?: (date: string) => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -142,6 +145,8 @@ export default function MemoEditor({
   categories,
   selectedCategoryId,
   onCategoryChange,
+  createdDate,
+  onCreatedDateChange,
   onSave,
   onCancel,
   isSaving,
@@ -373,8 +378,31 @@ export default function MemoEditor({
 
         <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
 
-        {/* 카테고리 — select (값 처리: null / id 동일) */}
-        <div className="px-5 py-4">
+        {/* 작성일자 + 카테고리 */}
+        <div className="px-5 py-4 grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-3">
+          <div>
+            <label
+              htmlFor="memo-editor-date"
+              className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2"
+            >
+              작성일자
+            </label>
+            <input
+              id="memo-editor-date"
+              type="date"
+              value={createdDate ?? ''}
+              max={(() => {
+                const d = new Date();
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+              })()}
+              onChange={(e) => {
+                if (e.target.value) onCreatedDateChange?.(e.target.value);
+              }}
+              style={{ touchAction: 'manipulation' }}
+              className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+            />
+          </div>
+          <div className="min-w-0">
           <label
             htmlFor="memo-editor-category"
             className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2"
@@ -409,6 +437,7 @@ export default function MemoEditor({
               ));
             })()}
           </select>
+          </div>
         </div>
 
         <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
