@@ -8,6 +8,8 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { CategoryManager } from '../assets/components/CategoryManager';
 import { APP_CONTENT_CONTAINER } from '../components/container';
+import SubItemsEditor from '../components/SubItemsEditor';
+import { normalizeSubItems, type RoutineSubItem, type RoutineType } from '../../lib/routineSubItems';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
@@ -96,8 +98,8 @@ function RoutineItemWithChart({
   progress: number;
   onUpdate: (
     index: number,
-    field: 'label' | 'type' | 'unit' | 'image_upload_enabled',
-    value: string | boolean
+    field: 'label' | 'type' | 'unit' | 'image_upload_enabled' | 'sub_items',
+    value: string | boolean | RoutineSubItem[]
   ) => void;
   onMove: (index: number, direction: 'up' | 'down') => void;
   onSave: (templateId: string) => void;
@@ -202,6 +204,16 @@ function RoutineItemWithChart({
                 />
                 <span className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-nowrap">숫자</span>
               </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`type-${template.id}`}
+                  checked={template.type === 'multi'}
+                  onChange={() => onUpdate(index, 'type', 'multi')}
+                  className="w-4 h-4"
+                />
+                <span className="text-[11px] text-gray-700 dark:text-gray-300 whitespace-nowrap">복합</span>
+              </label>
             </div>
           </div>
 
@@ -249,6 +261,14 @@ function RoutineItemWithChart({
             </span>
           </label>
         </div>
+        {/* 복합 타입: 하위 항목(이름 + 단위) 편집 */}
+        {template.type === 'multi' && (
+          <SubItemsEditor
+            items={template.sub_items ?? []}
+            onChange={(items) => onUpdate(index, 'sub_items', items)}
+            disabled={isSaving}
+          />
+        )}
         {isDirty && (
           <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
             변경됨 (저장 필요)
@@ -265,9 +285,10 @@ interface RoutineTemplate {
   label: string;
   field_key: string;
   sort_order: number;
-  type: 'checkbox' | 'number';
+  type: RoutineType;
   unit?: string;
   image_upload_enabled?: boolean;
+  sub_items?: RoutineSubItem[];
 }
 
 export default function SettingsPage() {
@@ -302,10 +323,23 @@ export default function SettingsPage() {
       // type, unit, deleted_at 컬럼 포함하여 조회 시도 (deleted_at은 soft delete 용)
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled, sub_items')
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('sort_order', { ascending: true });
+
+      // sub_items 컬럼이 없는(add_routine_sub_items.sql 실행 전) DB → 그 컬럼만 빼고 재시도
+      if (error && /sub_items/i.test(error.message || '')) {
+        console.warn('⚠️ sub_items 컬럼이 없습니다. add_routine_sub_items.sql 을 실행해 주세요.');
+        const retry = await supabase
+          .from('routine_templates')
+          .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('sort_order', { ascending: true });
+        data = retry.data as typeof data;
+        error = retry.error;
+      }
 
       // type 또는 unit 컬럼이 없는 경우 재시도
       if (error && (error.message.includes('column') || error.code === '42703')) {
@@ -317,7 +351,7 @@ export default function SettingsPage() {
           .order('sort_order', { ascending: true });
         
         // type, unit 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null, image_upload_enabled: false }));
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null, image_upload_enabled: false, sub_items: [] })) as typeof data;
         error = result.error;
       }
 
@@ -333,11 +367,12 @@ export default function SettingsPage() {
       // type, unit 필드가 없는 경우 기본값 설정
       const templatesWithType = (data || [])
         .filter((t: any) => !t.deleted_at)
-        .map(t => ({
+        .map((t: any) => ({
         ...t,
-        type: t.type || 'checkbox' as 'checkbox' | 'number',
+        type: (t.type || 'checkbox') as RoutineType,
         unit: t.unit || undefined,
-        image_upload_enabled: t.image_upload_enabled ?? false
+        image_upload_enabled: t.image_upload_enabled ?? false,
+        sub_items: normalizeSubItems(t.sub_items),
       }));
       setRoutineTemplates(templatesWithType);
       setDirtyById(Object.fromEntries((templatesWithType || []).map(t => [t.id, false])));
@@ -477,12 +512,18 @@ export default function SettingsPage() {
         unit: t.unit || null,
         deleted_at: null,
         image_upload_enabled: t.image_upload_enabled ?? false,
+        sub_items: t.type === 'multi' ? normalizeSubItems(t.sub_items) : [],
       }));
 
       // 3) upsert (id 기준). 컬럼/제약이 없는 구버전 DB는 기존 fallback 로직으로 처리
       let { error: upsertError } = await supabase
         .from('routine_templates')
         .upsert(templatesPayload, { onConflict: 'id' });
+
+      // 복합 타입 제약(routine_type_check) 또는 sub_items 컬럼이 없는 DB → 마이그레이션 안내
+      if (upsertError && (/sub_items/i.test(upsertError.message) || /routine_type_check/i.test(upsertError.message))) {
+        throw new Error('복합 타입 저장에 필요한 DB 변경이 아직 없습니다. add_routine_sub_items.sql 을 Supabase SQL Editor 에서 실행해 주세요.');
+      }
 
       if (upsertError && (upsertError.message.includes('column') || upsertError.code === '42703')) {
         console.warn('⚠️ type/unit 컬럼 또는 onConflict 제약이 없을 수 있어 fallback으로 재시도합니다.');
@@ -563,8 +604,8 @@ export default function SettingsPage() {
 
   const handleUpdate = (
     index: number,
-    field: 'label' | 'type' | 'unit' | 'image_upload_enabled',
-    value: string | boolean
+    field: 'label' | 'type' | 'unit' | 'image_upload_enabled' | 'sub_items',
+    value: string | boolean | RoutineSubItem[]
   ) => {
     const updated = [...routineTemplates];
     updated[index] = { ...updated[index], [field]: value };
