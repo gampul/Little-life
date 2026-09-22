@@ -10,6 +10,16 @@ import { FooterNav } from './components/FooterNav';
 import DailyLogFeed from './components/DailyLogFeed';
 import { useLongPress } from '../hooks/useLongPress';
 import { compressImage } from '../lib/compressImage';
+import SubItemsInput from './components/SubItemsInput';
+import {
+  normalizeSubItems,
+  normalizeSubValues,
+  countCheckedSubItems,
+  summarizeSubValues,
+  type RoutineType,
+  type RoutineSubItem,
+  type SubValues,
+} from '../lib/routineSubItems';
 import { AuthGuard } from './components/AuthGuard';
 import { SwipeNav } from './components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from './components/container';
@@ -55,9 +65,11 @@ interface RoutineTemplate {
   label: string;
   field_key: string;
   sort_order: number;
-  type: 'checkbox' | 'number';
+  type: RoutineType;
   unit?: string;
   image_upload_enabled?: boolean;
+  /** 복합(multi) 타입의 하위 항목 (routine_templates.sub_items) */
+  sub_items?: RoutineSubItem[];
 }
 
 /** daily_routine_checks 행 — Home 에서 전 루틴을 한 번에 로드해 RoutineItem 으로 내려줌 */
@@ -71,8 +83,11 @@ interface RoutineCheckRow {
   image_urls?: string[] | null;
   book_title?: string | null;
   memo?: string | null;
+  /** 복합 타입: 체크한 하위 항목과 값. 컬럼이 아직 없으면 undefined */
+  sub_values?: SubValues | null;
 }
 const EMPTY_ROUTINE_CHECKS: RoutineCheckRow[] = [];
+const EMPTY_SUB_ITEMS: RoutineSubItem[] = [];
 const MAX_ROUTINE_PHOTOS = 5;
 /** 행의 사진 목록 (image_urls 우선, 없으면 기존 단일 image_url) */
 const getRowImages = (row: { image_url?: string | null; image_urls?: string[] | null }): string[] => {
@@ -729,10 +744,23 @@ export default function Home() {
       // type, unit, deleted_at 컬럼 포함하여 조회 시도 (deleted_at은 soft delete 용)
       let { data, error } = await supabase
         .from('routine_templates')
-        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled')
+        .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled, sub_items')
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('sort_order', { ascending: true });
+
+      // sub_items 컬럼이 없는(add_routine_sub_items.sql 실행 전) DB → 그 컬럼만 빼고 재시도
+      if (error && isMissingColumnError(error) && /sub_items/i.test(error.message || '')) {
+        console.warn('⚠️ sub_items 컬럼이 없습니다. add_routine_sub_items.sql 실행 전까지 복합 루틴은 체크형으로 동작합니다.');
+        const retry = await supabase
+          .from('routine_templates')
+          .select('id, emoji, label, field_key, sort_order, user_id, type, unit, deleted_at, image_upload_enabled')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .order('sort_order', { ascending: true });
+        data = retry.data as typeof data;
+        error = retry.error;
+      }
 
       // type 컬럼이 없는 경우 재시도
       if (error && (error.message.includes('column') || error.code === '42703')) {
@@ -744,7 +772,7 @@ export default function Home() {
           .order('sort_order', { ascending: true });
         
         // type, unit 필드 추가
-        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null, image_upload_enabled: false }));
+        data = (result.data || []).map(t => ({ ...t, type: 'checkbox' as const, unit: undefined, deleted_at: null, image_upload_enabled: false, sub_items: [] })) as typeof data;
         error = result.error;
       }
 
@@ -760,11 +788,12 @@ export default function Home() {
       // type, unit 필드가 없는 경우 기본값 설정
       const templatesWithType = (data || [])
         .filter((t: any) => !t.deleted_at) // 안전장치 (쿼리에서 걸렀지만 방어)
-        .map(t => ({
+        .map((t: any) => ({
         ...t,
-        type: t.type || 'checkbox' as 'checkbox' | 'number',
+        type: (t.type || 'checkbox') as RoutineType,
         unit: t.unit || undefined,
-        image_upload_enabled: t.image_upload_enabled ?? false
+        image_upload_enabled: t.image_upload_enabled ?? false,
+        sub_items: normalizeSubItems(t.sub_items),
       }));
       setRoutineTemplates(templatesWithType);
     } catch (err) {
@@ -967,10 +996,12 @@ export default function Home() {
     // PostgREST 기본 max-rows(1000) 초과 대비: 1000행씩 이어서 받음 (전 루틴 합산이라 1000을 넘을 수 있음)
     const PAGE = 1000;
     const BASE_COLS = 'date, routine_id, checked, value, image_url, book_title, memo';
+    // 마이그레이션 전 DB 에서도 동작하도록, 없는 컬럼이 있으면 한 단계 적은 컬럼 조합으로 재시도
+    const COL_SETS = [`${BASE_COLS}, image_urls, sub_values`, `${BASE_COLS}, image_urls`, BASE_COLS];
     const load = async () => {
       const rows: RoutineCheckRow[] = [];
-      // image_urls 컬럼이 없는(마이그레이션 전) DB 에서도 동작하도록 실패 시 기존 컬럼만으로 재시도
-      let cols = `${BASE_COLS}, image_urls`;
+      let colIdx = 0;
+      let cols = COL_SETS[colIdx];
       for (let from = 0; ; from += PAGE) {
         const { data, error } = await supabase
           .from('daily_routine_checks')
@@ -984,9 +1015,9 @@ export default function Home() {
           .order('routine_id', { ascending: true })
           .range(from, from + PAGE - 1);
         if (cancelled) return;
-        if (error && cols !== BASE_COLS && isMissingColumnError(error)) {
-          console.warn('⚠️ image_urls 컬럼이 없습니다. add_routine_image_urls.sql 실행 전까지 사진은 1장만 저장됩니다.');
-          cols = BASE_COLS;
+        if (error && colIdx < COL_SETS.length - 1 && isMissingColumnError(error)) {
+          console.warn(`⚠️ 컬럼 누락으로 재시도: ${error.message} (add_routine_sub_items.sql / add_routine_image_urls.sql 실행 여부 확인)`);
+          cols = COL_SETS[++colIdx];
           rows.length = 0;
           from = -PAGE;
           continue;
@@ -995,7 +1026,9 @@ export default function Home() {
           console.error('루틴 체크 데이터(전체) 로드 오류:', error);
           return;
         }
-        const chunk = (data || []) as unknown as RoutineCheckRow[];
+        const chunk = ((data || []) as unknown as RoutineCheckRow[]).map(r =>
+          r.sub_values !== undefined ? { ...r, sub_values: normalizeSubValues(r.sub_values) } : r
+        );
         rows.push(...chunk);
         if (chunk.length < PAGE) break;
       }
@@ -2654,6 +2687,7 @@ export default function Home() {
                       }));
                     }}
                     unit={routine.unit}
+                    subItems={routine.sub_items}
                     syncTick={routineSyncTick}
                     onSync={bumpRoutineSync}
                     imageUploadEnabled={!!routine.image_upload_enabled}
@@ -3103,6 +3137,7 @@ function RoutineItem({
   value,
   onValueChange,
   unit,
+  subItems = EMPTY_SUB_ITEMS,
   syncTick,
   onSync,
   imageUploadEnabled = false,
@@ -3125,10 +3160,12 @@ function RoutineItem({
   routineTemplates: RoutineTemplate[];
   editModeRoutine: string | null;
   setEditModeRoutine: (routineId: string | null) => void;
-  routineType: 'checkbox' | 'number';
+  routineType: RoutineType;
   value?: number | null;
   onValueChange?: (value: number | null) => void;
   unit?: string;
+  /** 복합 타입의 하위 항목 정의 */
+  subItems?: RoutineSubItem[];
   syncTick: number;
   onSync: () => void;
   imageUploadEnabled?: boolean;
@@ -3164,6 +3201,9 @@ function RoutineItem({
   const [readingUploading, setReadingUploading] = useState(false);
   const [readingMemo, setReadingMemo] = useState('');
   const [sheetChecked, setSheetChecked] = useState(true);
+  // 복합 타입: 시트에서 편집 중인 하위 항목 값(키 존재 = 체크) + 입력 중 문자열
+  const [sheetSubValues, setSheetSubValues] = useState<SubValues>({});
+  const [sheetSubDrafts, setSheetSubDrafts] = useState<Record<string, string>>({});
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
@@ -3357,6 +3397,8 @@ function RoutineItem({
     setReadingMemo(memoDateValues[dateStr] ?? '');
     // 체크형은 시트를 열면 "완료"가 기본값 → 메모 없이 저장만 눌러도 체크됨
     setSheetChecked(true);
+    setSheetSubValues(existingRow?.sub_values ? { ...existingRow.sub_values } : {});
+    setSheetSubDrafts({});
   };
 
   const closeReadingSheet = () => {
@@ -3364,6 +3406,18 @@ function RoutineItem({
     setReadingMinutes('');
     setReadingImages([]);
     setReadingMemo('');
+    setSheetSubValues({});
+    setSheetSubDrafts({});
+  };
+
+  const toggleSheetSubItem = (key: string, checked: boolean) => {
+    setSheetSubValues(prev => {
+      const next = { ...prev };
+      if (checked) next[key] = prev[key] ?? null;
+      else delete next[key];
+      return next;
+    });
+    if (!checked) setSheetSubDrafts(prev => { const n = { ...prev }; delete n[key]; return n; });
   };
 
   // 루틴 기록 피드에서 온 열기 요청 처리
@@ -3382,6 +3436,29 @@ function RoutineItem({
     const targetDate = readingSheet.dateStr;
     const memoText = readingMemo.trim().slice(0, 200);
     const isNumber = routineType === 'number';
+    const isMulti = routineType === 'multi';
+
+    // 복합: 체크된 항목별 값 파싱 (빈 입력은 "체크만" = null)
+    let subValuesToSave: SubValues | null = null;
+    if (isMulti) {
+      subValuesToSave = {};
+      for (const it of subItems) {
+        if (!Object.prototype.hasOwnProperty.call(sheetSubValues, it.key)) continue;
+        const draft = sheetSubDrafts[it.key];
+        if (draft === undefined) {
+          subValuesToSave[it.key] = sheetSubValues[it.key] ?? null;
+          continue;
+        }
+        const trimmed = draft.trim();
+        if (trimmed === '') { subValuesToSave[it.key] = null; continue; }
+        const parsed = parseFloat(trimmed);
+        if (Number.isNaN(parsed)) {
+          alert(`${it.label} 값에 올바른 숫자를 입력해주세요.`);
+          return;
+        }
+        subValuesToSave[it.key] = Math.round(parsed * 10) / 10;
+      }
+    }
 
     let numValue: number | null = null;
     if (isNumber) {
@@ -3400,7 +3477,9 @@ function RoutineItem({
     // 기록을 지우는 경우: 체크형에서 완료 해제 / 숫자형에서 값·사진·메모가 모두 비어 있음
     const shouldDelete = isNumber
       ? numValue === null && readingImages.length === 0 && memoText === ''
-      : !sheetChecked;
+      : isMulti
+        ? Object.keys(subValuesToSave ?? {}).length === 0 && readingImages.length === 0 && memoText === ''
+        : !sheetChecked;
 
     setReadingUploading(true);
 
@@ -3434,7 +3513,21 @@ function RoutineItem({
 
         let { error: dbError } = await supabase
           .from('daily_routine_checks')
-          .upsert({ ...payload, image_urls: images }, { onConflict: 'user_id,date,routine_id' });
+          .upsert(
+            { ...payload, image_urls: images, ...(isMulti ? { sub_values: subValuesToSave } : {}) },
+            { onConflict: 'user_id,date,routine_id' }
+          );
+
+        // sub_values 컬럼이 없는 DB → 그 컬럼만 빼고 재시도 (체크만 저장됨)
+        if (dbError && isMulti && isMissingColumnError(dbError) && /sub_values/i.test(dbError.message || '')) {
+          const retry = await supabase
+            .from('daily_routine_checks')
+            .upsert({ ...payload, image_urls: images }, { onConflict: 'user_id,date,routine_id' });
+          dbError = retry.error;
+          if (!dbError) {
+            alert('하위 항목 값 저장용 DB 컬럼(sub_values)이 아직 없어 체크만 저장했습니다. add_routine_sub_items.sql 을 Supabase 에서 실행해 주세요.');
+          }
+        }
 
         let savedImages = images;
         if (dbError && isMissingColumnError(dbError)) {
@@ -3466,6 +3559,7 @@ function RoutineItem({
           image_urls: savedImages,
           book_title: existing?.book_title ?? null,
           memo: memoText || null,
+          sub_values: isMulti ? subValuesToSave : existing?.sub_values ?? null,
         });
       }
 
@@ -3604,6 +3698,19 @@ function RoutineItem({
                     {sheetChecked ? '완료' : '미완료 (저장하면 이 날 기록이 지워져요)'}
                   </span>
                 </button>
+              )}
+
+              {/* 복합: 하위 항목 체크 + 체크 시 단위 값 입력 */}
+              {routineType === 'multi' && (
+                <SubItemsInput
+                  items={subItems}
+                  values={sheetSubValues}
+                  drafts={sheetSubDrafts}
+                  onToggle={toggleSheetSubItem}
+                  onDraftChange={(key, text) => setSheetSubDrafts(prev => ({ ...prev, [key]: text }))}
+                  onSubmit={() => { if (!readingUploading) saveReadingSheet(); }}
+                  disabled={readingUploading}
+                />
               )}
 
               {/* 숫자 입력 */}
@@ -3782,7 +3889,7 @@ function RoutineItem({
         {/* 연속 일수 + 슬라이더 + 오늘 날짜 체크박스 */}
         <div className="flex items-center gap-2 shrink-0">
           {/* 스트릭 (체크박스 타입일 때만) */}
-          {routineType === 'checkbox' && consecutiveDays > 0 && (
+          {routineType !== 'number' && consecutiveDays > 0 && (
             <span className="text-xs text-blue-400 dark:text-blue-500 font-medium">
               {consecutiveDays}일 연속
             </span>
@@ -3837,6 +3944,46 @@ function RoutineItem({
             </div>
           )}
           
+          {/* 복합 타입: 최근 5일, 체크한 하위 항목 수(n/m) — 탭하면 입력 시트 */}
+          {routineType === 'multi' && (
+            <div className="flex items-center gap-1 shrink-0">
+              {(() => {
+                const today = new Date();
+                const cells = [];
+                const total = subItems.length;
+                for (let i = 4; i >= 0; i--) {
+                  const date = new Date(today);
+                  date.setDate(date.getDate() - i);
+                  const koreaTime = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+                  const dateStr = `${koreaTime.getUTCFullYear()}-${String(koreaTime.getUTCMonth() + 1).padStart(2, '0')}-${String(koreaTime.getUTCDate()).padStart(2, '0')}`;
+                  const row = checks.find(c => c.date === dateStr);
+                  const done = row ? countCheckedSubItems(row.sub_values, subItems) : 0;
+                  const isChecked = !!row?.checked;
+                  const summary = row ? summarizeSubValues(row.sub_values, subItems) : '';
+                  cells.push(
+                    <button
+                      key={dateStr}
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openReadingSheet(dateStr); }}
+                      aria-label={`${label} ${dateStr}${i === 0 ? ' (오늘)' : ''} ${done}/${total}${summary ? ` — ${summary}` : ''}`}
+                      title={summary || `${dateStr} 입력`}
+                      className={`relative flex items-center justify-center rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden ${
+                        isChecked
+                          ? 'bg-gray-900 dark:bg-gray-600 text-white'
+                          : 'bg-[rgb(254,252,247)] dark:bg-gray-700 border border-gray-300 dark:border-gray-500 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600'
+                      }`}
+                      style={{ width: '20px', height: '20px', minWidth: '20px', fontSize: '8px', lineHeight: '1', padding: 0 }}
+                    >
+                      <span className="font-bold tabular-nums">{done}/{total}</span>
+                      {(memoDateValues[dateStr] || photoCountByDate[dateStr]) && <MemoDot />}
+                    </button>
+                  );
+                }
+                return cells;
+              })()}
+            </div>
+          )}
+
           {/* 최근 5일 체크박스 (체크박스 타입일 때) */}
           {routineType === 'checkbox' && (
             <div className="flex items-center gap-1 shrink-0">
@@ -4819,7 +4966,7 @@ function RoutineCalendar({
 
   // 헤더에서 이동해온 월별 달성률/연간 누적 (펼침 상태에서 드롭박스 행 우측에 표시)
   const headerRoutineData = routineTemplates.find(r => r.id === routineId);
-  const headerRoutineType: 'checkbox' | 'number' = headerRoutineData?.type || 'checkbox';
+  const headerRoutineType: RoutineType = headerRoutineData?.type || 'checkbox';
   const headerUnit = headerRoutineData?.unit;
   const headerMonthProgress = getMonthProgress(currentYear, currentMonth, routineId);
   const headerYearlyTotal = Object.values(dateValues).reduce((sum, v) => sum + (v || 0), 0);
