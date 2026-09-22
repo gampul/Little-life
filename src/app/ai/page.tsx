@@ -6,6 +6,8 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { SwipeNav } from '../components/SwipeNav';
 import { APP_HORIZONTAL_CONTAINER } from '../components/container';
+import { DiaryIndexCard } from './DiaryIndexCard';
+import { ArchivePanel, type ArchiveResult } from './ArchivePanel';
 
 interface Message {
   id: string;
@@ -14,7 +16,7 @@ interface Message {
   timestamp: Date;
 }
 
-type ReportKind = 'coach' | 'weekly' | 'monthly';
+type ReportKind = 'coach' | 'weekly' | 'monthly' | 'archive';
 
 interface SavedReport {
   id: string;
@@ -29,12 +31,17 @@ const REPORT_TYPES: { id: ReportKind; label: string; icon: string; desc: string 
   { id: 'coach', label: '오늘의 코칭', icon: '☀️', desc: '오늘 할 것 + 한 줄 응원' },
   { id: 'weekly', label: '주간 리포트', icon: '📈', desc: '지난 7일 루틴·체중·일기' },
   { id: 'monthly', label: '월간 리포트', icon: '🗓️', desc: '지난 30일 흐름과 제안' },
+  { id: 'archive', label: '전체 글 분석', icon: '📚', desc: 'Diary 전체를 월별로 읽고 종합' },
 ];
 
-const KIND_LABEL: Record<ReportKind, string> = { coach: '오늘의 코칭', weekly: '주간', monthly: '월간' };
+const KIND_LABEL: Record<ReportKind, string> = { coach: '오늘의 코칭', weekly: '주간', monthly: '월간', archive: '전체 글' };
 
 const fmtPeriod = (r: SavedReport) =>
-  r.kind === 'coach' ? r.period_to.replace(/-/g, '.') : `${r.period_from.slice(5).replace('-', '.')} ~ ${r.period_to.slice(5).replace('-', '.')}`;
+  r.kind === 'coach'
+    ? r.period_to.replace(/-/g, '.')
+    : r.kind === 'archive'
+      ? `${r.period_from.replace(/-/g, '.')} ~ ${r.period_to.replace(/-/g, '.')}`
+      : `${r.period_from.slice(5).replace('-', '.')} ~ ${r.period_to.slice(5).replace('-', '.')}`;
 
 export default function AIPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -43,7 +50,8 @@ export default function AIPage() {
   const [activeTab, setActiveTab] = useState<'chat' | 'report'>('chat');
   const [report, setReport] = useState<string>('');
   const [reportType, setReportType] = useState<ReportKind>('weekly');
-  const [reportMeta, setReportMeta] = useState<{ period?: { from: string; to: string }; cached?: boolean; createdAt?: string; tableMissing?: boolean } | null>(null);
+  const [reportMeta, setReportMeta] = useState<{ period?: { from: string; to: string }; cached?: boolean; createdAt?: string; tableMissing?: boolean; category?: string | null; saveError?: string | null } | null>(null);
+  const [showArchivePanel, setShowArchivePanel] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -65,7 +73,7 @@ export default function AIPage() {
       setMessages([{
         id: 'welcome',
         role: 'assistant',
-        content: '안녕하세요! 👋 저는 Little Life AI 코치예요.\n\nDaily 루틴 체크, 체중, Diary 일기를 읽고 요약·분석·제안을 드릴 수 있어요. 정리된 리포트가 필요하면 위의 📊 리포트 탭을 눌러 보세요.\n\n예시 질문:\n• "이번 주 루틴 어땠어?"\n• "요즘 일기에서 내가 자주 말한 고민이 뭐야?"\n• "오늘 뭐부터 하면 좋을까?"\n• "한 달 전보다 체중이 얼마나 변했어?"',
+        content: '안녕하세요! 👋 저는 Little Life AI 코치예요.\n\nDaily 루틴 체크, 체중, Diary 일기를 읽고 요약·분석·제안을 드릴 수 있어요. 정리된 리포트가 필요하면 위의 📊 리포트 탭을 눌러 보세요.\n\n예시 질문:\n• "이번 주 루틴 어땠어?"\n• "요즘 일기에서 내가 자주 말한 고민이 뭐야?"\n• "예전에 내가 이직에 대해 뭐라고 썼었지?" (전체 일기 의미 검색)\n• "오늘 뭐부터 하면 좋을까?"\n• "한 달 전보다 체중이 얼마나 변했어?"',
         timestamp: new Date(),
       }]);
     }
@@ -142,9 +150,15 @@ export default function AIPage() {
 
   // 리포트 생성 (같은 기간에 이미 있으면 저장본을 보여주고, force 면 새로 생성)
   const generateReport = async (type: ReportKind, force = false) => {
-    setIsGeneratingReport(true);
     setReportType(type);
     setShowHistory(false);
+    if (type === 'archive') {
+      // 전체 글 분석은 옵션 패널에서 시작
+      setShowArchivePanel(true);
+      return;
+    }
+    setShowArchivePanel(false);
+    setIsGeneratingReport(true);
 
     try {
       const response = await fetch('/api/ai/report', {
@@ -176,6 +190,15 @@ export default function AIPage() {
     setReport(r.content);
     setReportMeta({ period: { from: r.period_from, to: r.period_to }, cached: true, createdAt: r.created_at });
     setShowHistory(false);
+    setShowArchivePanel(false);
+  };
+
+  const onArchiveDone = (r: ArchiveResult) => {
+    setReportType('archive');
+    setReport(r.report);
+    setReportMeta({ period: r.period, cached: false, createdAt: r.saved?.created_at, category: r.category, saveError: r.saveError });
+    setShowArchivePanel(false);
+    loadSavedReports();
   };
 
   // Enter 키 처리
@@ -191,6 +214,7 @@ export default function AIPage() {
     '이번 주 루틴 어땠어?',
     '오늘 뭐부터 하면 좋을까?',
     '요즘 일기에서 자주 나온 고민은?',
+    '예전에 내가 이직에 대해 뭐라고 썼었지?',
     '한 달 전보다 체중이 어때?',
   ];
 
@@ -325,14 +349,14 @@ export default function AIPage() {
         {activeTab === 'report' && (
           <div className="px-4 py-5">
             {/* 리포트 타입 선택 */}
-            <div className="grid grid-cols-3 gap-2 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
               {REPORT_TYPES.map((type) => (
                 <button
                   key={type.id}
                   onClick={() => generateReport(type.id)}
                   disabled={isGeneratingReport}
                   className={`p-3 rounded-xl border-2 transition-all text-left ${
-                    reportType === type.id && report
+                    reportType === type.id && (report || (type.id === 'archive' && showArchivePanel))
                       ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                       : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-700'
                   } disabled:opacity-50`}
@@ -342,6 +366,25 @@ export default function AIPage() {
                   <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">{type.desc}</div>
                 </button>
               ))}
+            </div>
+
+            {/* 전체 글 분석 옵션 */}
+            {showArchivePanel && (
+              <ArchivePanel
+                running={isGeneratingReport}
+                setRunning={setIsGeneratingReport}
+                onDone={onArchiveDone}
+                onError={(msg) => {
+                  setReport(`⚠️ ${msg}`);
+                  setReportMeta(null);
+                  setShowArchivePanel(false);
+                }}
+              />
+            )}
+
+            {/* 일기 색인 현황 (의미 검색용) */}
+            <div className="mb-4">
+              <DiaryIndexCard compact />
             </div>
 
             {/* 지난 리포트 토글 */}
@@ -379,7 +422,7 @@ export default function AIPage() {
             )}
 
             {/* 리포트 생성 중 */}
-            {isGeneratingReport && (
+            {isGeneratingReport && !showArchivePanel && (
               <div className="flex flex-col items-center justify-center py-12">
                 <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
                 <div className="text-sm text-gray-500 dark:text-gray-400">루틴·체중·일기를 읽고 있어요...</div>
@@ -387,11 +430,12 @@ export default function AIPage() {
             )}
 
             {/* 리포트 내용 */}
-            {!isGeneratingReport && report && (
+            {!isGeneratingReport && report && !showArchivePanel && (
               <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
                 <div className="flex items-center justify-between gap-2 mb-3 text-[11px] text-gray-400 dark:text-gray-500">
                   <span>
                     {KIND_LABEL[reportType]}
+                    {reportMeta?.category && ` · ${reportMeta.category}`}
                     {reportMeta?.period && ` · ${reportMeta.period.from.replace(/-/g, '.')} ~ ${reportMeta.period.to.replace(/-/g, '.')}`}
                     {reportMeta?.createdAt && ` · ${new Date(reportMeta.createdAt).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 생성`}
                   </span>
@@ -403,6 +447,11 @@ export default function AIPage() {
                     다시 생성
                   </button>
                 </div>
+                {reportMeta?.saveError && (
+                  <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-[12px] text-amber-700 dark:text-amber-300">
+                    이 리포트는 저장되지 않았어요: {reportMeta.saveError}
+                  </div>
+                )}
                 {reportMeta?.tableMissing && (
                   <div className="mb-3 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-[12px] text-amber-700 dark:text-amber-300">
                     리포트 저장 테이블이 아직 없어 이번 리포트는 저장되지 않았어요. <code>add_ai_reports.sql</code> 을 Supabase에서 실행하면 지난 리포트를 다시 볼 수 있어요.
@@ -415,7 +464,7 @@ export default function AIPage() {
             )}
 
             {/* 초기 안내 */}
-            {!report && !isGeneratingReport && (
+            {!report && !isGeneratingReport && !showArchivePanel && (
               <div className="text-center py-12">
                 <div className="text-4xl mb-4">🤖</div>
                 <div className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed">

@@ -10,6 +10,7 @@ import {
   type InsightData,
 } from '../../../../lib/aiInsights';
 import { normalizeSubItems, normalizeSubValues, summarizeSubValues } from '../../../../lib/routineSubItems';
+import { isEmbeddingSetupMissing, searchMemosSemantic } from '../../../../lib/memoEmbeddings';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
@@ -74,15 +75,35 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: 'search_diary',
       description:
-        '일기 검색/열람. 키워드(제목·본문)와 기간으로 찾고 전문을 돌려준다. "요즘 일기 주제", "이사 관련 글", "지난달 일기 요약", "내가 자주 말한 고민" 류. 키워드 없이 기간만 줘도 된다.',
+        '일기 목록 열람(정확 일치). 기간·카테고리로 최신순 글을 가져오거나, 정확한 단어(제목·본문 부분 일치)로 찾는다. "지난달 일기 요약", "독서 카테고리 최근 글", "9월에 쓴 글 목록", 고유명사·정확한 단어 검색에 적합. 기간 제한 없음(오래된 글도 가능). 의미·주제로 찾을 때는 semantic_search_diary 를 쓴다.',
       parameters: {
         type: 'object',
         properties: {
-          keyword: { type: 'string', description: '검색어 (선택)' },
+          keyword: { type: 'string', description: '정확히 포함될 단어 (선택)' },
+          category: { type: 'string', description: '카테고리 이름 (선택, 목록 참고)' },
           from: { type: 'string', description: '시작일 YYYY-MM-DD (선택)' },
           to: { type: 'string', description: '종료일 YYYY-MM-DD (선택)' },
           limit: { type: 'number', description: '최대 개수 (기본 8, 최대 20)' },
         },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'semantic_search_diary',
+      description:
+        '일기 의미 검색(전체 기간). 질문의 뜻과 비슷한 내용을 쓴 글을 찾는다 — 표현이 달라도 됨("회사 옮길까" 로 쓴 글을 "이직 고민" 으로 찾음). "내가 ~에 대해 뭐라고 썼지", "~했을 때 기분", "비슷한 고민 한 적 있어?", "예전에 ~ 생각한 적", 주제·감정·상황 질문에 우선 사용. 기간·카테고리로 좁힐 수 있다.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '찾고 싶은 내용을 자연어 한 문장으로 (사용자 질문을 그대로 넣기보다 핵심 주제로)' },
+          category: { type: 'string', description: '카테고리 이름 (선택)' },
+          from: { type: 'string', description: '시작일 YYYY-MM-DD (선택)' },
+          to: { type: 'string', description: '종료일 YYYY-MM-DD (선택)' },
+          limit: { type: 'number', description: '최대 개수 (기본 6, 최대 12)' },
+        },
+        required: ['query'],
       },
     },
   },
@@ -201,26 +222,35 @@ async function getDayDetail(args: { date: string }) {
   };
 }
 
-async function searchDiary(args: { keyword?: string; from?: string; to?: string; limit?: number }) {
+async function searchDiary(args: { keyword?: string; category?: string; from?: string; to?: string; limit?: number }) {
   const { supabase, userId } = await getSupabaseWithUserId();
   if (!userId) return { error: '로그인이 필요합니다.' };
   const limit = Math.min(Math.max(Number(args.limit) || 8, 1), 20);
   const keyword = (args.keyword || '').trim();
+  const category = (args.category || '').trim();
 
   // memos 에는 user_id 컬럼이 없음 (RLS 스코프)
   let q = supabase
     .from('memos')
-    .select('title, content, created_at, memo_categories(name)')
+    .select(category ? 'title, content, created_at, memo_categories!inner(name)' : 'title, content, created_at, memo_categories(name)')
     .order('created_at', { ascending: false })
     .limit(limit);
   if (args.from && isoDate.test(args.from)) q = q.gte('created_at', `${args.from}T00:00:00+09:00`);
   if (args.to && isoDate.test(args.to)) q = q.lte('created_at', `${args.to}T23:59:59+09:00`);
   if (keyword) q = q.or(`title.ilike.%${keyword}%,content.ilike.%${keyword}%`);
+  if (category) q = q.ilike('memo_categories.name', `%${category}%`);
 
   const { data, error } = await q;
   if (error) return { error: error.message };
   if (!data || data.length === 0) {
-    return { count: 0, message: keyword ? `'${keyword}' 가 들어간 일기가 없습니다.` : '해당 기간에 일기가 없습니다.' };
+    return {
+      count: 0,
+      message: keyword
+        ? `'${keyword}' 가 들어간 일기가 없습니다. 표현이 다를 수 있으니 semantic_search_diary 로 다시 찾아보세요.`
+        : category
+          ? `'${category}' 카테고리에 해당 기간 일기가 없습니다.`
+          : '해당 기간에 일기가 없습니다.',
+    };
   }
   const perEntry = data.length > 6 ? 900 : 1800;
   return {
@@ -269,8 +299,39 @@ async function getWeightTrend(args: { from?: string; to?: string }) {
   };
 }
 
+async function semanticSearchDiary(args: { query?: string; category?: string; from?: string; to?: string; limit?: number }) {
+  const { supabase, userId } = await getSupabaseWithUserId();
+  if (!userId) return { error: '로그인이 필요합니다.' };
+  const query = (args.query || '').trim();
+  if (!query) return { error: 'query 가 필요합니다.' };
+  try {
+    const matches = await searchMemosSemantic(supabase, query, {
+      limit: Math.min(Math.max(Number(args.limit) || 6, 1), 12),
+      category: (args.category || '').trim() || null,
+      from: args.from && isoDate.test(args.from) ? args.from : null,
+      to: args.to && isoDate.test(args.to) ? args.to : null,
+    });
+    if (matches.length === 0) {
+      return { count: 0, message: '비슷한 내용의 일기를 찾지 못했습니다. (AI Agent 페이지에서 "일기 색인" 이 완료되어 있어야 검색됩니다.)' };
+    }
+    return {
+      count: matches.length,
+      query,
+      note: 'text 는 글에서 가장 관련 있는 부분(발췌)이다. 전문이 필요하면 get_day_detail(date) 로 그날 일기를 읽는다.',
+      entries: matches.map((m) => ({ date: m.date, title: m.title, category: m.category, similarity: m.similarity, text: m.text })),
+    };
+  } catch (e: any) {
+    if (isEmbeddingSetupMissing(e)) {
+      return { error: '의미 검색 준비가 안 되어 있습니다(임베딩 테이블 없음). 대신 search_diary 를 사용하세요.' };
+    }
+    return { error: e?.message || '의미 검색 오류' };
+  }
+}
+
 async function executeTool(name: string, args: any) {
   switch (name) {
+    case 'semantic_search_diary':
+      return semanticSearchDiary(args || {});
     case 'get_routine_stats':
       return getRoutineStats(args || {});
     case 'get_day_detail':
@@ -296,7 +357,10 @@ async function buildSystemPrompt(): Promise<string> {
   const monday = addDays(today, -((dow + 6) % 7));
 
   let routineLines = '- (루틴 정보를 불러오지 못함)';
+  let categoryLine = '(없음)';
   if (userId) {
+    const { data: cats } = await supabase.from('memo_categories').select('name').order('sort_order', { ascending: true }).limit(50);
+    if (cats?.length) categoryLine = cats.map((c: any) => c.name).filter(Boolean).join(', ');
     const { data } = await supabase
       .from('routine_templates')
       .select('label, type, unit, sub_items')
@@ -325,6 +389,9 @@ async function buildSystemPrompt(): Promise<string> {
 # 사용자의 루틴 (이 이름으로 부른다)
 ${routineLines}
 
+# Diary 카테고리
+${categoryLine}
+
 # 답하는 원칙
 1. 먼저 사용자가 무엇을 알고 싶은지 정한다: (a) 사실 확인(며칠 했나, 몇 kg인가) (b) 흐름·비교(늘었나, 지난주보다) (c) 일기 내용·감정 (d) 조언·다음 행동 (e) 그냥 대화(인사, 감사, 의견). 이전 대화의 주제·날짜·루틴명을 이어받는다 ("그럼 지난주는?" → 같은 루틴, 지난주 기간).
 2. 데이터가 필요하면 도구를 호출한다. 필요 없는 대화(인사, 감사, 개념 질문, 이미 조회한 데이터로 답할 수 있는 후속 질문)에는 호출하지 않는다. 한 질문에 여러 조회가 필요하면 이어서 호출한다 (예: 루틴 통계로 무너진 날을 찾고 → 그날 상세를 본다).
@@ -332,6 +399,7 @@ ${routineLines}
 4. 숫자는 도구 결과에서만 인용한다. 없는 수치·사건은 만들지 않는다. 데이터가 없으면 없다고 말한다.
 5. 조언은 조회한 데이터에 근거해 구체적으로 (어떤 루틴을, 언제, 어떻게). 뻔한 일반론은 피한다.
 6. 일기 내용을 말할 때는 사용자의 표현을 짧게 인용하고, 과잉 해석·진단은 하지 않는다.
+7. 일기 질문은 두 도구를 구분한다: 주제·감정·상황("~에 대해 뭐라고 썼어", "비슷한 고민", "예전에 ~ 생각한 적")은 semantic_search_diary 를 먼저 쓴다(기간 제한 없음, 표현이 달라도 찾음). 정확한 단어·고유명사, 특정 기간/카테고리의 글 목록·요약은 search_diary 를 쓴다. 검색 결과에 없는 글은 없다고 말한다. 답할 때는 날짜(와 제목)를 함께 적어 사용자가 원문을 찾을 수 있게 한다.
 
 # 말투·형식
 - 한국어 존댓말, 친근하고 담백하게. 질문 크기에 맞게: 단순 확인은 1~3문장, 분석·조언은 짧은 문단 몇 개. 마크다운 목록·굵게는 필요할 때만.
