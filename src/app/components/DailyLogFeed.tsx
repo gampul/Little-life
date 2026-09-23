@@ -322,8 +322,8 @@ export default function DailyLogFeed({
                         aria-pressed={done}
                         className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
                           done
-                            ? 'text-[#1b44d6] dark:text-[#8ea6f2] [&_svg]:[stroke-width:2.25]'
-                            : 'text-gray-300 dark:text-gray-600 [&_svg]:[stroke-width:1.25] hover:text-gray-500'
+                            ? 'text-[#1b44d6] dark:text-[#8ea6f2]'
+                            : 'text-gray-300 dark:text-gray-600 hover:text-gray-500'
                         }`}
                       >
                         {glyph}
