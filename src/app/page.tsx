@@ -1763,6 +1763,8 @@ export default function Home() {
                     inputMode="decimal"
                     step="0.1"
                     value={weightInputModal.weightText}
+                    autoFocus
+                    onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) =>
                       setWeightInputModal(prev => ({ ...prev, weightText: e.target.value }))
                     }
@@ -1884,122 +1886,102 @@ export default function Home() {
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
             <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
-              <div className="flex gap-1 sm:gap-1.5">
-                {/* 날짜 입력 */}
-                <div 
-                  className="relative cursor-pointer flex-1 min-w-0"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    const input = e.currentTarget.querySelector('input[type="date"]') as HTMLInputElement;
-                    if (input) {
-                      input.focus();
-                      // showPicker는 readOnly가 아닌 input에서만 작동
-                      if (input.showPicker) {
-                        try {
-                          input.showPicker();
-                        } catch (err) {
-                          // showPicker 실패 시 click으로 대체
-                          input.click();
-                        }
-                      } else {
-                        input.click();
-                      }
-                    }
-                  }}
-                >
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={async (e) => {
-                      const newDate = e.target.value;
-                      devLog('📅 상단 날짜 변경:', newDate);
-                      setSelectedDate(newDate);
-                      // formData.date도 함께 업데이트
-                      setFormData(prev => ({ ...prev, date: newDate }));
-                    }}
-                    className="w-[150px] px-1.5 sm:px-3 py-3 text-base bg-transparent text-transparent border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
-                    style={{ color: 'transparent', WebkitAppearance: 'none' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (e.currentTarget.showPicker) {
-                        try {
-                          e.currentTarget.showPicker();
-                        } catch (err) {
-                          // 에러 무시 (브라우저가 자동으로 처리)
-                        }
-                      }
-                    }}
-                  />
-                  {/* 날짜 포맷 표시 (오버레이) - 한 줄로 정렬, 전체 텍스트 표시 */}
-                  <div className="absolute left-1.5 sm:left-3 top-1/2 -translate-y-1/2 pointer-events-none text-[14px] text-gray-900 dark:text-white font-medium whitespace-nowrap" style={{ lineHeight: '22px' }}>
-                    {(() => {
-                      const [year, month = '01', day = '01'] = selectedDate.split('-');
-                      return `${year}-${month}-${day}`;
-                    })()}
+              {/* 오늘 체중 카드 — 숫자를 누르면 체중 기록 창(체중·메모·사진·날짜) 하나로 통일 */}
+              {(() => {
+                const today = getKstDateString();
+                const todayRec = findRecordByDate(today);
+                const todayKg = todayRec?.weight ?? (typeof formData?.weight === 'number' ? formData.weight : null);
+                const prev = [...allRecords]
+                  .filter((r) => r.weight != null && (r.date.includes('T') ? r.date.split('T')[0] : r.date) < today)
+                  .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+                const delta = todayKg != null && prev?.weight != null ? Math.round((Number(todayKg) - Number(prev.weight)) * 10) / 10 : null;
+                const prevLabel = prev
+                  ? (() => {
+                      const pd = prev.date.slice(0, 10);
+                      const y = new Date(`${today}T00:00:00`);
+                      y.setDate(y.getDate() - 1);
+                      const yStr = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+                      return pd === yStr ? '어제보다' : `${Number(pd.slice(5, 7))}/${Number(pd.slice(8, 10))}보다`;
+                    })()
+                  : '';
+                const d = new Date(`${today}T00:00:00`);
+                const wd = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+                const memo = todayRec?.weight_memo?.trim() || '';
+                const photoCount = todayRec?.weight_images?.length ?? 0;
+                return (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-[13px] font-medium text-gray-500 dark:text-gray-400">
+                        {d.getMonth() + 1}월 {d.getDate()}일 ({wd})
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
+                        aria-expanded={isWeightListExpanded}
+                        className="inline-flex items-center gap-0.5 px-2 py-1 -mr-2 rounded-lg text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        기록
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                          className={`transition-transform ${isWeightListExpanded ? 'rotate-180' : ''}`}
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {todayKg != null ? (
+                      <button
+                        type="button"
+                        onClick={() => openWeightModal(today)}
+                        className="mt-1 w-full text-left rounded-xl -mx-2 px-2 py-1.5 hover:bg-gray-100/70 dark:hover:bg-gray-700/50 transition-colors"
+                        aria-label="오늘 체중 기록 수정"
+                      >
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[28px] leading-none font-bold tracking-tight text-gray-900 dark:text-white">
+                            {Number(todayKg).toFixed(1)}
+                          </span>
+                          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">kg</span>
+                          {delta != null && (
+                            <span className="ml-1 text-[12px] text-gray-500 dark:text-gray-400">
+                              <span className={delta < 0 ? 'text-blue-600 dark:text-blue-400' : delta > 0 ? 'text-red-500 dark:text-red-400' : ''}>
+                                {delta < 0 ? '▼' : delta > 0 ? '▲' : '–'}
+                                {delta !== 0 ? Math.abs(delta).toFixed(1) : ''}
+                              </span>{' '}
+                              {prevLabel}
+                            </span>
+                          )}
+                          <svg className="ml-auto w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        {(memo || photoCount > 0) && (
+                          <div className="mt-1.5 flex items-center gap-2 text-[12px] text-gray-500 dark:text-gray-400 min-w-0">
+                            {memo && <span className="truncate">{memo}</span>}
+                            {photoCount > 0 && <span className="shrink-0">📷 {photoCount}</span>}
+                          </div>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openWeightModal(today)}
+                        className="mt-2 w-full flex items-center justify-center gap-1.5 py-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100/70 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        <span aria-hidden>⚖️</span> 오늘 체중 기록하기
+                      </button>
+                    )}
                   </div>
-                </div>
-            {/* 체중 입력 */}
-            <input
-              type="number"
-              step="0.1"
-              value={formData.weight || ''}
-              onChange={(e) =>
-                handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : '')
-              }
-              placeholder="체중"
-              readOnly={!isEditMode}
-              onClick={() => {
-                if (!isEditMode) openWeightModal();
-              }}
-              className={`w-10 sm:w-14 px-1 sm:px-1.5 py-3 text-[14px] bg-transparent text-gray-900 dark:text-white border-0 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] ${
-                !isEditMode ? 'cursor-pointer' : ''
-              }`}
-            />
-            {/* 수정/저장 버튼 */}
-                {!isEditMode ? (
-                  <button
-                    onClick={handleEdit}
-                className="w-10 sm:w-12 px-1.5 sm:px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] transition-colors flex items-center justify-center"
-                aria-label="수정하기"
-                  >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                className="w-10 sm:w-12 px-1.5 sm:px-2 py-3 text-base bg-transparent text-gray-900 dark:text-white border-0 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 min-h-[44px] disabled:cursor-not-allowed transition-colors flex items-center justify-center"
-                aria-label={isSaving ? '저장 중' : '저장'}
-                  >
-                {isSaving ? (
-                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                  </svg>
-                )}
-                  </button>
-                )}
-                
-                {/* 체중 기록 버튼: 상단(오늘) 입력 줄 오른쪽 */}
-                <button
-                  onClick={() => setIsWeightListExpanded(!isWeightListExpanded)}
-                  className={`w-auto flex items-center justify-center py-3 px-0.5 sm:px-1 rounded-lg transition-colors min-h-[44px] flex-shrink-0 ${
-                    isWeightListExpanded
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-800/50 text-gray-900 dark:text-white'
-                  }`}
-                  title="체중 기록"
-                  aria-label="체중 기록"
-                >
-                  <div className="text-[10px] sm:text-[11px] font-semibold whitespace-nowrap">기록</div>
-                </button>
-              </div>
+                );
+              })()}
               {/* 날씨 정보 표시 */}
               {weatherData && (
                 <>
