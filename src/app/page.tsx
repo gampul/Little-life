@@ -8,6 +8,7 @@ import { PendingSmsPopup } from './components/PendingSmsPopup';
 import type { PendingTransaction, TransactionType } from '../types/pending_transaction';
 import { FooterNav } from './components/FooterNav';
 import DailyLogFeed from './components/DailyLogFeed';
+import TodayInsight from './components/TodayInsight';
 import CheckCell from './components/CheckCell';
 import { compressImage } from '../lib/compressImage';
 import { RoutineIcon } from '../lib/routineIcons';
@@ -431,7 +432,10 @@ export default function Home() {
   const [routineSyncTick, setRoutineSyncTick] = useState(0);
   const bumpRoutineSync = useCallback(() => setRoutineSyncTick(t => t + 1), []);
   // 저장 직후 재조회 없이 매트릭스·루틴 기록 피드에 즉시 반영 (row=null 이면 해당 날짜 기록 제거)
+  /** 루틴 체크·체중 기록이 바뀔 때마다 증가 → 상단 AI 한 줄 갱신 신호 */
+  const [insightSignal, setInsightSignal] = useState(0);
   const patchRoutineCheck = useCallback((routineId: string, dateStr: string, row: RoutineCheckRow | null) => {
+    setInsightSignal((n) => n + 1);
     setRoutineChecksByRoutine(prev => {
       const rest = (prev[routineId] ?? []).filter(r => r.date !== dateStr);
       const nextRows = row ? [...rest, row].sort((a, b) => (a.date < b.date ? -1 : 1)) : rest;
@@ -1087,6 +1091,7 @@ export default function Home() {
 
   // 루틴 체크박스 토글
   const handleRoutineCheckChange = (routineId: string) => {
+    setInsightSignal((n) => n + 1);
     const isChecked = isRoutineChecked(routineId);
     devLog('🔄 루틴 체크 변경:', routineId, '현재 상태:', isChecked, '→', !isChecked);
     setRoutineChecks(prev => {
@@ -1340,6 +1345,7 @@ export default function Home() {
       }
 
       setMessage('✅ 체중이 저장되었습니다!');
+      setInsightSignal((n) => n + 1);
       loadAllRecords();
       setTimeout(() => setMessage(''), 2500);
     } catch (err: any) {
@@ -1982,6 +1988,8 @@ export default function Home() {
                   </div>
                 );
               })()}
+              {/* AI 오늘의 한 줄 — Daily·Diary 를 읽고 1~2문장 */}
+              <TodayInsight refreshSignal={insightSignal} />
               {/* 날씨 정보 표시 */}
               {weatherData && (
                 <>
