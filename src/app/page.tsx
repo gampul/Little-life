@@ -37,7 +37,6 @@ import {
   IconCheckbox,
   IconCamera,
   IconX,
-  IconBrush,
   IconPencil,
 } from '@tabler/icons-react';
 
@@ -137,6 +136,31 @@ const devLog = (...args: unknown[]) => {
 const getKstDateString = (): string =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
 
+/** 칫솔 라인 아이콘 (Tabler 세트에 없어서 같은 스타일로 직접 그림: 24 그리드, currentColor, 둥근 선) */
+const IconToothbrush = ({ size = 18, stroke = 1.5 }: { size?: number; stroke?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={stroke}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="tabler-icon tabler-icon-toothbrush"
+    aria-hidden="true"
+  >
+    <g transform="rotate(45 12 12)">
+      {/* 헤드 + 칫솔모 */}
+      <rect x="9" y="1" width="6" height="7.5" rx="1.75" />
+      <rect x="10.6" y="2.6" width="2.8" height="4.3" rx="0.8" />
+      {/* 목(살짝 꺾임) + 손잡이 */}
+      <path d="M11 8.5v1.75l-0.6 1.6v10.15a1.6 1.6 0 0 0 3.2 0v-10.15l-0.6-1.6v-1.75" />
+    </g>
+  </svg>
+);
+
 const getRoutineIcon = (label: string) => {
   const map: Record<string, React.ReactNode> = {
     '800km': <IconRun size={18} stroke={1.5} />,
@@ -150,7 +174,7 @@ const getRoutineIcon = (label: string) => {
     'OKR': <IconTarget size={18} stroke={1.5} />,
     '금주': <IconBottleOff size={18} stroke={1.5} />,
     '사랑이': <IconClock size={18} stroke={1.5} />,
-    'brush': <IconBrush size={18} stroke={1.5} />,
+    'brush': <IconToothbrush size={18} stroke={1.5} />,
     '독서': <IconBook size={18} stroke={1.5} />,
     '500km': <IconRun size={18} stroke={1.5} />,
     'Dev ops': <IconCode size={18} stroke={1.5} />,
