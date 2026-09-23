@@ -76,6 +76,7 @@ export async function GET() {
     .from('ai_reports')
     .select('id, kind, period_from, period_to, content, created_at')
     .eq('user_id', userId)
+    .in('kind', ['coach', 'weekly', 'monthly', 'archive'])
     .order('created_at', { ascending: false })
     .limit(20);
 
