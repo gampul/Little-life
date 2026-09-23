@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline, IconPhoto } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline } from '@tabler/icons-react';
 import { summarizeSubValues, type RoutineSubItem, type RoutineType, type SubValues } from '../../lib/routineSubItems';
 
 interface RoutineTemplate {
@@ -196,7 +196,7 @@ export default function DailyLogFeed({
     <section aria-label="루틴 기록" className="mb-2" ref={topRef}>
       <div className="flex items-baseline justify-between px-1 mt-4 mb-2">
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">루틴 기록</h3>
-        <span className="text-[11px] text-gray-400 dark:text-gray-500">길게 눌러 메모 남기기</span>
+        <span className="text-[11px] text-gray-400 dark:text-gray-500">아이콘을 누르면 기록 수정</span>
       </div>
 
       {months.length === 0 && (
@@ -232,7 +232,7 @@ export default function DailyLogFeed({
             </button>
           </div>
 
-          <div className="space-y-2 mb-3">
+          <div className="space-y-1.5 mb-3">
             {month.days.map((day) => {
               const d = new Date(`${day.date}T00:00:00`);
               const weekday = WEEKDAYS[d.getDay()];
@@ -242,7 +242,98 @@ export default function DailyLogFeed({
               const meals = rec
                 ? [rec.meal_breakfast && '아침', rec.meal_lunch && '점심', rec.meal_dinner && '저녁'].filter(Boolean)
                 : [];
-              const showMissed = !!expandedMissed[day.date];
+
+              // "내용"이 있는 루틴만 본문에 — 값(숫자/복합), 메모, 책 제목. 체크만 한 루틴은 아이콘 도장 줄로만
+              const contentEntries = day.entries.filter(({ routine, row }) => {
+                const hasValue =
+                  (routine.type === 'number' && row.value != null && row.value !== 0) ||
+                  (routine.type === 'multi' && !!summarizeSubValues(row.sub_values, routine.sub_items ?? []));
+                return hasValue || !!row.memo?.trim() || !!row.book_title;
+              });
+              const photos: { url: string; label: string }[] = [];
+              for (const { routine, row } of day.entries) {
+                for (const url of getRowImages(row)) photos.push({ url, label: routine.label });
+              }
+              for (const url of rec?.weight_images ?? []) photos.push({ url, label: '체중' });
+              for (const url of rec?.meal_images ?? []) photos.push({ url, label: '식사' });
+              const weightMemo = rec?.weight_memo?.trim() || '';
+              const mealMemo = rec?.meal_memo?.trim() || '';
+              const dailyMemo = rec?.daily_memo?.trim() || '';
+              const hasContent =
+                contentEntries.length > 0 || !!weightMemo || !!mealMemo || !!dailyMemo || photos.length > 0;
+              const expanded = !!expandedMissed[day.date];
+
+              const dateLabel = (
+                <>
+                  {d.getMonth() + 1}월 {d.getDate()}일{' '}
+                  <span className={isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'}>
+                    ({weekday})
+                  </span>
+                </>
+              );
+              const rightMeta = (
+                <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
+                  {rec?.weight != null && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onWeightClick?.(day.date);
+                      }}
+                      className="inline-flex items-center gap-0.5 rounded-md px-1 -mx-1 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
+                      aria-label={`${day.date} 체중 기록 수정`}
+                    >
+                      <IconScaleOutline size={14} stroke={1.5} aria-hidden="true" />
+                      {rec.weight}kg
+                    </button>
+                  )}
+                  {totalRoutines > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 font-medium text-gray-700 dark:text-gray-200">
+                      {day.entries.length}/{totalRoutines}
+                    </span>
+                  )}
+                </div>
+              );
+              const stampRow = day.entries.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1" aria-label="완료한 루틴">
+                  {day.entries.map(({ routine }) => (
+                    <button
+                      key={routine.id}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEntryClick(routine.id, day.date);
+                      }}
+                      title={routine.label}
+                      aria-label={`${routine.label} ${day.date} 기록`}
+                      className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-white/70 dark:bg-gray-700/60 border border-gray-200/80 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                    >
+                      {renderIcon ? renderIcon(routine.label) : <span className="text-sm leading-none">{routine.emoji}</span>}
+                    </button>
+                  ))}
+                </div>
+              );
+
+              // 체크만 있고 남긴 내용이 없는 날 — 한 줄로 접기 (탭하면 도장 줄만 펼침)
+              if (!hasContent) {
+                return (
+                  <div
+                    key={day.date}
+                    className="rounded-lg px-3 py-1.5 bg-transparent hover:bg-[rgb(254,252,247)] dark:hover:bg-gray-800/60 transition-colors"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMissed((prev) => ({ ...prev, [day.date]: !prev[day.date] }))}
+                      aria-expanded={expanded}
+                      className="w-full flex items-center justify-between gap-2 text-left"
+                    >
+                      <span className="text-[13px] font-medium text-gray-600 dark:text-gray-300">{dateLabel}</span>
+                      {rightMeta}
+                    </button>
+                    {expanded && <div className="mt-1.5">{stampRow}</div>}
+                  </div>
+                );
+              }
 
               return (
                 <article
@@ -250,173 +341,110 @@ export default function DailyLogFeed({
                   className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3"
                 >
                   <header className="flex items-center justify-between gap-2 mb-2">
-                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {d.getMonth() + 1}월 {d.getDate()}일{' '}
-                      <span className={isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-gray-400 dark:text-gray-500'}>
-                        ({weekday})
-                      </span>
-                    </h4>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                      {totalRoutines > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 font-medium text-gray-700 dark:text-gray-200">
-                          {day.entries.length}/{totalRoutines}
-                        </span>
-                      )}
-                    </div>
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{dateLabel}</h4>
+                    {rightMeta}
                   </header>
 
-                  {day.entries.length > 0 && (
-                    <ul className="space-y-1.5">
-                      {day.entries.map(({ routine, row }) => (
-                        <li key={routine.id}>
+                  {stampRow && <div className="mb-2">{stampRow}</div>}
+
+                  {/* 남긴 내용 — 루틴 이름 없이 아이콘 + 값/메모 */}
+                  {(contentEntries.length > 0 || weightMemo || mealMemo || dailyMemo) && (
+                    <ul className="space-y-1 text-[13px] text-gray-600 dark:text-gray-300">
+                      {contentEntries.map(({ routine, row }) => {
+                        const value =
+                          routine.type === 'number' && row.value != null && row.value !== 0
+                            ? `${formatValue(row.value)}${routine.unit || ''}`
+                            : routine.type === 'multi'
+                              ? summarizeSubValues(row.sub_values, routine.sub_items ?? [])
+                              : '';
+                        return (
+                          <li key={routine.id}>
+                            <button
+                              type="button"
+                              onClick={() => onEntryClick(routine.id, day.date)}
+                              title={routine.label}
+                              className="w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
+                              aria-label={`${routine.label} ${day.date} 기록 수정`}
+                            >
+                              <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
+                                <span aria-hidden="true" className="shrink-0 mt-px text-gray-400 dark:text-gray-500">
+                                  {renderIcon ? renderIcon(routine.label) : routine.emoji}
+                                </span>
+                                <span className="min-w-0">
+                                  {value && <span className="font-semibold text-gray-900 dark:text-white">{value}</span>}
+                                  {row.book_title && (
+                                    <span className={`text-gray-500 dark:text-gray-400 ${value ? ' ml-1' : ''}`}>《{row.book_title}》</span>
+                                  )}
+                                  {(value || row.book_title) && row.memo?.trim() ? ' — ' : ''}
+                                  {row.memo?.trim()}
+                                </span>
+                              </p>
+                            </button>
+                          </li>
+                        );
+                      })}
+                      {weightMemo && (
+                        <li>
                           <button
                             type="button"
-                            onClick={() => onEntryClick(routine.id, day.date)}
+                            onClick={() => onWeightClick?.(day.date)}
                             className="w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
-                            aria-label={`${routine.label} ${day.date} 기록 수정`}
+                            aria-label={`${day.date} 체중 기록 수정`}
                           >
-                            <div className="flex items-center gap-2 text-sm">
-                              {renderIcon && (
-                                <span aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500">
-                                  {renderIcon(routine.label)}
-                                </span>
-                              )}
-                              <span className="text-gray-800 dark:text-gray-100 break-words min-w-0">{routine.label}</span>
-                              {routine.type === 'number' && row.value != null && row.value !== 0 && (
-                                <span className="shrink-0 font-semibold text-gray-900 dark:text-white">
-                                  {formatValue(row.value)}
-                                  {routine.unit || ''}
-                                </span>
-                              )}
-                              {routine.type === 'multi' && (() => {
-                                const summary = summarizeSubValues(row.sub_values, routine.sub_items ?? []);
-                                return summary ? (
-                                  <span className="min-w-0 font-semibold text-gray-900 dark:text-white break-words">
-                                    {summary}
-                                  </span>
-                                ) : null;
-                              })()}
-                              {row.book_title && (
-                                <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">《{row.book_title}》</span>
-                              )}
-                            </div>
-                            {row.memo && (
-                              <p className="ml-[26px] mt-0.5 text-[13px] leading-snug text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-words">
-                                {row.memo}
-                              </p>
-                            )}
+                            <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
+                              <IconScaleOutline size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
+                              <span className="min-w-0">{weightMemo}</span>
+                            </p>
                           </button>
                         </li>
-                      ))}
+                      )}
+                      {mealMemo && (
+                        <li>
+                          <p className="flex items-start gap-2 whitespace-pre-wrap break-words px-1 -mx-1 py-0.5">
+                            <IconToolsKitchen2 size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
+                            <span className="min-w-0">
+                              {meals.length > 0 && <span className="font-medium">{meals.join(' · ')} — </span>}
+                              {mealMemo}
+                            </span>
+                          </p>
+                        </li>
+                      )}
+                      {dailyMemo && (
+                        <li>
+                          <p className="flex items-start gap-2 whitespace-pre-wrap break-words px-1 -mx-1 py-0.5">
+                            <IconNotes size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
+                            <span className="min-w-0">{dailyMemo}</span>
+                          </p>
+                        </li>
+                      )}
                     </ul>
                   )}
 
-                  {rec && (rec.weight != null || rec.weight_memo?.trim() || (rec.weight_images?.length ?? 0) > 0) && (
-                    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1 text-[13px] text-gray-600 dark:text-gray-300">
-                      <button
-                        type="button"
-                        onClick={() => onWeightClick?.(day.date)}
-                        className="w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
-                        aria-label={`${day.date} 체중 기록 수정`}
-                      >
-                        <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
-                          <IconScaleOutline size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
-                          <span className="min-w-0">
-                            {rec.weight != null && <span className="font-semibold text-gray-900 dark:text-white">{rec.weight}kg</span>}
-                            {rec.weight != null && rec.weight_memo?.trim() ? ' — ' : ''}
-                            {rec.weight_memo?.trim()}
-                          </span>
-                        </p>
-                      </button>
-                    </div>
-                  )}
-
-                  {rec && (meals.length > 0 || rec.meal_memo?.trim() || rec.daily_memo?.trim() || (rec.meal_images?.length ?? 0) > 0) && (
-                    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1 text-[13px] text-gray-600 dark:text-gray-300">
-                      {(meals.length > 0 || rec.meal_memo?.trim()) && (
-                        <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
-                          <IconToolsKitchen2 size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
-                          <span className="min-w-0">
-                          {meals.length > 0 && <span className="font-medium">{meals.join(' · ')}</span>}
-                          {meals.length > 0 && rec.meal_memo?.trim() ? ' — ' : ''}
-                          {rec.meal_memo?.trim()}
-                          </span>
-                        </p>
-                      )}
-                      {rec.daily_memo?.trim() && (
-                        <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
-                          <IconNotes size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
-                          <span className="min-w-0">{rec.daily_memo.trim()}</span>
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 그날의 사진 — 루틴·체중·식사 사진을 카드 맨 아래에 한 줄로 모아서 */}
-                  {(() => {
-                    const photos: { url: string; label: string }[] = [];
-                    for (const { routine, row } of day.entries) {
-                      for (const url of getRowImages(row)) photos.push({ url, label: routine.label });
-                    }
-                    for (const url of rec?.weight_images ?? []) photos.push({ url, label: '체중' });
-                    for (const url of rec?.meal_images ?? []) photos.push({ url, label: '식사' });
-                    if (photos.length === 0) return null;
-                    return (
-                      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-gray-400 dark:text-gray-500">
-                          <IconPhoto size={14} stroke={1.5} aria-hidden="true" />
-                          사진 {photos.length}장
-                        </div>
-                        <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
-                          {photos.map((p, i) => (
-                            <button
-                              key={p.url + i}
-                              type="button"
-                              onClick={() => onImageClick?.(p.url)}
-                              className="relative shrink-0"
-                              aria-label={`${p.label} 사진 크게 보기`}
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={p.url}
-                                alt={`${p.label} 사진`}
-                                loading="lazy"
-                                className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
-                              />
-                              <span className="absolute left-1 bottom-1 max-w-[calc(100%-8px)] truncate px-1 py-0.5 rounded bg-black/55 text-white text-[10px] leading-none">
-                                {p.label}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                  {/* 그날의 사진 — 카드 맨 아래 한 줄 */}
+                  {photos.length > 0 && (
+                    <div className={contentEntries.length > 0 || weightMemo || mealMemo || dailyMemo ? 'mt-2 pt-2 border-t border-gray-200 dark:border-gray-700' : ''}>
+                      <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+                        {photos.map((p, i) => (
+                          <button
+                            key={p.url + i}
+                            type="button"
+                            onClick={() => onImageClick?.(p.url)}
+                            className="relative shrink-0"
+                            aria-label={`${p.label} 사진 크게 보기`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={p.url}
+                              alt={`${p.label} 사진`}
+                              loading="lazy"
+                              className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                            />
+                            <span className="absolute left-1 bottom-1 max-w-[calc(100%-8px)] truncate px-1 py-0.5 rounded bg-black/55 text-white text-[10px] leading-none">
+                              {p.label}
+                            </span>
+                          </button>
+                        ))}
                       </div>
-                    );
-                  })()}
-
-                  {day.missed.length > 0 && (
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedMissed((prev) => ({ ...prev, [day.date]: !prev[day.date] }))}
-                        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
-                        aria-expanded={showMissed}
-                      >
-                        미완료 {day.missed.length}개 {showMissed ? '접기' : '보기'}
-                      </button>
-                      {showMissed && (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {day.missed.map((routine) => (
-                            <button
-                              key={routine.id}
-                              type="button"
-                              onClick={() => onEntryClick(routine.id, day.date)}
-                              className="px-2 py-0.5 rounded-full text-[11px] border border-dashed border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200"
-                            >
-                              {routine.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
                 </article>
