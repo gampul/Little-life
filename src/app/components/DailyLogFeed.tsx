@@ -13,6 +13,7 @@ interface RoutineTemplate {
   type: RoutineType;
   unit?: string;
   sub_items?: RoutineSubItem[];
+  icon?: string | null;
 }
 
 interface RoutineCheckRow {
@@ -52,7 +53,7 @@ interface Props {
   /** 체중 줄을 탭하면 그 날짜의 체중 기록(메모·사진) 입력을 연다 */
   onWeightClick?: (dateStr: string) => void;
   /** 매트릭스와 같은 라인 아이콘 (없으면 아이콘 생략) */
-  renderIcon?: (label: string) => ReactNode;
+  renderIcon?: (routine: { label: string; icon?: string | null }) => ReactNode;
 }
 
 interface DayEntry {
@@ -302,10 +303,10 @@ export default function DailyLogFeed({
                   {stampRoutines.map((routine) => {
                     const done = doneIds.has(routine.id);
                     const glyph =
-                      routine.emoji && routine.emoji !== '✅' ? (
+                      !routine.icon && routine.emoji && routine.emoji !== '✅' ? (
                         <span className={`text-[15px] leading-none ${done ? '' : 'grayscale opacity-40'}`}>{routine.emoji}</span>
                       ) : renderIcon ? (
-                        renderIcon(routine.label)
+                        renderIcon(routine)
                       ) : (
                         <span className="text-[15px] leading-none">✅</span>
                       );
@@ -387,7 +388,7 @@ export default function DailyLogFeed({
                             >
                               <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
                                 <span aria-hidden="true" className="shrink-0 mt-px text-gray-400 dark:text-gray-500">
-                                  {renderIcon ? renderIcon(routine.label) : routine.emoji}
+                                  {renderIcon ? renderIcon(routine) : routine.emoji}
                                 </span>
                                 <span className="min-w-0">
                                   {value && <span className="font-semibold text-gray-900 dark:text-white">{value}</span>}
