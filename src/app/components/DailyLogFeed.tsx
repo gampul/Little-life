@@ -294,30 +294,42 @@ export default function DailyLogFeed({
                   )}
                 </div>
               );
-              const stampRow = day.entries.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1" aria-label="완료한 루틴">
-                  {day.entries.map(({ routine }) => (
-                    <button
-                      key={routine.id}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEntryClick(routine.id, day.date);
-                      }}
-                      title={routine.label}
-                      aria-label={`${routine.label} ${day.date} 기록`}
-                      className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                    >
-                      {/* 완료 도장: 설정한 이모지가 있으면 그것, 기본(✅)이면 라인 아이콘을 초록으로 */}
-                      {routine.emoji && routine.emoji !== '✅' ? (
-                        <span className="text-sm leading-none">{routine.emoji}</span>
+              // 도장 줄: 전체 루틴을 순서대로 나열하고, 완료한 것만 초록으로 (안 한 것은 흐리게)
+              const doneIds = new Set(day.entries.map((e) => e.routine.id));
+              const stampRoutines = [...routineTemplates].sort((a, b) => a.sort_order - b.sort_order);
+              const stampRow = stampRoutines.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1" aria-label="루틴 완료 현황">
+                  {stampRoutines.map((routine) => {
+                    const done = doneIds.has(routine.id);
+                    const glyph =
+                      routine.emoji && routine.emoji !== '✅' ? (
+                        <span className={`text-sm leading-none ${done ? '' : 'grayscale'}`}>{routine.emoji}</span>
                       ) : renderIcon ? (
                         renderIcon(routine.label)
                       ) : (
                         <span className="text-sm leading-none">✅</span>
-                      )}
-                    </button>
-                  ))}
+                      );
+                    return (
+                      <button
+                        key={routine.id}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEntryClick(routine.id, day.date);
+                        }}
+                        title={`${routine.label}${done ? ' · 완료' : ' · 미완료'}`}
+                        aria-label={`${routine.label} ${day.date} ${done ? '완료' : '미완료'}`}
+                        aria-pressed={done}
+                        className={`w-7 h-7 inline-flex items-center justify-center rounded-lg border transition-colors ${
+                          done
+                            ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                            : 'bg-transparent border-dashed border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 opacity-70 hover:opacity-100 hover:text-gray-500'
+                        }`}
+                      >
+                        {glyph}
+                      </button>
+                    );
+                  })}
                 </div>
               );
 
