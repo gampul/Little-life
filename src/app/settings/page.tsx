@@ -10,6 +10,8 @@ import { CategoryManager } from '../assets/components/CategoryManager';
 import { APP_CONTENT_CONTAINER } from '../components/container';
 import SubItemsEditor from '../components/SubItemsEditor';
 import { normalizeSubItems, type RoutineSubItem, type RoutineType } from '../../lib/routineSubItems';
+import { RoutineIcon, resolveRoutineIconKey } from '../../lib/routineIcons';
+import RoutineIconPicker from '../components/RoutineIconPicker';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
@@ -92,6 +94,7 @@ function RoutineItemWithChart({
   canMoveDown,
   isDirty,
   isSaving,
+  onPickIcon,
 }: {
   template: RoutineTemplate;
   index: number;
@@ -108,6 +111,7 @@ function RoutineItemWithChart({
   canMoveDown: boolean;
   isDirty: boolean;
   isSaving: boolean;
+  onPickIcon: (templateId: string) => void;
 }) {
   return (
     <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-1 sm:p-1.5 border border-gray-200 dark:border-gray-600">
@@ -119,6 +123,16 @@ function RoutineItemWithChart({
             size={48}
           />
         </div>
+        <button
+          type="button"
+          onClick={() => onPickIcon(template.id)}
+          title="아이콘 바꾸기"
+          aria-label={`${template.label} 아이콘 바꾸기`}
+          style={{ touchAction: 'manipulation' }}
+          className="flex-shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-500 bg-gray-50 dark:bg-gray-600 text-gray-700 dark:text-gray-100 hover:border-[#1b44d6] hover:text-[#1b44d6] transition-colors"
+        >
+          <RoutineIcon label={template.label} icon={template.icon} size={17} />
+        </button>
         <input
           type="text"
           value={template.label}
@@ -289,6 +303,8 @@ interface RoutineTemplate {
   unit?: string;
   image_upload_enabled?: boolean;
   sub_items?: RoutineSubItem[];
+  /** 선택한 아이콘 키 (routine_templates.icon) */
+  icon?: string | null;
 }
 
 export default function SettingsPage() {
@@ -304,6 +320,7 @@ export default function SettingsPage() {
   const [isRoutineSectionExpanded, setIsRoutineSectionExpanded] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [assetNames, setAssetNames] = useState<string[]>([]);
+  const [iconPickerFor, setIconPickerFor] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -374,6 +391,15 @@ export default function SettingsPage() {
         image_upload_enabled: t.image_upload_enabled ?? false,
         sub_items: normalizeSubItems(t.sub_items),
       }));
+      // 아이콘은 별도 조회 (icon 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
+      const { data: iconRows, error: iconErr } = await supabase
+        .from('routine_templates')
+        .select('id, icon')
+        .eq('user_id', userId);
+      if (!iconErr && iconRows) {
+        const iconById = new Map(iconRows.map((r: any) => [r.id as string, (r.icon as string | null) ?? null]));
+        for (const t of templatesWithType as any[]) t.icon = iconById.get(t.id) ?? null;
+      }
       setRoutineTemplates(templatesWithType);
       setDirtyById(Object.fromEntries((templatesWithType || []).map(t => [t.id, false])));
     } catch (err) {
@@ -636,6 +662,24 @@ export default function SettingsPage() {
   const isValidUUID = (str: string): boolean => {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRegex.test(str);
+  };
+
+  /** 아이콘 선택 → 바로 저장 (이름 저장 버튼과 별개) */
+  const handleIconSelect = async (templateId: string, key: string) => {
+    setIconPickerFor(null);
+    const prevIcon = routineTemplates.find((t) => t.id === templateId)?.icon ?? null;
+    setRoutineTemplates((prev) => prev.map((t) => (t.id === templateId ? { ...t, icon: key } : t)));
+    if (!supabase || !userId) return;
+    const { error } = await supabase.from('routine_templates').update({ icon: key }).eq('id', templateId).eq('user_id', userId);
+    if (error) {
+      setRoutineTemplates((prev) => prev.map((t) => (t.id === templateId ? { ...t, icon: prevIcon } : t)));
+      const missing = error.code === '42703' || error.code === 'PGRST204' || /icon/.test(error.message || '');
+      setMessage(missing ? '❌ 아이콘 저장에는 DB 변경이 필요해요. Supabase 에서 add_routine_icon.sql 을 실행해 주세요.' : `❌ 아이콘 저장 실패: ${error.message}`);
+      setTimeout(() => setMessage(''), 6000);
+      return;
+    }
+    setMessage('✅ 아이콘이 저장되었습니다.');
+    setTimeout(() => setMessage(''), 2000);
   };
 
   const handleSaveOne = async (templateId: string) => {
@@ -968,6 +1012,7 @@ export default function SettingsPage() {
                         canMoveDown={index < routineTemplates.length - 1}
                         isDirty={!!dirtyById[template.id]}
                         isSaving={!!savingById[template.id]}
+                        onPickIcon={setIconPickerFor}
                       />
                     );
                   })}
@@ -1002,6 +1047,20 @@ export default function SettingsPage() {
           onUpdate={loadAssetNames}
         />
       )}
+
+      {/* 루틴 아이콘 선택 */}
+      {(() => {
+        const t = routineTemplates.find((x) => x.id === iconPickerFor);
+        return (
+          <RoutineIconPicker
+            open={!!t}
+            routineLabel={t?.label ?? ''}
+            value={t ? resolveRoutineIconKey(t.label, t.icon) : ''}
+            onSelect={(key) => t && handleIconSelect(t.id, key)}
+            onClose={() => setIconPickerFor(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
