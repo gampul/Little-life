@@ -37,6 +37,8 @@ import {
   IconCheckbox,
   IconCamera,
   IconX,
+  IconBrush,
+  IconPencil,
 } from '@tabler/icons-react';
 
 // WeightChart를 동적 import로 로드 (SSR 방지)
@@ -137,6 +139,8 @@ const getKstDateString = (): string =>
 
 const getRoutineIcon = (label: string) => {
   const map: Record<string, React.ReactNode> = {
+    '800km': <IconRun size={18} stroke={1.5} />,
+    '글쓰기': <IconPencil size={18} stroke={1.5} />,
     '주변정리': <IconSparkles size={18} stroke={1.5} />,
     '1Day class': <IconCode size={18} stroke={1.5} />,
     'DevOps': <IconCode size={18} stroke={1.5} />,
@@ -146,7 +150,7 @@ const getRoutineIcon = (label: string) => {
     'OKR': <IconTarget size={18} stroke={1.5} />,
     '금주': <IconBottleOff size={18} stroke={1.5} />,
     '사랑이': <IconClock size={18} stroke={1.5} />,
-    'brush': <IconSparkles size={18} stroke={1.5} />,
+    'brush': <IconBrush size={18} stroke={1.5} />,
     '독서': <IconBook size={18} stroke={1.5} />,
     '500km': <IconRun size={18} stroke={1.5} />,
     'Dev ops': <IconCode size={18} stroke={1.5} />,
