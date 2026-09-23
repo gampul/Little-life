@@ -74,7 +74,7 @@ export default function RoutineIconPicker({
                       style={{ touchAction: 'manipulation' }}
                       className={`flex flex-col items-center justify-center gap-0.5 py-2 rounded-lg transition-colors ${
                         selected
-                          ? 'text-[#1b44d6] dark:text-[#8ea6f2] ring-1 ring-[#1b44d6]/40 dark:ring-[#8ea6f2]/40'
+                          ? 'text-[#474c56] dark:text-[#c9ccd3] ring-1 ring-[#474c56]/40 dark:ring-[#c9ccd3]/40'
                           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                       }`}
                     >

@@ -323,7 +323,7 @@ export default function DailyLogFeed({
                         aria-pressed={done}
                         className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
                           done
-                            ? 'text-[#1b44d6] dark:text-[#8ea6f2]'
+                            ? 'text-[#474c56] dark:text-[#c9ccd3]'
                             : 'text-gray-300 dark:text-gray-600 hover:text-gray-500'
                         }`}
                       >
