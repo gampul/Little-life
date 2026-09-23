@@ -3790,7 +3790,7 @@ function RoutineItem({
                   <span
                     className={`w-6 h-6 rounded-md flex items-center justify-center ${
                       sheetChecked
-                        ? 'bg-gray-900 dark:bg-gray-600'
+                        ? 'bg-[#1b44d6]'
                         : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
                     }`}
                   >
@@ -4075,7 +4075,7 @@ function RoutineItem({
                       title={summary || `${dateStr} 입력`}
                       className={`relative flex items-center justify-center rounded-md transition-colors cursor-pointer active:scale-95 overflow-hidden ${
                         isChecked
-                          ? 'bg-gray-900 dark:bg-gray-600 text-white'
+                          ? 'bg-[#1b44d6] text-white'
                           : 'bg-[rgb(254,252,247)] dark:bg-gray-700 border border-gray-300 dark:border-gray-500 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-600'
                       }`}
                       style={{ width: '20px', height: '20px', minWidth: '20px', fontSize: '8px', lineHeight: '1', padding: 0 }}
