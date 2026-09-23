@@ -298,16 +298,16 @@ export default function DailyLogFeed({
               const doneIds = new Set(day.entries.map((e) => e.routine.id));
               const stampRoutines = [...routineTemplates].sort((a, b) => a.sort_order - b.sort_order);
               const stampRow = stampRoutines.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1" aria-label="루틴 완료 현황">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5" aria-label="루틴 완료 현황">
                   {stampRoutines.map((routine) => {
                     const done = doneIds.has(routine.id);
                     const glyph =
                       routine.emoji && routine.emoji !== '✅' ? (
-                        <span className={`text-sm leading-none ${done ? '' : 'grayscale'}`}>{routine.emoji}</span>
+                        <span className={`text-[15px] leading-none ${done ? '' : 'grayscale opacity-40'}`}>{routine.emoji}</span>
                       ) : renderIcon ? (
                         renderIcon(routine.label)
                       ) : (
-                        <span className="text-sm leading-none">✅</span>
+                        <span className="text-[15px] leading-none">✅</span>
                       );
                     return (
                       <button
@@ -320,10 +320,10 @@ export default function DailyLogFeed({
                         title={`${routine.label}${done ? ' · 완료' : ' · 미완료'}`}
                         aria-label={`${routine.label} ${day.date} ${done ? '완료' : '미완료'}`}
                         aria-pressed={done}
-                        className={`w-7 h-7 inline-flex items-center justify-center rounded-lg border transition-colors ${
+                        className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
                           done
-                            ? 'bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-                            : 'bg-transparent border-dashed border-gray-200 dark:border-gray-700 text-gray-300 dark:text-gray-600 opacity-70 hover:opacity-100 hover:text-gray-500'
+                            ? 'text-gray-900 dark:text-white [&_svg]:[stroke-width:2.25]'
+                            : 'text-gray-300 dark:text-gray-600 [&_svg]:[stroke-width:1.25] hover:text-gray-500'
                         }`}
                       >
                         {glyph}
