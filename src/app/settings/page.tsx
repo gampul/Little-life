@@ -129,7 +129,7 @@ function RoutineItemWithChart({
           title="아이콘 바꾸기"
           aria-label={`${template.label} 아이콘 바꾸기`}
           style={{ touchAction: 'manipulation' }}
-          className="flex-shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-500 bg-gray-50 dark:bg-gray-600 text-gray-700 dark:text-gray-100 hover:border-[#1b44d6] hover:text-[#1b44d6] transition-colors"
+          className="flex-shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg border border-gray-300 dark:border-gray-500 bg-gray-50 dark:bg-gray-600 text-gray-700 dark:text-gray-100 hover:border-[#474c56] hover:text-[#474c56] transition-colors"
         >
           <RoutineIcon label={template.label} icon={template.icon} size={17} />
         </button>
