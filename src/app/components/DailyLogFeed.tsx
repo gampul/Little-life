@@ -372,6 +372,10 @@ export default function DailyLogFeed({
                                 </span>
                                 <span className="min-w-0">
                                   {value && <span className="font-semibold text-gray-900 dark:text-white">{value}</span>}
+                                  {/* 숫자형은 값만으로는 무엇인지 알 수 없어 이름을 작게 덧붙임 (복합형은 항목명이 값에 포함) */}
+                                  {value && routine.type === 'number' && (
+                                    <span className="ml-1 text-[11px] text-gray-400 dark:text-gray-500">{routine.label}</span>
+                                  )}
                                   {row.book_title && (
                                     <span className={`text-gray-500 dark:text-gray-400 ${value ? ' ml-1' : ''}`}>《{row.book_title}》</span>
                                   )}
