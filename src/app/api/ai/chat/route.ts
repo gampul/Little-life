@@ -111,7 +111,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'get_weight_trend',
-      description: '기간 동안 체중 기록: 시작·최근·최저·최고·변화량·날짜별 추이. "체중 어때", "한 달 전보다", "살 빠졌어?" 류.',
+      description: '기간 동안 체중 기록: 시작·최근·최저·최고·변화량·날짜별 추이, 그리고 사용자가 체중과 함께 남긴 메모. "체중 어때", "한 달 전보다", "살 빠졌어?", "체중 기록에 뭐라고 썼지" 류.',
       parameters: {
         type: 'object',
         properties: {
@@ -273,15 +273,13 @@ async function getWeightTrend(args: { from?: string; to?: string }) {
   const { supabase, userId } = await getSupabaseWithUserId();
   if (!userId) return { error: '로그인이 필요합니다.' };
   const { from, to } = clampRange(args.from, args.to, 30);
-  const { data } = await supabase
-    .from('daily_records')
-    .select('date, weight')
-    .eq('user_id', userId)
-    .gte('date', from)
-    .lte('date', to)
-    .not('weight', 'is', null)
-    .order('date', { ascending: true });
-  const series = (data || []).map((r: any) => ({ date: r.date, kg: Number(r.weight) })).filter((r) => r.kg > 0);
+  const baseQ = (cols: string) =>
+    supabase.from('daily_records').select(cols).eq('user_id', userId).gte('date', from).lte('date', to).not('weight', 'is', null).order('date', { ascending: true });
+  let res: { data: any[] | null; error: { code?: string; message?: string } | null } = await baseQ('date, weight, weight_memo');
+  if (res.error && (res.error.code === '42703' || /weight_memo/.test(res.error.message || ''))) res = await baseQ('date, weight');
+  const series = ((res.data as any[]) || [])
+    .map((r: any) => ({ date: r.date as string, kg: Number(r.weight), memo: typeof r.weight_memo === 'string' && r.weight_memo.trim() ? r.weight_memo.trim().slice(0, 200) : null }))
+    .filter((r) => r.kg > 0);
   if (series.length === 0) return { period: `${from} ~ ${to}`, message: '해당 기간에 체중 기록이 없습니다.' };
   const kgs = series.map((s) => s.kg);
   const first = series[0];
@@ -296,6 +294,7 @@ async function getWeightTrend(args: { from?: string; to?: string }) {
     max: `${Math.max(...kgs)}kg`,
     avg: `${Math.round((kgs.reduce((a, b) => a + b, 0) / kgs.length) * 10) / 10}kg`,
     series: series.map((s) => `${s.date.slice(5)} ${s.kg}`).join(', '),
+    memos: series.filter((s) => s.memo).slice(-10).map((s) => `${s.date}: ${s.memo}`),
   };
 }
 

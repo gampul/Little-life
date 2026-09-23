@@ -36,6 +36,8 @@ interface DailyRecord {
   meal_memo: string;
   meal_images?: string[];
   daily_memo: string;
+  weight_memo?: string | null;
+  weight_images?: string[];
 }
 
 interface Props {
@@ -47,6 +49,8 @@ interface Props {
   /** 루틴 줄을 탭하면 해당 날짜의 입력 시트를 연다 */
   onEntryClick: (routineId: string, dateStr: string) => void;
   onImageClick?: (url: string) => void;
+  /** 체중 줄을 탭하면 그 날짜의 체중 기록(메모·사진) 입력을 연다 */
+  onWeightClick?: (dateStr: string) => void;
   /** 매트릭스와 같은 라인 아이콘 (없으면 아이콘 생략) */
   renderIcon?: (label: string) => ReactNode;
 }
@@ -89,7 +93,9 @@ const hasRecordContent = (r: DailyRecord): boolean =>
   !!r.meal_dinner ||
   !!(r.meal_memo && r.meal_memo.trim()) ||
   !!(r.daily_memo && r.daily_memo.trim()) ||
-  !!(r.meal_images && r.meal_images.length > 0);
+  !!(r.meal_images && r.meal_images.length > 0) ||
+  !!(r.weight_memo && r.weight_memo.trim()) ||
+  !!(r.weight_images && r.weight_images.length > 0);
 
 export default function DailyLogFeed({
   routineTemplates,
@@ -97,6 +103,7 @@ export default function DailyLogFeed({
   records,
   onEntryClick,
   onImageClick,
+  onWeightClick,
   renderIcon,
 }: Props) {
   // 월 단위 페이지: 0 = 기록이 있는 가장 최근 달
@@ -250,12 +257,6 @@ export default function DailyLogFeed({
                       </span>
                     </h4>
                     <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                      {rec?.weight != null && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <IconScaleOutline size={14} stroke={1.5} aria-hidden="true" />
-                          {rec.weight}kg
-                        </span>
-                      )}
                       {totalRoutines > 0 && (
                         <span className="px-1.5 py-0.5 rounded-md bg-gray-100 dark:bg-gray-700 font-medium text-gray-700 dark:text-gray-200">
                           {day.entries.length}/{totalRoutines}
@@ -329,6 +330,36 @@ export default function DailyLogFeed({
                         </li>
                       ))}
                     </ul>
+                  )}
+
+                  {rec && (rec.weight != null || rec.weight_memo?.trim() || (rec.weight_images?.length ?? 0) > 0) && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1 text-[13px] text-gray-600 dark:text-gray-300">
+                      <button
+                        type="button"
+                        onClick={() => onWeightClick?.(day.date)}
+                        className="w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-700/60 transition-colors"
+                        aria-label={`${day.date} 체중 기록 수정`}
+                      >
+                        <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
+                          <IconScaleOutline size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
+                          <span className="min-w-0">
+                            {rec.weight != null && <span className="font-semibold text-gray-900 dark:text-white">{rec.weight}kg</span>}
+                            {rec.weight != null && rec.weight_memo?.trim() ? ' — ' : ''}
+                            {rec.weight_memo?.trim()}
+                          </span>
+                        </p>
+                      </button>
+                      {(rec.weight_images?.length ?? 0) > 0 && (
+                        <div className="ml-[26px] flex gap-1.5 overflow-x-auto">
+                          {rec.weight_images!.map((url, i) => (
+                            <button key={url + i} type="button" onClick={() => onImageClick?.(url)} className="shrink-0" aria-label={`체중 기록 사진 ${i + 1} 크게 보기`}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`체중 기록 사진 ${i + 1}`} loading="lazy" className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {rec && (meals.length > 0 || rec.meal_memo?.trim() || rec.daily_memo?.trim() || (rec.meal_images?.length ?? 0) > 0) && (
