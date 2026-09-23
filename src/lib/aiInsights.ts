@@ -70,7 +70,9 @@ export interface WeightStat {
   delta: number | null;
   count: number;
   /** 날짜별 (오래된 순) */
-  series: { date: string; kg: number }[];
+  series: { date: string; kg: number; memo?: string | null }[];
+  /** 메모가 있는 기록 수 */
+  memoCount: number;
 }
 
 export interface DiaryEntry {
@@ -247,16 +249,31 @@ export async function collectInsightData(
   const todayMissed = templates.filter((t) => !byRoutine.get(t.id)?.has(today)).map((t) => t.label);
 
   // ---- 체중
-  const { data: recs } = await supabase
+  // weight_memo 컬럼(add_weight_memo_images.sql)이 없는 DB 는 체중만 조회
+  let recsRes: { data: any[] | null; error: { code?: string; message?: string } | null } = await supabase
     .from('daily_records')
-    .select('date, weight')
+    .select('date, weight, weight_memo')
     .eq('user_id', userId)
     .gte('date', from)
     .lte('date', to)
     .not('weight', 'is', null)
     .order('date', { ascending: true });
-  const series = (recs || [])
-    .map((r: any) => ({ date: r.date as string, kg: Number(r.weight) }))
+  if (recsRes.error && (recsRes.error.code === '42703' || /weight_memo/.test(recsRes.error.message || ''))) {
+    recsRes = await supabase
+      .from('daily_records')
+      .select('date, weight')
+      .eq('user_id', userId)
+      .gte('date', from)
+      .lte('date', to)
+      .not('weight', 'is', null)
+      .order('date', { ascending: true });
+  }
+  const series = ((recsRes.data as any[]) || [])
+    .map((r: any) => ({
+      date: r.date as string,
+      kg: Number(r.weight),
+      memo: typeof r.weight_memo === 'string' && r.weight_memo.trim() ? r.weight_memo.trim().slice(0, 200) : null,
+    }))
     .filter((r) => Number.isFinite(r.kg) && r.kg > 0);
   const kgs = series.map((s) => s.kg);
   const weight: WeightStat = {
@@ -267,6 +284,7 @@ export async function collectInsightData(
     delta: series.length >= 2 ? Math.round((series[series.length - 1].kg - series[0].kg) * 10) / 10 : null,
     count: series.length,
     series,
+    memoCount: series.filter((s) => s.memo).length,
   };
 
   // ---- 일기 (기간 내, created_at 기준)
@@ -323,6 +341,11 @@ export function buildInsightContext(d: InsightData): string {
       `- 기록 ${d.weight.count}회, 시작 ${d.weight.first!.date} ${d.weight.first!.kg}kg → 최근 ${d.weight.last!.date} ${d.weight.last!.kg}kg (변화 ${d.weight.delta != null ? (d.weight.delta > 0 ? '+' : '') + d.weight.delta : '-'}kg), 최저 ${d.weight.min}kg / 최고 ${d.weight.max}kg`
     );
     lines.push('- 추이: ' + d.weight.series.map((s) => `${s.date.slice(5)} ${s.kg}`).join(', '));
+    const withMemo = d.weight.series.filter((s) => s.memo);
+    if (withMemo.length) {
+      lines.push('- 체중 메모 (사용자가 직접 남김):');
+      for (const s of withMemo.slice(-10)) lines.push(`  - ${s.date}: ${s.memo}`);
+    }
   }
 
   lines.push(`\n## 일기 (${d.diary.length}편)`);
