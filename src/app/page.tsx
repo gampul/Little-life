@@ -55,9 +55,21 @@ interface DailyRecord {
   meal_memo: string;
   meal_images?: string[];
   daily_memo: string;
+  /** 체중 기록 메모 (add_weight_memo_images.sql) */
+  weight_memo?: string | null;
+  /** 체중 기록 사진 (최대 5장) */
+  weight_images?: string[];
   created_at?: string;
   updated_at?: string;
 }
+
+/** daily_records select 컬럼 — 신규 컬럼이 없는 DB 에서는 순서대로 폴백 */
+const DAILY_RECORD_COLS = [
+  'id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, weight_memo, weight_images, created_at, updated_at',
+  'id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at',
+  'id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at',
+] as const;
+const MAX_WEIGHT_PHOTOS = 5;
 
 interface RoutineTemplate {
   id: string;
@@ -417,8 +429,13 @@ export default function Home() {
     open: boolean;
     dateStr: string;
     weightText: string;
-  }>({ open: false, dateStr: '', weightText: '' });
+    memo: string;
+    images: string[];
+  }>({ open: false, dateStr: '', weightText: '', memo: '', images: [] });
+  const closeWeightModal = () => setWeightInputModal({ open: false, dateStr: '', weightText: '', memo: '', images: [] });
   const [isWeightModalSaving, setIsWeightModalSaving] = useState(false);
+  const [isWeightPhotoUploading, setIsWeightPhotoUploading] = useState(false);
+  const weightPhotoInputRef = useRef<HTMLInputElement | null>(null);
   
   // 루틴 관련 상태
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
@@ -849,27 +866,21 @@ export default function Home() {
     if (!supabase || !userId) return;
     try {
       setDailyRecordsError(null);
-      // meal_images 포함하여 조회 시도
-      let { data, error } = await supabase
-        .from('daily_records')
-        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
-        .eq('date', date)
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      // meal_images 컬럼이 없는 경우 재시도
-      if (error && error.code !== 'PGRST116' && (error.message.includes('column') || error.code === '42703')) {
-        console.warn('⚠️ meal_images 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+      // 신규 컬럼(weight_memo/weight_images, meal_images)이 없는 DB 는 순서대로 폴백
+      let data: any = null;
+      let error: any = null;
+      for (const cols of DAILY_RECORD_COLS) {
         const result = await supabase
           .from('daily_records')
-          .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .select(cols)
           .eq('date', date)
           .eq('user_id', userId)
           .maybeSingle();
-        
-        data = result.data ? { ...result.data, meal_images: [] } : null;
+        data = result.data;
         error = result.error;
+        if (!(error && error.code !== 'PGRST116' && isMissingColumnError(error))) break;
       }
+      if (data) data = { meal_images: [], weight_images: [], weight_memo: null, ...data };
 
       if (error && error.code !== 'PGRST116') {
         console.error('데이터 조회 오류');
@@ -934,25 +945,20 @@ export default function Home() {
     }
     try {
       setDailyRecordsError(null);
-      // meal_images 포함하여 조회 시도
-      let { data, error } = await supabase
-        .from('daily_records')
-        .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, meal_images, daily_memo, created_at, updated_at')
-        .eq('user_id', userId)
-        .order('date', { ascending: true });
-
-      // meal_images 컬럼이 없는 경우 (마이그레이션 전) 재시도
-      if (error && (error.message.includes('column') || error.code === '42703')) {
-        console.warn('⚠️ meal_images 컬럼이 없습니다. 마이그레이션 없이 계속 진행합니다.');
+      // 신규 컬럼이 없는 DB 는 순서대로 폴백
+      let data: any[] | null = null;
+      let error: any = null;
+      for (const cols of DAILY_RECORD_COLS) {
         const result = await supabase
           .from('daily_records')
-          .select('id, date, weight, meal_breakfast, meal_lunch, meal_dinner, meal_memo, daily_memo, created_at, updated_at')
+          .select(cols)
           .eq('user_id', userId)
           .order('date', { ascending: true });
-        
-        data = result.data ? result.data.map(r => ({ ...r, meal_images: [] })) : null;
+        data = result.data as any[] | null;
         error = result.error;
+        if (!(error && isMissingColumnError(error))) break;
       }
+      if (data) data = data.map((r) => ({ meal_images: [], weight_images: [], weight_memo: null, ...r }));
 
       if (error) {
         console.error('전체 데이터 조회 오류');
@@ -1111,18 +1117,83 @@ export default function Home() {
     }));
   };
 
-  const openWeightModal = () => {
-    // 항상 현재 날짜(오늘)로 설정
-    const today = getKstDateString();
-    const current = typeof formData?.weight === 'number' ? formData.weight : null;
+  /** 날짜의 저장된 체중 메모·사진 (allRecords 기준) */
+  const findRecordByDate = (dateStr: string) =>
+    allRecords.find((r) => (r.date.includes('T') ? r.date.split('T')[0] : r.date) === dateStr) ?? null;
+
+  const openWeightModal = (dateStr?: string) => {
+    // 기본은 오늘. 드롭다운/피드에서 열면 그 날짜
+    const target = dateStr || getKstDateString();
+    const rec = findRecordByDate(target);
+    const current = rec?.weight ?? (target === getKstDateString() && typeof formData?.weight === 'number' ? formData.weight : null);
     setWeightInputModal({
       open: true,
-      dateStr: today,
-      weightText: current != null ? current.toFixed(1) : '',
+      dateStr: target,
+      weightText: current != null ? Number(current).toFixed(1) : '',
+      memo: rec?.weight_memo ?? '',
+      images: rec?.weight_images ?? [],
     });
   };
 
-  const saveWeightForDate = async (dateStr: string, weightText: string) => {
+  // 모달에서 날짜를 바꾸면 그 날짜의 메모·사진을 불러온다
+  const changeWeightModalDate = (dateStr: string) => {
+    const rec = findRecordByDate(dateStr);
+    setWeightInputModal((prev) => ({
+      ...prev,
+      dateStr,
+      weightText: rec?.weight != null ? Number(rec.weight).toFixed(1) : prev.weightText,
+      memo: rec?.weight_memo ?? '',
+      images: rec?.weight_images ?? [],
+    }));
+  };
+
+  /** 체중 사진 업로드 — 압축 후 meal-images 버킷 `{user}/{date}/weight_…` (최대 5장) */
+  const handleWeightPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files || []).filter((f) => f.type.startsWith('image/'));
+    e.target.value = '';
+    if (picked.length === 0 || !supabase || !userId) return;
+    const remaining = MAX_WEIGHT_PHOTOS - weightInputModal.images.length;
+    if (remaining <= 0) {
+      alert(`사진은 최대 ${MAX_WEIGHT_PHOTOS}장까지 올릴 수 있어요.`);
+      return;
+    }
+    const files = picked.slice(0, remaining);
+    if (picked.length > remaining) alert(`사진은 최대 ${MAX_WEIGHT_PHOTOS}장까지 올릴 수 있어요. 앞의 ${remaining}장만 추가합니다.`);
+    setIsWeightPhotoUploading(true);
+    const dateStr = weightInputModal.dateStr || getKstDateString();
+    try {
+      const results = await Promise.allSettled(
+        files.map(async (file, i) => {
+          const { blob, extension, contentType } = await compressImage(file);
+          const filePath = `${userId}/${dateStr}/weight_${Date.now()}_${i}.${extension}`;
+          const { error } = await supabase.storage.from('meal-images').upload(filePath, blob, { upsert: true, contentType });
+          if (error) throw new Error(error.message);
+          return supabase.storage.from('meal-images').getPublicUrl(filePath).data.publicUrl;
+        })
+      );
+      const urls = results.filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled').map((r) => r.value);
+      const failed = results.length - urls.length;
+      if (urls.length) setWeightInputModal((prev) => ({ ...prev, images: [...prev.images, ...urls].slice(0, MAX_WEIGHT_PHOTOS) }));
+      if (failed) alert(`${failed}장은 업로드하지 못했어요. 다시 시도해 주세요.`);
+    } finally {
+      setIsWeightPhotoUploading(false);
+    }
+  };
+
+  const removeWeightPhoto = (url: string) => {
+    setWeightInputModal((prev) => ({ ...prev, images: prev.images.filter((u) => u !== url) }));
+    // 스토리지 파일은 저장 시점에 남아 있어도 무방 (다른 날짜와 충돌 없음). 필요 시 정리
+    if (supabase) {
+      const parts = url.split('/meal-images/');
+      if (parts.length === 2) supabase.storage.from('meal-images').remove([parts[1]]).catch(() => {});
+    }
+  };
+
+  const saveWeightForDate = async (
+    dateStr: string,
+    weightText: string,
+    extra?: { memo?: string; images?: string[] }
+  ) => {
     if (!supabase) {
       alert('❌ Supabase 연결이 설정되지 않았습니다.');
       return;
@@ -1164,15 +1235,29 @@ export default function Home() {
         throw checkError;
       }
 
+      // 메모·사진: extra 가 있을 때만 갱신 (빠른 입력줄에서는 기존 값 유지)
+      const weightExtra =
+        extra
+          ? { weight_memo: (extra.memo ?? '').trim() || null, weight_images: (extra.images ?? []).slice(0, MAX_WEIGHT_PHOTOS) }
+          : {};
+      let extraSkipped = false;
+
       if (existingData) {
-        const { error } = await supabase
+        let { error } = await supabase
           .from('daily_records')
-          .update({
-            weight: weightValue,
-            updated_at: new Date().toISOString(),
-          })
+          .update({ weight: weightValue, updated_at: new Date().toISOString(), ...weightExtra })
           .eq('date', normalizedDate)
           .eq('user_id', userId);
+
+        if (error && extra && isMissingColumnError(error)) {
+          // weight_memo/weight_images 컬럼이 없는 DB — 체중만 저장
+          extraSkipped = true;
+          ({ error } = await supabase
+            .from('daily_records')
+            .update({ weight: weightValue, updated_at: new Date().toISOString() })
+            .eq('date', normalizedDate)
+            .eq('user_id', userId));
+        }
 
         if (error) {
           console.error('체중 저장 - 업데이트 오류:', error);
@@ -1191,22 +1276,30 @@ export default function Home() {
           updated_at: new Date().toISOString(),
         };
 
-        const first = await supabase
-          .from('daily_records')
-          .insert([{ ...baseInsert, meal_images: [] }]);
-
-        if (first.error) {
-          if (first.error.code === '42703' || String(first.error.message || '').includes('column')) {
-            const second = await supabase.from('daily_records').insert([baseInsert]);
-            if (second.error) {
-              console.error('체중 저장 - 삽입 오류(재시도):', second.error);
-              throw second.error;
-            }
-          } else {
-            console.error('체중 저장 - 삽입 오류:', first.error);
-            throw first.error;
+        // 신규 컬럼이 없는 DB 는 순서대로 폴백
+        const attempts = [
+          { ...baseInsert, meal_images: [], ...weightExtra },
+          { ...baseInsert, meal_images: [] },
+          baseInsert,
+        ];
+        let lastError: any = null;
+        for (let i = 0; i < attempts.length; i++) {
+          const { error } = await supabase.from('daily_records').insert([attempts[i]]);
+          if (!error) {
+            if (i > 0 && extra && Object.keys(weightExtra).length) extraSkipped = true;
+            lastError = null;
+            break;
           }
+          lastError = error;
+          if (!isMissingColumnError(error)) break;
         }
+        if (lastError) {
+          console.error('체중 저장 - 삽입 오류:', lastError);
+          throw lastError;
+        }
+      }
+      if (extraSkipped && extra && ((extra.memo ?? '').trim() || (extra.images ?? []).length)) {
+        alert('메모·사진은 저장되지 않았습니다. Supabase 에서 add_weight_memo_images.sql 을 실행해 주세요.');
       }
 
       setAllRecords(prev => {
@@ -1220,6 +1313,7 @@ export default function Home() {
           updated[idx] = {
             ...updated[idx],
             weight: weightValue,
+            ...(extraSkipped ? {} : weightExtra),
             updated_at: new Date().toISOString(),
           } as DailyRecord;
           return updated;
@@ -1235,6 +1329,9 @@ export default function Home() {
             meal_dinner: false,
             meal_memo: '',
             daily_memo: '',
+            weight_memo: null,
+            weight_images: [],
+            ...(extraSkipped ? {} : weightExtra),
             updated_at: new Date().toISOString(),
           } as DailyRecord,
         ];
@@ -1624,25 +1721,25 @@ export default function Home() {
           >
             <div
               className="absolute inset-0 bg-black/40"
-              onClick={() => setWeightInputModal({ open: false, dateStr: '', weightText: '' })}
+              onClick={closeWeightModal}
             />
-            <div className="relative w-full max-w-[412px] rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
+            <div className="relative w-full max-w-[412px] max-h-[90vh] flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
               <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">체중 기록</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                  날짜를 선택하고 체중을 입력해주세요.
+                  체중과 함께 메모·사진(최대 {MAX_WEIGHT_PHOTOS}장)을 남길 수 있어요.
                 </div>
               </div>
 
-              <div className="px-4 py-4 space-y-3">
+              <div className="px-4 py-4 space-y-3 overflow-y-auto">
                 {/* 날짜 선택 */}
                 <div className="relative">
                   <input
                     type="date"
                     value={weightInputModal.dateStr}
-                    onChange={(e) =>
-                      setWeightInputModal(prev => ({ ...prev, dateStr: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      if (e.target.value) changeWeightModalDate(e.target.value);
+                    }}
                     className="w-full px-4 py-3 text-base bg-transparent text-transparent border border-gray-300 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none min-h-[44px] cursor-pointer [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-outer-spin-button]:hidden"
                     style={{ color: 'transparent', WebkitAppearance: 'none' }}
                     onClick={(e) => {
@@ -1677,14 +1774,15 @@ export default function Home() {
                     }
                     onKeyDown={(e) => {
                       if (e.key === 'Escape') {
-                        setWeightInputModal({ open: false, dateStr: '', weightText: '' });
+                        closeWeightModal();
                         return;
                       }
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        saveWeightForDate(weightInputModal.dateStr, weightInputModal.weightText).then(
-                          () => setWeightInputModal({ open: false, dateStr: '', weightText: '' })
-                        );
+                        saveWeightForDate(weightInputModal.dateStr, weightInputModal.weightText, {
+                          memo: weightInputModal.memo,
+                          images: weightInputModal.images,
+                        }).then(closeWeightModal);
                       }
                     }}
                     placeholder="예: 85.5"
@@ -1694,22 +1792,87 @@ export default function Home() {
                     소수점 1자리까지 저장됩니다. (예: 85.54 → 85.5)
                   </div>
                 </div>
+
+                {/* 메모 */}
+                <div>
+                  <label htmlFor="weight-memo" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    메모
+                  </label>
+                  <textarea
+                    id="weight-memo"
+                    value={weightInputModal.memo}
+                    onChange={(e) => setWeightInputModal((prev) => ({ ...prev, memo: e.target.value }))}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="컨디션, 식단, 운동 등 남기고 싶은 말"
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-sm resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+
+                {/* 사진 */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                      사진 <span className="text-gray-400">({weightInputModal.images.length}/{MAX_WEIGHT_PHOTOS})</span>
+                    </span>
+                    <input
+                      ref={weightPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={handleWeightPhotoSelect}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => weightPhotoInputRef.current?.click()}
+                      disabled={isWeightPhotoUploading || weightInputModal.images.length >= MAX_WEIGHT_PHOTOS}
+                      style={{ touchAction: 'manipulation' }}
+                      className="text-xs px-2.5 py-1 rounded-lg border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 transition-colors"
+                    >
+                      {isWeightPhotoUploading ? '업로드 중…' : '📷 사진 추가'}
+                    </button>
+                  </div>
+                  {weightInputModal.images.length > 0 ? (
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {weightInputModal.images.map((url) => (
+                        <div key={url} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="체중 기록 사진" className="w-full h-full object-cover" loading="lazy" />
+                          <button
+                            type="button"
+                            onClick={() => removeWeightPhoto(url)}
+                            aria-label="사진 삭제"
+                            className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] leading-none flex items-center justify-center"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500">인바디, 식단, 운동 사진 등을 함께 남겨 보세요.</div>
+                  )}
+                </div>
               </div>
 
-              <div className="px-4 pb-4 flex gap-2 justify-end">
+              <div className="px-4 pb-4 pt-2 flex gap-2 justify-end border-t border-gray-100 dark:border-gray-800">
                 <button
                   className="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  onClick={() => setWeightInputModal({ open: false, dateStr: '', weightText: '' })}
+                  onClick={closeWeightModal}
                   disabled={isWeightModalSaving}
                 >
                   취소
                 </button>
                 <button
                   className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  disabled={isWeightModalSaving}
+                  disabled={isWeightModalSaving || isWeightPhotoUploading}
                   onClick={async () => {
-                    await saveWeightForDate(weightInputModal.dateStr, weightInputModal.weightText);
-                    setWeightInputModal({ open: false, dateStr: '', weightText: '' });
+                    await saveWeightForDate(weightInputModal.dateStr, weightInputModal.weightText, {
+                      memo: weightInputModal.memo,
+                      images: weightInputModal.images,
+                    });
+                    closeWeightModal();
                   }}
                 >
                   {isWeightModalSaving ? '저장중' : '저장'}
@@ -1915,25 +2078,14 @@ export default function Home() {
                         .map((r) => {
                           const dateObj = new Date(r.date);
                           const formattedDate = `${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`;
-                          const hasImages = r.meal_images && r.meal_images.length > 0;
-                          const hasMemo = r.meal_memo && r.meal_memo.trim() !== '';
+                          const wImages = r.weight_images || [];
+                          const hasImages = wImages.length > 0;
+                          const hasMemo = !!(r.weight_memo && r.weight_memo.trim() !== '');
                           
                           return (
                             <div
                               key={r.date}
-                              onClick={() => {
-                                // 클릭 시 편집 팝업 열기
-                                setSelectedChartDate(r.date);
-                                setChartPopupWeight(r.weight?.toString() || '');
-                                setChartPopupMemo(r.meal_memo || '');
-                                setChartPopupImages(r.meal_images || []);
-                                setTimeout(() => {
-                                  const popup = document.getElementById('chart-edit-popup');
-                                  if (popup) {
-                                    popup.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                  }
-                                }, 100);
-                              }}
+                              onClick={() => openWeightModal(r.date)}
                               className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all"
                             >
                               {/* 날짜 & 체중 */}
@@ -1945,16 +2097,16 @@ export default function Home() {
                               {/* 사진 썸네일 */}
                               {hasImages && (
                                 <div className="flex gap-1 mb-2">
-                                  {r.meal_images!.slice(0, 4).map((url, idx) => (
+                                  {wImages.slice(0, 4).map((url, idx) => (
                                     <div key={idx} className="relative w-10 h-10 rounded overflow-hidden">
                                       <img 
                                         src={url} 
                                         alt={`사진 ${idx + 1}`}
                                         className="w-full h-full object-cover"
                                       />
-                                      {idx === 3 && r.meal_images!.length > 4 && (
+                                      {idx === 3 && wImages.length > 4 && (
                                         <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
-                                          <span className="text-white text-xs font-bold">+{r.meal_images!.length - 4}</span>
+                                          <span className="text-white text-xs font-bold">+{wImages.length - 4}</span>
                                         </div>
                                       )}
                                     </div>
@@ -1964,7 +2116,7 @@ export default function Home() {
                               
                               {/* 메모 */}
                               {hasMemo && (
-                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{r.meal_memo}</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{r.weight_memo}</p>
                               )}
                               
                               {/* 편집 힌트 */}
@@ -2208,8 +2360,8 @@ export default function Home() {
                         // 해당 날짜의 데이터 로드
                         const record = allRecords.find(r => r.date === date);
                         setChartPopupWeight(record?.weight != null ? record.weight.toString() : '');
-                        setChartPopupMemo(mealMemo || '');
-                        setChartPopupImages(record?.meal_images || []);
+                        setChartPopupMemo(record?.weight_memo || '');
+                        setChartPopupImages(record?.weight_images || []);
                         
                         // 팝업으로 자동 스크롤
                         setTimeout(() => {
@@ -2416,6 +2568,11 @@ export default function Home() {
                               alert('로그인이 필요합니다.');
                               return;
                             }
+                            if (chartPopupImages.length + files.length > MAX_WEIGHT_PHOTOS) {
+                              alert(`사진은 최대 ${MAX_WEIGHT_PHOTOS}장까지 올릴 수 있어요. (현재 ${chartPopupImages.length}장)`);
+                              e.target.value = '';
+                              return;
+                            }
                             
                             devLog('사진 업로드 시작:', files.length, '개');
                             const uploadedUrls: string[] = [];
@@ -2510,8 +2667,8 @@ export default function Home() {
                             // 원래 데이터로 복원
                             const record = allRecords.find(r => r.date === selectedChartDate);
                             setChartPopupWeight(record?.weight != null ? record.weight.toString() : '');
-                            setChartPopupMemo(record?.meal_memo || '');
-                            setChartPopupImages(record?.meal_images || []);
+                            setChartPopupMemo(record?.weight_memo || '');
+                            setChartPopupImages(record?.weight_images || []);
                             setChartPopupEditMode(false);
                           }}
                           style={{ fontSize: '16px' }}
@@ -2531,58 +2688,12 @@ export default function Home() {
                               const weightValue = chartPopupWeight ? parseFloat(chartPopupWeight) : null;
                               devLog('저장 시작:', { date: selectedChartDate, weight: weightValue, memo: chartPopupMemo });
                               
-                              // 기존 레코드 확인 (maybeSingle 사용으로 에러 방지)
-                              const { data: existing, error: selectError } = await supabase
-                                .from('daily_records')
-                                .select('id')
-                                .eq('user_id', userId)
-                                .eq('date', selectedChartDate)
-                                .maybeSingle();
-                              
-                              if (selectError) {
-                                console.error('레코드 조회 오류:', selectError);
-                              }
-                              
-                              if (existing) {
-                                devLog('기존 레코드 업데이트:', existing.id);
-                                // 업데이트
-                                const { error: updateError } = await supabase
-                                  .from('daily_records')
-                                  .update({
-                                    weight: weightValue,
-                                    meal_memo: chartPopupMemo || null,
-                                    meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
-                                    updated_at: new Date().toISOString(),
-                                  })
-                                  .eq('id', existing.id);
-                                
-                                if (updateError) {
-                                  console.error('업데이트 오류:', updateError);
-                                  throw updateError;
-                                }
-                              } else {
-                                devLog('새 레코드 생성');
-                                // 새로 생성
-                                const { error: insertError } = await supabase
-                                  .from('daily_records')
-                                  .insert({
-                                    user_id: userId,
-                                    date: selectedChartDate,
-                                    weight: weightValue,
-                                    meal_memo: chartPopupMemo || null,
-                                    meal_images: chartPopupImages.length > 0 ? chartPopupImages : [],
-                                  });
-                                
-                                if (insertError) {
-                                  console.error('삽입 오류:', insertError);
-                                  throw insertError;
-                                }
-                              }
-                              
-                              devLog('저장 완료');
-                              
-                              // 데이터 새로고침
-                              loadAllRecords();
+                              // 체중 모달과 같은 저장 경로 (weight_memo / weight_images, 컬럼 없으면 폴백)
+                              await saveWeightForDate(selectedChartDate, chartPopupWeight, {
+                                memo: chartPopupMemo,
+                                images: chartPopupImages.slice(0, MAX_WEIGHT_PHOTOS),
+                              });
+                              devLog('저장 완료', { weightValue });
                               
                               // 수정 모드 종료 (팝업은 유지)
                               setChartPopupEditMode(false);
@@ -3046,6 +3157,7 @@ export default function Home() {
               records={allRecords}
               onEntryClick={handleFeedEntryClick}
               onImageClick={setFullImageUrl}
+              onWeightClick={openWeightModal}
               renderIcon={getRoutineIcon}
             />
           </div>
