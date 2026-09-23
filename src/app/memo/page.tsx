@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense, type MouseEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, type MouseEvent } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabase } from '../../lib/supabase';
@@ -27,6 +27,9 @@ import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/c
 import {
   useMemos,
   useInvalidateMemos,
+  usePatchMemoInCache,
+  usePinnedCount,
+  isMissingPinnedColumn,
   useMemoCategories,
   useInvalidateMemoCategories,
   type MemoCategoryItem,
@@ -122,6 +125,18 @@ function MemoPageContent() {
   const memoCategories: MemoCategory[] = memoCategoriesData ?? [];
   const invalidateMemoCategories = useInvalidateMemoCategories();
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  /** 중요공지 탭 — Diary 첫 진입 시 고정 글이 하나라도 있으면 이 탭이 먼저 열린다 */
+  const [showPinnedOnly, setShowPinnedOnly] = useState(true);
+  const { data: pinnedCount, isSuccess: pinnedCountReady } = usePinnedCount();
+  const pinnedDefaultDecided = useRef(false);
+  useEffect(() => {
+    if (pinnedDefaultDecided.current || !pinnedCountReady) return;
+    pinnedDefaultDecided.current = true;
+    if (!pinnedCount) setShowPinnedOnly(false);
+  }, [pinnedCountReady, pinnedCount]);
+  const patchMemoInCache = usePatchMemoInCache();
+  /** 편집 중인 글의 중요공지 여부 */
+  const [isPinned, setIsPinned] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MemoCategory | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -158,9 +173,10 @@ function MemoPageContent() {
     : null;
   const { data: memosPage, isLoading } = useMemos(
     currentPage,
-    effectiveCategoryIds,
+    showPinnedOnly ? null : effectiveCategoryIds,
     pageSize,
-    debouncedQuery
+    debouncedQuery,
+    showPinnedOnly
   );
   const displayedMemos = (memosPage?.memos ?? []) as MemoListCard[];
   const totalCount = memosPage?.totalCount ?? 0;
@@ -190,7 +206,14 @@ function MemoPageContent() {
   // 카테고리 변경은 selectCategory 에서 페이지를 함께 리셋(같은 렌더에 배치 → memos 1회 요청).
   // 검색어는 디바운스 콜백에서 함께 리셋.
   const selectCategory = useCallback((id: string | null) => {
+    setShowPinnedOnly(false);
     setSelectedCategoryFilter(id);
+    setCurrentPage(1);
+  }, []);
+
+  const selectPinned = useCallback(() => {
+    setShowPinnedOnly(true);
+    setSelectedCategoryFilter(null);
     setCurrentPage(1);
   }, []);
 
@@ -224,6 +247,7 @@ function MemoPageContent() {
           setCreatedDate(toLocalDateInput(data.created_at));
           // 편집 진입 시 카테고리 폼 상태를 원본 category_id 로 초기화 (미설정 시 null)
           setSelectedCategoryId(data.category_id ?? null);
+          setIsPinned(!!data.is_pinned);
           setShowEditor(true);
           // URL에서 edit 파라미터 제거
           router.replace('/memo', { scroll: false });
@@ -289,39 +313,58 @@ function MemoPageContent() {
       // '없음'을 고르면 null, 그 외에는 선택 UUID — || 로 덮어쓰지 않음.
       const categoryIdForSave = selectedCategoryId;
 
+      // is_pinned 컬럼이 없는 DB(add_memo_pinned.sql 미실행)면 그 필드만 빼고 재시도
+      const withPinnedFallback = async <T,>(run: (pinnedPatch: { is_pinned?: boolean }) => PromiseLike<{ data: T; error: any }>) => {
+        const first = await run({ is_pinned: isPinned });
+        if (first.error && isMissingPinnedColumn(first.error)) {
+          const second = await run({});
+          if (!second.error && isPinned) {
+            alert('중요공지 설정은 저장되지 않았습니다. Supabase 에서 add_memo_pinned.sql 을 실행해 주세요.');
+          }
+          return second;
+        }
+        return first;
+      };
+
       if (editingId) {
-        const { error } = await supabase
-          .from('memos')
-          .update({
-            title: formData.title,
-            content: formData.content,
-            excerpt,
-            cover_image,
-            updated_at: new Date().toISOString(),
-            category_id: categoryIdForSave,
-            // 작성일을 바꾼 경우에만 created_at 갱신 (시각은 원본 유지)
-            ...(createdDate !== toLocalDateInput(originalCreatedAt)
-              ? { created_at: composeCreatedAt(createdDate, originalCreatedAt) }
-              : {}),
-          })
-          .eq('id', editingId);
+        const { error } = await withPinnedFallback((pinnedPatch) =>
+          supabase
+            .from('memos')
+            .update({
+              title: formData.title,
+              content: formData.content,
+              excerpt,
+              cover_image,
+              updated_at: new Date().toISOString(),
+              category_id: categoryIdForSave,
+              ...pinnedPatch,
+              // 작성일을 바꾼 경우에만 created_at 갱신 (시각은 원본 유지)
+              ...(createdDate !== toLocalDateInput(originalCreatedAt)
+                ? { created_at: composeCreatedAt(createdDate, originalCreatedAt) }
+                : {}),
+            })
+            .eq('id', editingId)
+        );
 
         if (error) throw error;
         setMessage('✅ 수정되었습니다!');
         requestMemoEmbedding(editingId);
       } else {
-        const { data: inserted, error } = await supabase
-          .from('memos')
-          .insert([{
-            title: formData.title,
-            content: formData.content,
-            excerpt,
-            cover_image,
-            category_id: categoryIdForSave,
-            // 오늘이면 DB 기본값(now) 그대로, 다른 날짜를 골랐으면 그 날짜(시각은 지금)
-            ...(createdDate !== toLocalDateInput() ? { created_at: composeCreatedAt(createdDate) } : {}),
-          }])
-          .select('id');
+        const { data: inserted, error } = await withPinnedFallback<{ id: string }[] | null>((pinnedPatch) =>
+          supabase
+            .from('memos')
+            .insert([{
+              title: formData.title,
+              content: formData.content,
+              excerpt,
+              cover_image,
+              category_id: categoryIdForSave,
+              ...pinnedPatch,
+              // 오늘이면 DB 기본값(now) 그대로, 다른 날짜를 골랐으면 그 날짜(시각은 지금)
+              ...(createdDate !== toLocalDateInput() ? { created_at: composeCreatedAt(createdDate) } : {}),
+            }])
+            .select('id')
+        );
 
         if (error) throw error;
         setMessage('✅ 저장되었습니다!');
@@ -333,6 +376,7 @@ function MemoPageContent() {
       setFormData({ title: '', content: '' });
       setEditingId(null);
       setSelectedCategoryId(null);
+      setIsPinned(false);
       setOriginalCreatedAt(null);
       setCreatedDate(toLocalDateInput());
       setCurrentPage(1);
@@ -359,6 +403,7 @@ function MemoPageContent() {
     setEditingId(null);
     setFormData({ title: '', content: '' });
     setSelectedCategoryId(null);
+    setIsPinned(false);
     setOriginalCreatedAt(null);
     setCreatedDate(toLocalDateInput());
   };
@@ -368,6 +413,7 @@ function MemoPageContent() {
     setFormData({ title: '', content: '' });
     setEditingId(null);
     setSelectedCategoryId(null);
+    setIsPinned(false);
   };
 
   // 목록에는 content 가 없으므로 편집 진입 시 단건만 로드 (상세 페이지 select 와 동일 패턴)
@@ -397,6 +443,7 @@ function MemoPageContent() {
         content: data.content || '',
       });
       setSelectedCategoryId(data.category_id ?? null);
+      setIsPinned(!!data.is_pinned);
       setOriginalCreatedAt(data.created_at ?? null);
       setCreatedDate(toLocalDateInput(data.created_at));
       setTimeout(() => {
@@ -427,6 +474,26 @@ function MemoPageContent() {
       }
     },
     [supabase, invalidateMemos]
+  );
+
+  /** 카드의 📌 버튼 — 중요공지 토글 */
+  const handleTogglePin = useCallback(
+    async (memo: MemoListCard) => {
+      if (!supabase || !memo.id) return;
+      const next = !memo.is_pinned;
+      const { error } = await supabase.from('memos').update({ is_pinned: next }).eq('id', memo.id);
+      if (error) {
+        if (isMissingPinnedColumn(error)) {
+          alert('중요공지 기능을 쓰려면 Supabase 에서 add_memo_pinned.sql 을 먼저 실행해 주세요.');
+        } else {
+          alert('중요공지 설정에 실패했습니다.');
+        }
+        return;
+      }
+      patchMemoInCache(memo.id, { is_pinned: next });
+      await invalidateMemos();
+    },
+    [supabase, patchMemoInCache, invalidateMemos]
   );
 
   const handleAddCategory = async () => {
@@ -577,7 +644,9 @@ function MemoPageContent() {
         {!showEditor && (
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">전체글</span>
+              <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                {showPinnedOnly ? '📌 중요공지' : selectedCategory ? selectedCategory.name : '전체글'}
+              </span>
               <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">({totalCount})</span>
             </div>
             
@@ -623,10 +692,25 @@ function MemoPageContent() {
             {/* 상위 카테고리 칩 — 화면 폭 안에서 줄바꿈 (가로 스크롤 없음) */}
             <div className="flex flex-wrap items-center gap-2">
               <button
+                onClick={selectPinned}
+                style={{ touchAction: 'manipulation' }}
+                aria-pressed={showPinnedOnly}
+                className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  showPinnedOnly
+                    ? 'bg-amber-500 text-white'
+                    : 'border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                }`}
+              >
+                📌 중요공지
+                {!!pinnedCount && (
+                  <span className={`text-[11px] ${showPinnedOnly ? 'text-amber-100' : 'text-amber-500'}`}>{pinnedCount}</span>
+                )}
+              </button>
+              <button
                 onClick={() => selectCategory(null)}
                 style={{ touchAction: 'manipulation' }}
                 className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  !selectedCategoryFilter
+                  !selectedCategoryFilter && !showPinnedOnly
                     ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
                     : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
                 }`}
@@ -634,7 +718,7 @@ function MemoPageContent() {
                 전체
               </button>
               {rootChipCategories.map((cat) => {
-                const isActive = activeRootId === cat.id;
+                const isActive = !showPinnedOnly && activeRootId === cat.id;
                 const hasChildren = memoCategories.some((c) => c.parent_id === cat.id);
                 return (
                   <button
@@ -685,7 +769,7 @@ function MemoPageContent() {
             </div>
 
             {/* 하위 카테고리 칩 — 선택된 상위에 하위가 있을 때만 펼침 */}
-            {activeRootId && activeRootChildren.length > 0 && (
+            {!showPinnedOnly && activeRootId && activeRootChildren.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 pl-3 border-l-2 border-gray-200 dark:border-gray-700 animate-fade-in">
                 <button
                   onClick={() => selectCategory(activeRootId)}
@@ -786,6 +870,8 @@ function MemoPageContent() {
             onCategoryChange={setSelectedCategoryId}
             createdDate={createdDate}
             onCreatedDateChange={setCreatedDate}
+            isPinned={isPinned}
+            onPinnedChange={setIsPinned}
             onSave={handleSave}
             onCancel={handleCancelEditor}
             isSaving={isSaving}
@@ -838,12 +924,17 @@ function MemoPageContent() {
                 onDelete={handleDelete}
                 onCopyLink={handleCopyLink}
                 onOpen={handleOpenMemo}
+                onTogglePin={handleTogglePin}
               />
             ))}
           </div>
         ) : (
           <div className="text-center text-sm text-gray-400 dark:text-gray-500 py-12">
-            {isSearchActive ? '검색 결과가 없습니다' : '작성된 글이 없습니다'}
+            {isSearchActive
+              ? '검색 결과가 없습니다'
+              : showPinnedOnly
+                ? '중요공지로 지정된 글이 없습니다. 글 카드의 📌 버튼이나 글쓰기 화면에서 지정할 수 있어요.'
+                : '작성된 글이 없습니다'}
           </div>
         )}
 

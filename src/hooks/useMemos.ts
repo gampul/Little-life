@@ -14,6 +14,8 @@ export interface MemoListItem {
   updated_at?: string;
   category_id?: string | null;
   memo_categories?: { name: string } | null;
+  /** 중요공지(고정) 여부 — add_memo_pinned.sql 이전 환경에서는 undefined */
+  is_pinned?: boolean;
 }
 
 export interface MemosPageResult {
@@ -36,11 +38,19 @@ function toIlikeOrPattern(raw: string): string {
   return `"%${escaped}%"`;
 }
 
+/** is_pinned 컬럼이 아직 없는 DB (add_memo_pinned.sql 미실행) */
+export const isMissingPinnedColumn = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === '42703' || /is_pinned/.test(e.message || ''));
+
+const LIST_COLS = 'id, title, excerpt, cover_image, created_at, updated_at, category_id, memo_categories(name)';
+
 async function fetchMemosPage(
   page: number,
   pageSize: number,
   categoryIds: string[] | null,
-  searchTerm: string
+  searchTerm: string,
+  pinnedOnly: boolean,
+  withPinnedCol = true
 ): Promise<MemosPageResult> {
   const supabase = getSupabase();
   if (!supabase) {
@@ -60,11 +70,11 @@ async function fetchMemosPage(
   //   -- 또는 tsvector 생성 컬럼 + GIN 인덱스 후 plainto_tsquery 로 전환
   let query = supabase
     .from('memos')
-    .select(
-      'id, title, excerpt, cover_image, created_at, updated_at, category_id, memo_categories(name)',
-      { count: 'exact' }
-    )
+    .select(withPinnedCol ? `${LIST_COLS}, is_pinned` : LIST_COLS, { count: 'exact' })
     .order('created_at', { ascending: false });
+
+  // 중요공지 탭: 고정 글만 (카테고리 무관)
+  if (pinnedOnly) query = query.eq('is_pinned', true);
 
   // 단일 카테고리는 eq, 대분류(부모+자식) 선택 시 여러 id를 in() 으로 필터
   if (categoryIds && categoryIds.length > 0) {
@@ -86,6 +96,11 @@ async function fetchMemosPage(
 
   const { data, count, error } = await query;
   if (error) {
+    // 컬럼이 없는 환경: 고정 글 목록은 빈 결과, 일반 목록은 컬럼 없이 재조회
+    if (withPinnedCol && isMissingPinnedColumn(error)) {
+      if (pinnedOnly) return { memos: [], totalCount: 0 };
+      return fetchMemosPage(page, pageSize, categoryIds, searchTerm, false, false);
+    }
     throw error;
   }
 
@@ -99,7 +114,8 @@ export function useMemos(
   page: number,
   categoryIds: string[] | null,
   pageSize: number = 10,
-  searchTerm: string = ''
+  searchTerm: string = '',
+  pinnedOnly: boolean = false
 ) {
   const normalizedSearch = searchTerm.trim();
   // 안정적인 캐시 키 (id 목록 순서 무관)
@@ -107,10 +123,37 @@ export function useMemos(
     categoryIds && categoryIds.length > 0 ? [...categoryIds].sort().join(',') : null;
 
   return useQuery({
-    queryKey: [...MEMOS_QUERY_KEY, page, categoryKey, pageSize, normalizedSearch],
-    queryFn: () => fetchMemosPage(page, pageSize, categoryIds, normalizedSearch),
+    queryKey: [...MEMOS_QUERY_KEY, page, categoryKey, pageSize, normalizedSearch, pinnedOnly],
+    queryFn: () => fetchMemosPage(page, pageSize, categoryIds, normalizedSearch, pinnedOnly),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
+  });
+}
+
+export const PINNED_COUNT_QUERY_KEY = [...MEMOS_QUERY_KEY, 'pinnedCount'] as const;
+
+/**
+ * 중요공지 글 개수 — Diary 첫 진입 시 중요공지 탭을 기본으로 열지 결정하는 데 사용.
+ * 컬럼이 없으면(마이그레이션 전) 0.
+ */
+export function usePinnedCount() {
+  return useQuery({
+    queryKey: PINNED_COUNT_QUERY_KEY,
+    queryFn: async () => {
+      const supabase = getSupabase();
+      if (!supabase) return 0;
+      const { count, error } = await supabase
+        .from('memos')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_pinned', true);
+      if (error) {
+        if (isMissingPinnedColumn(error)) return 0;
+        throw error;
+      }
+      return count ?? 0;
+    },
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
   });
 }
 
