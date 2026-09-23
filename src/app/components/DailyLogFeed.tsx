@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline, IconPhoto } from '@tabler/icons-react';
 import { summarizeSubValues, type RoutineSubItem, type RoutineType, type SubValues } from '../../lib/routineSubItems';
 
 interface RoutineTemplate {
@@ -306,27 +306,6 @@ export default function DailyLogFeed({
                               </p>
                             )}
                           </button>
-                          {getRowImages(row).length > 0 && (
-                            <div className="ml-[26px] mt-1 flex gap-1.5 overflow-x-auto">
-                              {getRowImages(row).map((url, i) => (
-                                <button
-                                  key={url + i}
-                                  type="button"
-                                  onClick={() => onImageClick?.(url)}
-                                  className="shrink-0"
-                                  aria-label={`${routine.label} 사진 ${i + 1} 크게 보기`}
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={url}
-                                    alt={`${routine.label} 사진 ${i + 1}`}
-                                    loading="lazy"
-                                    className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          )}
                         </li>
                       ))}
                     </ul>
@@ -349,16 +328,6 @@ export default function DailyLogFeed({
                           </span>
                         </p>
                       </button>
-                      {(rec.weight_images?.length ?? 0) > 0 && (
-                        <div className="ml-[26px] flex gap-1.5 overflow-x-auto">
-                          {rec.weight_images!.map((url, i) => (
-                            <button key={url + i} type="button" onClick={() => onImageClick?.(url)} className="shrink-0" aria-label={`체중 기록 사진 ${i + 1} 크게 보기`}>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={url} alt={`체중 기록 사진 ${i + 1}`} loading="lazy" className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -374,16 +343,6 @@ export default function DailyLogFeed({
                           </span>
                         </p>
                       )}
-                      {(rec.meal_images?.length ?? 0) > 0 && (
-                        <div className="ml-[26px] flex gap-1.5 overflow-x-auto">
-                          {rec.meal_images!.map((url, i) => (
-                            <button key={url + i} type="button" onClick={() => onImageClick?.(url)} className="shrink-0" aria-label="식사 사진 크게 보기">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={url} alt="식사 사진" loading="lazy" className="h-16 w-16 object-cover rounded-lg border border-gray-200 dark:border-gray-700" />
-                            </button>
-                          ))}
-                        </div>
-                      )}
                       {rec.daily_memo?.trim() && (
                         <p className="flex items-start gap-2 whitespace-pre-wrap break-words">
                           <IconNotes size={18} stroke={1.5} aria-hidden="true" className="shrink-0 text-gray-400 dark:text-gray-500" />
@@ -392,6 +351,47 @@ export default function DailyLogFeed({
                       )}
                     </div>
                   )}
+
+                  {/* 그날의 사진 — 루틴·체중·식사 사진을 카드 맨 아래에 한 줄로 모아서 */}
+                  {(() => {
+                    const photos: { url: string; label: string }[] = [];
+                    for (const { routine, row } of day.entries) {
+                      for (const url of getRowImages(row)) photos.push({ url, label: routine.label });
+                    }
+                    for (const url of rec?.weight_images ?? []) photos.push({ url, label: '체중' });
+                    for (const url of rec?.meal_images ?? []) photos.push({ url, label: '식사' });
+                    if (photos.length === 0) return null;
+                    return (
+                      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+                          <IconPhoto size={14} stroke={1.5} aria-hidden="true" />
+                          사진 {photos.length}장
+                        </div>
+                        <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+                          {photos.map((p, i) => (
+                            <button
+                              key={p.url + i}
+                              type="button"
+                              onClick={() => onImageClick?.(p.url)}
+                              className="relative shrink-0"
+                              aria-label={`${p.label} 사진 크게 보기`}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={p.url}
+                                alt={`${p.label} 사진`}
+                                loading="lazy"
+                                className="h-20 w-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                              />
+                              <span className="absolute left-1 bottom-1 max-w-[calc(100%-8px)] truncate px-1 py-0.5 rounded bg-black/55 text-white text-[10px] leading-none">
+                                {p.label}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {day.missed.length > 0 && (
                     <div className="mt-2">
