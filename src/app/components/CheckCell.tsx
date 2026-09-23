@@ -115,7 +115,7 @@ export default function CheckCell({ checked, hasMemo, ariaLabel, onToggle, onOpe
         }}
         className={`relative w-5 h-5 rounded-md flex items-center justify-center transition-all cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
           checked
-            ? 'bg-gray-900 dark:bg-gray-700 border-gray-900 dark:border-gray-700'
+            ? 'bg-[#1b44d6] border-[#1b44d6]'
             : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
         } ${menu ? 'ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-gray-900' : ''}`}
       >
