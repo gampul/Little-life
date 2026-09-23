@@ -10,6 +10,7 @@ import { FooterNav } from './components/FooterNav';
 import DailyLogFeed from './components/DailyLogFeed';
 import CheckCell from './components/CheckCell';
 import { compressImage } from '../lib/compressImage';
+import { RoutineIcon } from '../lib/routineIcons';
 import SubItemsInput from './components/SubItemsInput';
 import {
   normalizeSubItems,
@@ -83,6 +84,8 @@ interface RoutineTemplate {
   image_upload_enabled?: boolean;
   /** 복합(multi) 타입의 하위 항목 (routine_templates.sub_items) */
   sub_items?: RoutineSubItem[];
+  /** 선택한 아이콘 키 (routine_templates.icon, add_routine_icon.sql) */
+  icon?: string | null;
 }
 
 /** daily_routine_checks 행 — Home 에서 전 루틴을 한 번에 로드해 RoutineItem 으로 내려줌 */
@@ -136,53 +139,8 @@ const devLog = (...args: unknown[]) => {
 const getKstDateString = (): string =>
   new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(new Date());
 
-/** 칫솔 라인 아이콘 (Tabler 세트에 없어서 같은 스타일로 직접 그림: 24 그리드, currentColor, 둥근 선) */
-const IconToothbrush = ({ size = 18, stroke = 1.5 }: { size?: number; stroke?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={stroke}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className="tabler-icon tabler-icon-toothbrush"
-    aria-hidden="true"
-  >
-    <g transform="rotate(45 12 12)">
-      {/* 헤드 + 칫솔모 */}
-      <rect x="9" y="1" width="6" height="7.5" rx="1.75" />
-      <rect x="10.6" y="2.6" width="2.8" height="4.3" rx="0.8" />
-      {/* 목(살짝 꺾임) + 손잡이 */}
-      <path d="M11 8.5v1.75l-0.6 1.6v10.15a1.6 1.6 0 0 0 3.2 0v-10.15l-0.6-1.6v-1.75" />
-    </g>
-  </svg>
-);
-
-const getRoutineIcon = (label: string) => {
-  const map: Record<string, React.ReactNode> = {
-    '800km': <IconRun size={18} stroke={1.5} />,
-    '글쓰기': <IconPencil size={18} stroke={1.5} />,
-    '주변정리': <IconSparkles size={18} stroke={1.5} />,
-    '1Day class': <IconCode size={18} stroke={1.5} />,
-    'DevOps': <IconCode size={18} stroke={1.5} />,
-    '1Day': <IconDeviceLaptop size={18} stroke={1.5} />,
-    '가계부': <IconWallet size={18} stroke={1.5} />,
-    '기도': <IconClock size={18} stroke={1.5} />,
-    'OKR': <IconTarget size={18} stroke={1.5} />,
-    '금주': <IconBottleOff size={18} stroke={1.5} />,
-    '사랑이': <IconHeart size={18} stroke={1.5} />,
-    'brush': <IconToothbrush size={18} stroke={1.5} />,
-    '독서': <IconBook size={18} stroke={1.5} />,
-    '500km': <IconRun size={18} stroke={1.5} />,
-    'Dev ops': <IconCode size={18} stroke={1.5} />,
-  };
-
-  const key = Object.keys(map).find((k) => label.includes(k));
-  return key ? map[key] : <IconCheckbox size={18} stroke={1.5} />;
-};
+/** 루틴 아이콘 — 저장된 icon 키 우선, 없으면 이름으로 추정 (src/lib/routineIcons) */
+const getRoutineIcon = (label: string, icon?: string | null) => <RoutineIcon label={label} icon={icon} />;
 
 export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
@@ -840,7 +798,15 @@ export default function Home() {
         image_upload_enabled: t.image_upload_enabled ?? false,
         sub_items: normalizeSubItems(t.sub_items),
       }));
-      setRoutineTemplates(templatesWithType);
+      // 아이콘은 별도 조회 (icon 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
+      const { data: iconRows, error: iconErr } = await supabase
+        .from('routine_templates')
+        .select('id, icon')
+        .eq('user_id', userId);
+      const iconById = new Map<string, string | null>(
+        !iconErr && iconRows ? iconRows.map((r: any) => [r.id as string, (r.icon as string | null) ?? null]) : []
+      );
+      setRoutineTemplates(templatesWithType.map((t: any) => ({ ...t, icon: iconById.get(t.id) ?? null })));
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -3186,7 +3152,7 @@ export default function Home() {
               onEntryClick={handleFeedEntryClick}
               onImageClick={setFullImageUrl}
               onWeightClick={openWeightModal}
-              renderIcon={getRoutineIcon}
+              renderIcon={(r) => getRoutineIcon(r.label, r.icon)}
             />
           </div>
         </div>
@@ -3787,7 +3753,7 @@ function RoutineItem({
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white">
-                    {getRoutineIcon(readingSheet.label)}
+                    {getRoutineIcon(readingSheet.label, routineTemplates.find((t) => t.id === readingSheet.routineId)?.icon)}
                     {readingSheet.label}
                   </div>
                   <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -4019,7 +3985,7 @@ function RoutineItem({
         {/* 아이콘 + 텍스트 영역 */}
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
-            {getRoutineIcon(label)}
+            {getRoutineIcon(label, routineTemplates.find((t) => t.id === routineId)?.icon)}
           </span>
           <span className={`text-sm truncate ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
             {label}
