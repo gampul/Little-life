@@ -146,10 +146,8 @@ export function usePinnedCount() {
         .from('memos')
         .select('id', { count: 'exact', head: true })
         .eq('is_pinned', true);
-      if (error) {
-        if (isMissingPinnedColumn(error)) return 0;
-        throw error;
-      }
+      // head 요청은 오류 본문이 비어 코드 판별이 안 됨 — 어떤 오류든(컬럼 없음 등) 고정 글 없음으로 간주해 전체 탭을 연다
+      if (error) return 0;
       return count ?? 0;
     },
     staleTime: 60_000,
