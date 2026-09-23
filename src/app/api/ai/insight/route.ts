@@ -16,8 +16,8 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 const SYSTEM = `너는 "Little Life" 앱 사용자의 기록(루틴 체크, 체중·체중 메모, 일기)을 읽고, 앱 첫 화면에 띄울 "오늘의 한 줄"을 쓰는 코치다.
 
 규칙:
-- 한국어 존댓말, 1~2문장, 합쳐서 70자 이내. 마크다운·따옴표·이모지 금지(문장 맨 앞 이모지 1개는 허용).
-- 데이터에 있는 사실과 숫자만 사용한다. 지어내지 않는다.
+- 한국어 존댓말, 1~2문장, 합쳐서 60자 이내. 마크다운·따옴표·이모지 금지(문장 맨 앞 이모지 1개는 허용).
+- 숫자는 [오늘의 사실]에 적힌 값만 그대로 쓴다. 직접 계산하거나 반올림하지 않는다. 없는 사실은 지어내지 않는다.
 - 뻔한 말("꾸준히 하세요", "화이팅") 금지. 사용자가 몰랐을 법한 연결·흐름을 하나 짚는다.
   좋은 소재: 연속일 기록(곧 최장), 무너진 루틴, 체중 추이와 루틴/메모의 연결, 일기에 반복된 감정과 루틴의 관계, 오늘 남은 것 중 가장 중요한 하나.
 - 오늘 이미 한 일이 있으면 인정하고, 남은 것 하나를 가볍게 권한다.
@@ -34,13 +34,34 @@ async function generate(supabase: any, userId: string) {
     diaryCharLimit: 500,
   });
   const context = buildInsightContext(data);
+
+  // 모델이 직접 계산하지 않도록 오늘 기준 수치를 미리 계산해 준다
+  const series = data.weight.series;
+  const last = series[series.length - 1];
+  const prev = series.length >= 2 ? series[series.length - 2] : null;
+  const facts: string[] = [];
+  if (last && last.date === today) {
+    facts.push(`오늘 체중 ${last.kg}kg`);
+    if (prev) {
+      const dlt = Math.round((last.kg - prev.kg) * 10) / 10;
+      const when = prev.date === kstDateMinus(today, 1) ? '어제' : `${prev.date.slice(5)}`;
+      facts.push(`${when}(${prev.kg}kg)보다 ${dlt > 0 ? '+' : ''}${dlt}kg`);
+    }
+  } else {
+    facts.push('오늘 체중 기록 없음');
+  }
+  if (data.weight.delta != null && data.weight.first) facts.push(`14일간 체중 변화 ${data.weight.delta > 0 ? '+' : ''}${data.weight.delta}kg (${data.weight.first.date.slice(5)} ${data.weight.first.kg}kg → ${last?.kg}kg)`);
+  facts.push(`오늘 완료: ${data.todayDone.length ? data.todayDone.join(', ') : '없음'}`);
+  facts.push(`오늘 남음: ${data.todayMissed.length ? data.todayMissed.join(', ') : '없음'}`);
+  const streaks = data.routines.filter((r) => r.streak >= 3).map((r) => `${r.label} ${r.streak}일 연속`);
+  if (streaks.length) facts.push(`연속 기록: ${streaks.join(', ')}`);
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     temperature: 0.7,
     max_tokens: 160,
     messages: [
       { role: 'system', content: SYSTEM },
-      { role: 'user', content: `[데이터 — 최근 14일, 오늘 ${today}]\n${context}\n\n오늘의 한 줄을 써줘.` },
+      { role: 'user', content: `[오늘의 사실 — ${today}]\n- ${facts.join('\n- ')}\n\n[참고 데이터 — 최근 14일]\n${context}\n\n오늘의 한 줄을 써줘.` },
     ],
   });
   const text = (completion.choices[0]?.message?.content || '')
