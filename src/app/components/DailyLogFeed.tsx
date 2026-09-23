@@ -306,9 +306,16 @@ export default function DailyLogFeed({
                       }}
                       title={routine.label}
                       aria-label={`${routine.label} ${day.date} 기록`}
-                      className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-white/70 dark:bg-gray-700/60 border border-gray-200/80 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                      className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                     >
-                      {renderIcon ? renderIcon(routine.label) : <span className="text-sm leading-none">{routine.emoji}</span>}
+                      {/* 완료 도장: 설정한 이모지가 있으면 그것, 기본(✅)이면 라인 아이콘을 초록으로 */}
+                      {routine.emoji && routine.emoji !== '✅' ? (
+                        <span className="text-sm leading-none">{routine.emoji}</span>
+                      ) : renderIcon ? (
+                        renderIcon(routine.label)
+                      ) : (
+                        <span className="text-sm leading-none">✅</span>
+                      )}
                     </button>
                   ))}
                 </div>
