@@ -103,6 +103,9 @@ export interface MemoEditorProps {
   /** 작성일자 (YYYY-MM-DD). 새 글은 오늘, 편집은 원본 날짜 — 목록 정렬·표시에 쓰이는 created_at */
   createdDate?: string;
   onCreatedDateChange?: (date: string) => void;
+  /** 중요공지(고정) — Diary 첫 화면의 📌 중요공지 탭에 노출 */
+  isPinned?: boolean;
+  onPinnedChange?: (v: boolean) => void;
   onSave: () => void;
   onCancel: () => void;
   isSaving: boolean;
@@ -147,6 +150,8 @@ export default function MemoEditor({
   onCategoryChange,
   createdDate,
   onCreatedDateChange,
+  isPinned = false,
+  onPinnedChange,
   onSave,
   onCancel,
   isSaving,
@@ -439,6 +444,43 @@ export default function MemoEditor({
           </select>
           </div>
         </div>
+
+        {/* 중요공지 토글 */}
+        {onPinnedChange && (
+          <div className="px-5 pb-4 -mt-1">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isPinned}
+              onClick={() => onPinnedChange(!isPinned)}
+              style={{ touchAction: 'manipulation' }}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                isPinned
+                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'
+                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80'
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-gray-900 dark:text-white">📌 중요공지로 표시</span>
+                <span className="block text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
+                  Diary 를 열면 가장 먼저 보이는 중요공지 탭에 고정돼요
+                </span>
+              </span>
+              <span
+                aria-hidden
+                className={`relative inline-block w-10 h-6 rounded-full flex-shrink-0 transition-colors ${
+                  isPinned ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                    isPinned ? 'translate-x-4' : ''
+                  }`}
+                />
+              </span>
+            </button>
+          </div>
+        )}
 
         <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
 

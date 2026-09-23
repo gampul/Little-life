@@ -17,6 +17,8 @@ export interface MemoCardData {
   comments?: number;
   category_id?: string | null;
   memo_categories?: { name: string } | null;
+  /** 중요공지(고정) */
+  is_pinned?: boolean;
 }
 
 export interface MemoCardProps {
@@ -30,6 +32,8 @@ export interface MemoCardProps {
   onDelete: (memo: MemoCardData) => void;
   onCopyLink: (e: MouseEvent, memoId: string) => void;
   onOpen: (memoId: string) => void;
+  /** 중요공지 토글 (생략하면 📌 버튼 숨김) */
+  onTogglePin?: (memo: MemoCardData) => void;
 }
 
 const ICON = {
@@ -43,6 +47,14 @@ const ICON = {
   strokeLinejoin: 'round' as const,
   'aria-hidden': true,
 };
+
+const IconPin = ({ filled = false }: { filled?: boolean }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" {...ICON} fill={filled ? 'currentColor' : 'none'}>
+    <path d="M15 4.5l-4 4 -4 1.5 -1.5 1.5 7 7 1.5 -1.5 1.5 -4 4 -4" />
+    <path d="M9 15l-4.5 4.5" />
+    <path d="M14.5 4l5.5 5.5" />
+  </svg>
+);
 
 const IconLink = () => (
   <svg xmlns="http://www.w3.org/2000/svg" {...ICON}>
@@ -109,6 +121,7 @@ function MemoCardComponent({
   onDelete,
   onCopyLink,
   onOpen,
+  onTogglePin,
 }: MemoCardProps) {
   // 아래로 스크롤 중엔 액션(링크·수정·삭제)을 숨기고, 위로 올리면 다시 표시
   const actionsVisible = useScrollDirection() === 'up';
@@ -188,7 +201,17 @@ function MemoCardComponent({
         </div>
 
         <div className={contentClass}>
-          <h3 className={titleClass}>{title}</h3>
+          <h3 className={titleClass}>
+            {memo.is_pinned && (
+              <span
+                className="inline-flex items-center align-middle mr-1.5 px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-semibold leading-none"
+                aria-label="중요공지"
+              >
+                📌 공지
+              </span>
+            )}
+            {title}
+          </h3>
 
           {/* 미리보기: list 만 */}
           <p
@@ -263,6 +286,7 @@ function MemoCardComponent({
                 onCopyLink={onCopyLink}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onTogglePin={onTogglePin}
               />
             </div>
           </div>
@@ -283,6 +307,7 @@ function MemoCardComponent({
             onCopyLink={onCopyLink}
             onEdit={onEdit}
             onDelete={onDelete}
+            onTogglePin={onTogglePin}
           />
         </div>
       </div>
@@ -302,6 +327,7 @@ function CopyEditDelete({
   onCopyLink,
   onEdit,
   onDelete,
+  onTogglePin,
 }: {
   /** false 면 페이드아웃 + 클릭 차단 (자리는 유지해 레이아웃 흔들림 없음) */
   visible: boolean;
@@ -312,8 +338,10 @@ function CopyEditDelete({
   onCopyLink: MemoCardProps['onCopyLink'];
   onEdit: MemoCardProps['onEdit'];
   onDelete: MemoCardProps['onDelete'];
+  onTogglePin?: MemoCardProps['onTogglePin'];
 }) {
   const btnSize = size === 'sm' ? 'w-6 h-6' : 'w-7 h-7';
+  const pinned = !!memo.is_pinned;
   return (
     <div
       role="group"
@@ -325,6 +353,27 @@ function CopyEditDelete({
           : 'opacity-0 translate-y-1 pointer-events-none'
       }`}
     >
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin(memo);
+          }}
+          tabIndex={visible ? 0 : -1}
+          aria-pressed={pinned}
+          className={`${ACTION_BTN} ${btnSize} ${
+            pinned
+              ? 'text-amber-600 bg-white dark:bg-gray-700 shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm'
+          }`}
+          style={{ touchAction: 'manipulation' }}
+          title={pinned ? '중요공지 해제' : '중요공지로 지정'}
+          aria-label={pinned ? '중요공지 해제' : '중요공지로 지정'}
+        >
+          <IconPin filled={pinned} />
+        </button>
+      )}
       <button
         type="button"
         onClick={(e) => {
