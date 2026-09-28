@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core';
+import { NodeSelection } from '@tiptap/pm/state';
 
 /**
  * 링크 북마크 카드 (노션 북마크 블록과 비슷한 형태)
@@ -120,8 +121,15 @@ const Bookmark = Node.create({
     return {
       setBookmark:
         (attrs) =>
-        ({ commands }) =>
-          commands.insertContent({ type: this.name, attrs }),
+        ({ state, commands }) => {
+          // 카드 + 빈 문단을 함께 넣어 커서가 카드 아래 문단으로 가게 함
+          // (카드가 선택된 상태에서 또 넣으면 기존 카드를 덮어쓰지 않도록 그 뒤에 삽입)
+          const content = [{ type: this.name, attrs }, { type: 'paragraph' }];
+          if (state.selection instanceof NodeSelection) {
+            return commands.insertContentAt(state.selection.to, content);
+          }
+          return commands.insertContent(content);
+        },
     };
   },
 });
