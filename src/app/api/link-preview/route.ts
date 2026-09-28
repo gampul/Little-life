@@ -140,6 +140,22 @@ function parseMeta(html: string, pageUrl: URL): Omit<Preview, 'url'> {
   return { title, description, image, site };
 }
 
+async function youtubeOEmbed(url: string, signal: AbortSignal): Promise<Partial<Omit<Preview, 'url'>>> {
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`, { signal });
+    if (!r.ok) return {};
+    const j = (await r.json()) as { title?: string; author_name?: string; thumbnail_url?: string };
+    return {
+      title: clean(j.title, 200),
+      description: clean(j.author_name, 300),
+      image: j.thumbnail_url && /^https:\/\//.test(j.thumbnail_url) ? j.thumbnail_url : null,
+      site: 'YouTube',
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function GET(req: NextRequest) {
   const supabase = await createSupabaseServer();
   const {
@@ -179,7 +195,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(base, { headers: { 'cache-control': 'private, max-age=86400' } });
     }
     const html = decodeHtml(await readLimited(res), ct);
-    return NextResponse.json({ ...base, ...parseMeta(html, current) }, { headers: { 'cache-control': 'private, max-age=86400' } });
+    let meta = parseMeta(html, current);
+    // YouTube 는 서버 IP 에 동의 페이지를 주는 경우가 많아 메타가 비어 있음 → 공식 oEmbed 로 보충
+    if (!meta.title && /(^|\.)(youtube\.com|youtu\.be)$/i.test(current.hostname)) {
+      meta = { ...meta, ...(await youtubeOEmbed(raw, controller.signal)) };
+    }
+    return NextResponse.json({ ...base, ...meta }, { headers: { 'cache-control': 'private, max-age=86400' } });
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError';
     const message = aborted ? '응답이 너무 느립니다' : err instanceof Error ? err.message : '미리보기를 가져오지 못했습니다';
