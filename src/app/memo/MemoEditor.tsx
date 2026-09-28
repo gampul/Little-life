@@ -9,12 +9,40 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import { TextStyle, Color } from '@tiptap/extension-text-style';
+import Highlight from '@tiptap/extension-highlight';
+import Bookmark from './extensions/Bookmark';
 import { getSupabase } from '../../lib/supabase';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 /** 한 번에 첨부할 수 있는 최대 장수 */
 const MAX_IMAGES_PER_UPLOAD = 10;
 const MAX_IMAGE_EDGE = 1600;
+
+/** 글자색·형광펜 — 값은 globals.css 의 CSS 변수(라이트/다크 각각 정의)라서 테마가 바뀌어도 읽힘 */
+const TEXT_COLORS: { label: string; value: string | null }[] = [
+  { label: '기본', value: null },
+  { label: '회색', value: 'var(--tc-gray)' },
+  { label: '빨강', value: 'var(--tc-red)' },
+  { label: '주황', value: 'var(--tc-orange)' },
+  { label: '노랑', value: 'var(--tc-yellow)' },
+  { label: '초록', value: 'var(--tc-green)' },
+  { label: '파랑', value: 'var(--tc-blue)' },
+  { label: '보라', value: 'var(--tc-purple)' },
+  { label: '분홍', value: 'var(--tc-pink)' },
+];
+const HIGHLIGHT_COLORS: { label: string; value: string | null }[] = [
+  { label: '없음', value: null },
+  { label: '노랑', value: 'var(--hl-yellow)' },
+  { label: '초록', value: 'var(--hl-green)' },
+  { label: '파랑', value: 'var(--hl-blue)' },
+  { label: '분홍', value: 'var(--hl-pink)' },
+  { label: '주황', value: 'var(--hl-orange)' },
+  { label: '보라', value: 'var(--hl-purple)' },
+  { label: '회색', value: 'var(--hl-gray)' },
+];
+
+type LinkPreview = { title?: string | null; description?: string | null; image?: string | null; site?: string | null; error?: string };
 
 type PreparedUpload = {
   blob: Blob;
@@ -163,6 +191,8 @@ export default function MemoEditor({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -195,12 +225,23 @@ export default function MemoEditor({
           class: 'flex items-start gap-2',
         },
       }),
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
+      Bookmark,
     ],
     content: content || '',
     onUpdate: ({ editor: ed }) => {
       onContentChange(ed.getHTML());
     },
     editorProps: {
+      // 북마크 카드는 <a> 라서 에디터 안에서 누르면 새 탭이 열림 → 편집 중엔 선택만 되게
+      handleDOMEvents: {
+        click: (_view, event) => {
+          if ((event.target as HTMLElement | null)?.closest?.('a.bookmark-card')) event.preventDefault();
+          return false;
+        },
+      },
       attributes: {
         class:
           'prose prose-sm dark:prose-invert max-w-none focus:outline-none bg-transparent text-gray-800 dark:text-gray-200',
@@ -228,6 +269,8 @@ export default function MemoEditor({
             blockquote: e.isActive('blockquote'),
             codeBlock: e.isActive('codeBlock'),
             link: e.isActive('link'),
+            color: (e.getAttributes('textStyle').color as string | undefined) ?? null,
+            highlight: (e.getAttributes('highlight').color as string | undefined) ?? null,
           }
         : null,
   });
@@ -352,6 +395,49 @@ export default function MemoEditor({
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  /** 🔖 링크 북마크 카드 — URL 을 받아 제목·설명·썸네일을 가져와 카드로 삽입 */
+  const handleInsertBookmark = async () => {
+    if (!editor || isBookmarkLoading) return;
+    const input = prompt('북마크할 링크 URL을 입력하세요:', 'https://');
+    if (!input) return;
+    let href = input.trim();
+    if (!/^https?:\/\//i.test(href)) href = `https://${href}`;
+    try {
+      const u = new URL(href);
+      if (!u.hostname.includes('.')) throw new Error();
+      href = u.toString();
+    } catch {
+      setUploadMessage('❌ 올바른 링크가 아닙니다.');
+      setTimeout(() => setUploadMessage(''), 3000);
+      return;
+    }
+
+    setIsBookmarkLoading(true);
+    setUploadMessage('🔖 링크 정보를 불러오는 중...');
+    let preview: LinkPreview = {};
+    try {
+      const res = await fetch(`/api/link-preview?url=${encodeURIComponent(href)}`);
+      preview = (await res.json()) as LinkPreview;
+      if (!res.ok) throw new Error(preview.error || '미리보기 실패');
+    } catch {
+      preview = {};
+    }
+    editor
+      .chain()
+      .focus()
+      .setBookmark({
+        href,
+        title: preview.title ?? null,
+        description: preview.description ?? null,
+        image: preview.image ?? null,
+        site: preview.site ?? null,
+      })
+      .run();
+    setUploadMessage(preview.title ? '✅ 북마크가 추가되었습니다!' : '⚠️ 링크 정보를 못 가져와 주소로만 추가했어요.');
+    setTimeout(() => setUploadMessage(''), 2500);
+    setIsBookmarkLoading(false);
   };
 
   const displayMessage = uploadMessage || message;
@@ -490,6 +576,8 @@ export default function MemoEditor({
           <EditorContent editor={editor} />
         </div>
       </div>
+      {/* 팔레트가 열리면 하단 바가 높아지므로 본문 끝이 가려지지 않게 여백 추가 */}
+      {paletteOpen && <div className="h-20" aria-hidden />}
 
       {/*
         하단 고정 바 — 서식 툴바 + 취소/저장.
@@ -498,6 +586,59 @@ export default function MemoEditor({
       */}
       <div className="fixed bottom-0 left-0 right-0 z-[120] bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-800 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[env(safe-area-inset-bottom,0px)]">
         <div className="max-w-2xl mx-auto">
+          {/* 글자색·형광펜 팔레트 (툴바 A 버튼으로 열고 닫음) */}
+          {paletteOpen && (
+            <div className="px-3 pt-2 pb-1.5 space-y-1.5 border-b border-gray-100 dark:border-gray-800" style={{ touchAction: 'manipulation' }}>
+              {[
+                { name: '글자색', list: TEXT_COLORS, current: tb?.color ?? null, kind: 'color' as const },
+                { name: '형광펜', list: HIGHLIGHT_COLORS, current: tb?.highlight ?? null, kind: 'highlight' as const },
+              ].map((row) => (
+                <div key={row.name} className="flex items-center gap-2" role="group" aria-label={row.name}>
+                  <span className="w-10 flex-shrink-0 text-[11px] font-medium text-gray-500 dark:text-gray-400">{row.name}</span>
+                  <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
+                    {row.list.map((c) => {
+                      const selected = row.current === c.value;
+                      return (
+                        <button
+                          key={c.label}
+                          type="button"
+                          title={`${row.name} ${c.label}`}
+                          aria-label={`${row.name} ${c.label}`}
+                          aria-pressed={selected}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            const chain = editor.chain().focus();
+                            if (row.kind === 'color') {
+                              if (c.value) chain.setColor(c.value).run();
+                              else chain.unsetColor().run();
+                            } else if (c.value) {
+                              chain.setHighlight({ color: c.value }).run();
+                            } else {
+                              chain.unsetHighlight().run();
+                            }
+                          }}
+                          className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center border transition-shadow ${
+                            selected
+                              ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900'
+                              : 'border-gray-200 dark:border-gray-700 hover:ring-2 hover:ring-gray-200 dark:hover:ring-gray-700'
+                          }`}
+                          style={row.kind === 'highlight' && c.value ? { backgroundColor: c.value } : undefined}
+                        >
+                          {row.kind === 'color' ? (
+                            <span className="text-[13px] font-bold" style={{ color: c.value ?? undefined }}>
+                              A
+                            </span>
+                          ) : c.value ? null : (
+                            <span className="text-[11px] text-gray-400">✕</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* 서식 툴바 (가로 스크롤) */}
           <div
             className="flex items-center gap-0 overflow-x-auto scrollbar-hide px-2 pt-1.5 pb-1"
@@ -558,6 +699,29 @@ export default function MemoEditor({
                 className={toolBtnClass(!!tb?.underline)}
               >
                 <u>U</u>
+              </button>
+              <button
+                type="button"
+                title="글자색·형광펜"
+                aria-label="글자색·형광펜"
+                aria-expanded={paletteOpen}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setPaletteOpen((v) => !v)}
+                className={toolBtnClass(paletteOpen)}
+              >
+                <span className="flex flex-col items-center leading-none">
+                  <span
+                    className="text-sm font-bold px-0.5 rounded-sm"
+                    style={{ color: tb?.color ?? undefined, backgroundColor: tb?.highlight ?? undefined }}
+                  >
+                    A
+                  </span>
+                  <span
+                    aria-hidden
+                    className="mt-0.5 block w-4 h-[3px] rounded-full"
+                    style={{ backgroundColor: tb?.color ?? tb?.highlight ?? 'currentColor', opacity: tb?.color || tb?.highlight ? 1 : 0.35 }}
+                  />
+                </span>
               </button>
             </ToolbarGroup>
 
@@ -640,6 +804,16 @@ export default function MemoEditor({
                 className={toolBtnClass(!!tb?.link)}
               >
                 <span className="text-xs">🔗</span>
+              </button>
+              <button
+                type="button"
+                title="링크 북마크 카드"
+                aria-label="링크 북마크 카드"
+                onClick={handleInsertBookmark}
+                disabled={isBookmarkLoading}
+                className={`${toolBtnClass(false)} disabled:opacity-50`}
+              >
+                <span className="text-xs">{isBookmarkLoading ? '⏳' : '🔖'}</span>
               </button>
               <input
                 ref={fileInputRef}
