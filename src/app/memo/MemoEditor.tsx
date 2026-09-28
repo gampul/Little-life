@@ -739,26 +739,7 @@ export default function MemoEditor({
           margin-top: 0.5em;
           margin-bottom: 0.5em;
         }
-        .ProseMirror ul[data-type='taskList'] {
-          list-style: none;
-          padding: 0;
-        }
-        .ProseMirror ul[data-type='taskList'] li {
-          display: flex;
-          align-items: flex-start;
-          gap: 0.5rem;
-        }
-        .ProseMirror ul[data-type='taskList'] li > label {
-          flex: 0 0 auto;
-          margin-right: 0.5rem;
-          user-select: none;
-        }
-        .ProseMirror ul[data-type='taskList'] li > div {
-          flex: 1 1 auto;
-        }
-        .ProseMirror ul[data-type='taskList'] input[type='checkbox'] {
-          cursor: pointer;
-        }
+        /* 할 일(체크박스) 목록 스타일은 globals.css (상세 화면과 공통) */
       `}</style>
     </>
   );
