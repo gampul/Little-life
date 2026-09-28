@@ -11,6 +11,8 @@ import DailyLogFeed from './components/DailyLogFeed';
 import TodayInsight from './components/TodayInsight';
 import CheckCell from './components/CheckCell';
 import { compressImage } from '../lib/compressImage';
+import { WEIGHT_MEMO_TEMPLATE, normalizeWeightMemo, withWeightMemoTemplate } from '../lib/weightMemo';
+import AutoGrowTextarea from './components/AutoGrowTextarea';
 import { RoutineIcon } from '../lib/routineIcons';
 import SubItemsInput from './components/SubItemsInput';
 import {
@@ -1120,6 +1122,15 @@ export default function Home() {
   const findRecordByDate = (dateStr: string) =>
     allRecords.find((r) => (r.date.includes('T') ? r.date.split('T')[0] : r.date) === dateStr) ?? null;
 
+  /** 양식만 있는 메모에 포커스하면 커서를 '아침 : ' 뒤로 */
+  const placeCaretInEmptyTemplate = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget;
+    if (normalizeWeightMemo(el.value) !== null) return;
+    const pos = el.value.indexOf('\n');
+    const caret = pos === -1 ? el.value.length : pos;
+    requestAnimationFrame(() => el.setSelectionRange(caret, caret));
+  };
+
   const openWeightModal = (dateStr?: string) => {
     // 기본은 오늘. 드롭다운/피드에서 열면 그 날짜
     const target = dateStr || getKstDateString();
@@ -1129,7 +1140,7 @@ export default function Home() {
       open: true,
       dateStr: target,
       weightText: current != null ? Number(current).toFixed(1) : '',
-      memo: rec?.weight_memo ?? '',
+      memo: withWeightMemoTemplate(rec?.weight_memo),
       images: rec?.weight_images ?? [],
     });
   };
@@ -1141,7 +1152,7 @@ export default function Home() {
       ...prev,
       dateStr,
       weightText: rec?.weight != null ? Number(rec.weight).toFixed(1) : prev.weightText,
-      memo: rec?.weight_memo ?? '',
+      memo: withWeightMemoTemplate(rec?.weight_memo),
       images: rec?.weight_images ?? [],
     }));
   };
@@ -1237,7 +1248,7 @@ export default function Home() {
       // 메모·사진: extra 가 있을 때만 갱신 (빠른 입력줄에서는 기존 값 유지)
       const weightExtra =
         extra
-          ? { weight_memo: (extra.memo ?? '').trim() || null, weight_images: (extra.images ?? []).slice(0, MAX_WEIGHT_PHOTOS) }
+          ? { weight_memo: normalizeWeightMemo(extra.memo), weight_images: (extra.images ?? []).slice(0, MAX_WEIGHT_PHOTOS) }
           : {};
       let extraSkipped = false;
 
@@ -1723,7 +1734,7 @@ export default function Home() {
               className="absolute inset-0 bg-black/40"
               onClick={closeWeightModal}
             />
-            <div className="relative w-full max-w-[412px] max-h-[90vh] flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
+            <div className="relative w-full max-w-[412px] max-h-[90vh] max-h-[90dvh] flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl">
               <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">체중 기록</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
@@ -1800,14 +1811,15 @@ export default function Home() {
                   <label htmlFor="weight-memo" className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     메모
                   </label>
-                  <textarea
+                  <AutoGrowTextarea
                     id="weight-memo"
                     value={weightInputModal.memo}
                     onChange={(e) => setWeightInputModal((prev) => ({ ...prev, memo: e.target.value }))}
-                    rows={3}
+                    onFocus={placeCaretInEmptyTemplate}
+                    minRows={5}
                     maxLength={1000}
-                    placeholder="컨디션, 식단, 운동 등 남기고 싶은 말"
-                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-sm resize-none focus:ring-2 focus:ring-blue-500 outline-none"
+                    placeholder={WEIGHT_MEMO_TEMPLATE}
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
 
@@ -2100,7 +2112,7 @@ export default function Home() {
                               
                               {/* 메모 */}
                               {hasMemo && (
-                                <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{r.weight_memo}</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-line line-clamp-3">{r.weight_memo}</p>
                               )}
                               
                               {/* 편집 힌트 */}
@@ -2474,7 +2486,10 @@ export default function Home() {
                       {/* 수정 버튼 */}
                       <div className="flex gap-2 mt-3">
                         <button
-                          onClick={() => setChartPopupEditMode(true)}
+                          onClick={() => {
+                            setChartPopupMemo((prev) => withWeightMemoTemplate(prev));
+                            setChartPopupEditMode(true);
+                          }}
                           style={{ fontSize: '16px' }}
                           className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
                         >
@@ -2519,11 +2534,13 @@ export default function Home() {
                       {/* 메모 수정 */}
                       <div className="mb-2">
                         <label style={{ fontSize: '16px' }} className="font-medium text-gray-700 dark:text-gray-300 mb-1 block">메모</label>
-                        <textarea
+                        <AutoGrowTextarea
                           value={chartPopupMemo}
                           onChange={(e) => setChartPopupMemo(e.target.value)}
-                          placeholder="메모를 입력하세요..."
-                          rows={2}
+                          onFocus={placeCaretInEmptyTemplate}
+                          placeholder={WEIGHT_MEMO_TEMPLATE}
+                          minRows={4}
+                          maxLength={1000}
                           style={{ fontSize: '16px' }}
                           className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none transition-all"
                         />
@@ -2679,7 +2696,8 @@ export default function Home() {
                               });
                               devLog('저장 완료', { weightValue });
                               
-                              // 수정 모드 종료 (팝업은 유지)
+                              // 수정 모드 종료 (팝업은 유지) — 보기 화면엔 저장된 형태(빈 양식 줄 제거)로
+                              setChartPopupMemo(normalizeWeightMemo(chartPopupMemo) ?? '');
                               setChartPopupEditMode(false);
                               
                               setMessage('저장되었습니다!');
