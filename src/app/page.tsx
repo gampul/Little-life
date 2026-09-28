@@ -108,6 +108,8 @@ interface RoutineCheckRow {
 const EMPTY_ROUTINE_CHECKS: RoutineCheckRow[] = [];
 const EMPTY_SUB_ITEMS: RoutineSubItem[] = [];
 const MAX_ROUTINE_PHOTOS = 5;
+/** 루틴 메모 최대 글자 수 (예전 한 줄 메모 200자 → 여러 줄) */
+const ROUTINE_MEMO_MAX = 1000;
 /** 행의 사진 목록 (image_urls 우선, 없으면 기존 단일 image_url) */
 const getRowImages = (row: { image_url?: string | null; image_urls?: string[] | null }): string[] => {
   const list = Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean) : [];
@@ -3548,7 +3550,7 @@ function RoutineItem({
     if (!supabase || !readingSheet) return;
 
     const targetDate = readingSheet.dateStr;
-    const memoText = readingMemo.trim().slice(0, 200);
+    const memoText = readingMemo.trim().slice(0, ROUTINE_MEMO_MAX);
     const isNumber = routineType === 'number';
     const isMulti = routineType === 'multi';
 
@@ -3755,7 +3757,7 @@ function RoutineItem({
               if (!readingUploading) closeReadingSheet();
             }}
           />
-          <div className="relative w-[90%] max-w-[400px] mx-auto rounded-2xl bg-white dark:bg-gray-900 shadow-xl animate-fade-in overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="relative w-[90%] max-w-[400px] mx-auto rounded-2xl bg-white dark:bg-gray-900 shadow-xl animate-fade-in overflow-hidden flex flex-col max-h-[90vh] max-h-[90dvh]">
             {/* 헤더 */}
             <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
               <div className="flex items-center justify-between">
@@ -3853,27 +3855,35 @@ function RoutineItem({
               </div>
               )}
 
-              {/* 한 줄 메모 (모든 루틴 공통) → 루틴 기록 글에 합쳐져 보임 */}
+              {/* 메모 (모든 루틴 공통) → 루틴 기록 글에 합쳐져 보임. 내용만큼 늘어나 전체 글이 보임 */}
               <div className="mb-5">
-                <label htmlFor={`routine-memo-${routineId}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  한 줄 메모 (선택)
-                </label>
-                <input
+                <div className="flex items-baseline justify-between mb-2">
+                  <label htmlFor={`routine-memo-${routineId}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    메모 (선택)
+                  </label>
+                  {readingMemo.length > ROUTINE_MEMO_MAX * 0.8 && (
+                    <span className="text-xs text-gray-400 dark:text-gray-500" aria-live="polite">
+                      {readingMemo.length}/{ROUTINE_MEMO_MAX}
+                    </span>
+                  )}
+                </div>
+                <AutoGrowTextarea
                   id={`routine-memo-${routineId}`}
-                  type="text"
-                  maxLength={200}
+                  minRows={3}
+                  maxLength={ROUTINE_MEMO_MAX}
                   autoFocus={routineType === 'checkbox'}
                   value={readingMemo}
                   onChange={(e) => setReadingMemo(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.nativeEvent.isComposing && !readingUploading) {
+                    // Enter 는 줄바꿈, Ctrl/Cmd+Enter 로 저장
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing && !readingUploading) {
                       e.preventDefault();
                       saveReadingSheet();
                     }
                   }}
-                  placeholder="오늘 어땠는지 짧게 남겨보세요"
+                  placeholder="오늘 어땠는지 남겨보세요"
                   disabled={readingUploading}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
                 />
               </div>
 
