@@ -298,26 +298,126 @@ async function getWeightTrend(args: { from?: string; to?: string }) {
   };
 }
 
-async function semanticSearchDiary(args: { query?: string; category?: string; from?: string; to?: string; limit?: number }) {
+// ============================================
+// 의미 검색 재순위(rerank) — 벡터 유사도 후보를 LLM 이 질문 기준으로 한 번 더 채점해 관련 없는 글을 걸러낸다
+// ============================================
+const RERANK_CANDIDATES = 12; // 재순위에 넘길 후보 수 (벡터 검색은 넉넉히 가져온다)
+const RERANK_KEEP_SCORE = 2; // 0~3점 중 이 점수 이상만 답변 근거로 사용
+const RERANK_SNIPPET = 700; // 후보당 채점에 보여줄 글자 수
+const RERANK_TIMEOUT_MS = 8000;
+
+type RerankResult<T> = { kept: (T & { relevance: number })[]; weak: (T & { relevance: number })[]; applied: boolean };
+
+async function rerankMatches<T extends { date: string; title: string; text: string; similarity: number }>(
+  question: string,
+  query: string,
+  candidates: T[]
+): Promise<RerankResult<T>> {
+  const passthrough = (): RerankResult<T> => ({ kept: candidates.map((c) => ({ ...c, relevance: -1 })), weak: [], applied: false });
+  if (candidates.length === 0) return { kept: [], weak: [], applied: false };
+
+  const list = candidates
+    .map((c, i) => `[${i}] ${c.date} — ${c.title}\n${c.text.replace(/\s+/g, ' ').slice(0, RERANK_SNIPPET)}`)
+    .join('\n\n');
+  try {
+    const completion = await openai.chat.completions.create(
+      {
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        max_tokens: 400,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `너는 개인 일기 검색 결과의 관련성 심사자다. 사용자 질문에 답하는 데 각 발췌가 얼마나 쓸모 있는지 0~3점으로 매긴다.
+3 = 질문의 주제·대상을 직접 다룸 (답의 핵심 근거)
+2 = 관련 내용이 분명히 있음 (보조 근거)
+1 = 단어나 분위기만 비슷함
+0 = 무관
+표현이 달라도 뜻이 같으면 관련 있다고 본다(예: "회사 옮길까" ↔ 이직 고민). 발췌에 없는 내용을 추측하지 않는다.
+JSON 으로만 답한다: {"scores":[{"i":0,"s":3},...]} — 모든 후보를 빠짐없이.`,
+          },
+          { role: 'user', content: `사용자 질문: ${question || query}\n검색 의도: ${query}\n\n후보:\n${list}` },
+        ],
+      },
+      { timeout: RERANK_TIMEOUT_MS }
+    );
+    const raw = completion.choices[0]?.message?.content || '';
+    const parsed = JSON.parse(raw) as { scores?: { i: number; s: number }[] };
+    const score = new Map<number, number>();
+    for (const x of parsed.scores || []) {
+      const i = Number(x.i);
+      const v = Number(x.s);
+      if (Number.isInteger(i) && i >= 0 && i < candidates.length && Number.isFinite(v)) score.set(i, Math.max(0, Math.min(3, v)));
+    }
+    if (score.size === 0) return passthrough();
+    const scored = candidates
+      .map((c, i) => ({ ...c, relevance: score.get(i) ?? 0 }))
+      .sort((a, b) => b.relevance - a.relevance || b.similarity - a.similarity);
+    return {
+      kept: scored.filter((c) => c.relevance >= RERANK_KEEP_SCORE),
+      weak: scored.filter((c) => c.relevance === 1).slice(0, 2),
+      applied: true,
+    };
+  } catch (e) {
+    // 재순위 실패(타임아웃·파싱 오류)는 검색 자체를 막지 않는다 — 벡터 순위 그대로 사용
+    console.warn('rerank failed:', (e as Error)?.message);
+    return passthrough();
+  }
+}
+
+async function semanticSearchDiary(
+  args: { query?: string; category?: string; from?: string; to?: string; limit?: number },
+  ctx: ToolCtx
+) {
   const { supabase, userId } = await getSupabaseWithUserId();
   if (!userId) return { error: '로그인이 필요합니다.' };
   const query = (args.query || '').trim();
   if (!query) return { error: 'query 가 필요합니다.' };
+  const limit = Math.min(Math.max(Number(args.limit) || 6, 1), 12);
   try {
-    const matches = await searchMemosSemantic(supabase, query, {
-      limit: Math.min(Math.max(Number(args.limit) || 6, 1), 12),
+    const candidates = await searchMemosSemantic(supabase, query, {
+      limit: Math.max(limit, RERANK_CANDIDATES),
       category: (args.category || '').trim() || null,
       from: args.from && isoDate.test(args.from) ? args.from : null,
       to: args.to && isoDate.test(args.to) ? args.to : null,
     });
-    if (matches.length === 0) {
+    if (candidates.length === 0) {
       return { count: 0, message: '비슷한 내용의 일기를 찾지 못했습니다. (AI Agent 페이지에서 "일기 색인" 이 완료되어 있어야 검색됩니다.)' };
     }
-    return {
-      count: matches.length,
+
+    const { kept, weak, applied } = await rerankMatches(ctx.question, query, candidates);
+    ctx.trace?.push({
+      tool: 'semantic_search_diary',
       query,
-      note: 'text 는 글에서 가장 관련 있는 부분(발췌)이다. 전문이 필요하면 get_day_detail(date) 로 그날 일기를 읽는다.',
-      entries: matches.map((m) => ({ date: m.date, title: m.title, category: m.category, similarity: m.similarity, text: m.text })),
+      rerankApplied: applied,
+      vectorTop: candidates.map((c) => `${c.date.slice(0, 10)} ${c.title} (${c.similarity})`),
+      kept: kept.map((c) => `${c.date.slice(0, 10)} ${c.title} [${c.relevance}]`),
+    });
+    const entries = kept.slice(0, limit);
+    if (entries.length === 0) {
+      return {
+        count: 0,
+        query,
+        message:
+          '질문과 직접 관련된 일기를 찾지 못했습니다. 관련 글이 없다고 답하거나, 정확한 단어가 있다면 search_diary 로 다시 찾아본다.',
+        ...(weak.length
+          ? { weakCandidates: weak.map((m) => ({ date: m.date, title: m.title, text: m.text.slice(0, 200) })), weakNote: '단어·분위기만 비슷한 글 — 근거로 인용하지 않는다' }
+          : {}),
+      };
+    }
+    return {
+      count: entries.length,
+      query,
+      filtered: applied ? `후보 ${candidates.length}개 중 관련 ${kept.length}개` : undefined,
+      note: 'text 는 글에서 가장 관련 있는 부분(발췌)이다. relevance 3 = 핵심 근거, 2 = 보조 근거. 전문이 필요하면 get_day_detail(date) 로 그날 일기를 읽는다.',
+      entries: entries.map((m) => ({
+        date: m.date,
+        title: m.title,
+        category: m.category,
+        ...(applied ? { relevance: m.relevance } : { similarity: m.similarity }),
+        text: m.text,
+      })),
     };
   } catch (e: any) {
     if (isEmbeddingSetupMissing(e)) {
@@ -327,10 +427,12 @@ async function semanticSearchDiary(args: { query?: string; category?: string; fr
   }
 }
 
-async function executeTool(name: string, args: any) {
+type ToolCtx = { question: string; trace?: Record<string, unknown>[] };
+
+async function executeTool(name: string, args: any, ctx: ToolCtx) {
   switch (name) {
     case 'semantic_search_diary':
-      return semanticSearchDiary(args || {});
+      return semanticSearchDiary(args || {}, ctx);
     case 'get_routine_stats':
       return getRoutineStats(args || {});
     case 'get_day_detail':
@@ -413,6 +515,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}));
     const message: string = (body.message || '').toString().trim();
     const historyRaw: ChatTurn[] = Array.isArray(body.history) ? body.history : [];
+    // debug: true 면 도구 호출·검색 후보를 응답에 포함 (검색 품질 점검용, 본인 데이터만)
+    const trace: Record<string, unknown>[] | undefined = body.debug === true ? [] : undefined;
 
     if (!message) return NextResponse.json({ error: '메시지가 필요합니다.' }, { status: 400 });
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: 'API 키가 설정되지 않았습니다.' }, { status: 500 });
@@ -465,7 +569,8 @@ export async function POST(request: NextRequest) {
         functionsUsed.push(name);
         let result: unknown;
         try {
-          result = await executeTool(name, args);
+          result = await executeTool(name, args, { question: message, trace });
+          if (trace && name !== 'semantic_search_diary') trace.push({ tool: name, args });
         } catch (e: any) {
           result = { error: e?.message || '도구 실행 오류' };
         }
@@ -475,7 +580,7 @@ export async function POST(request: NextRequest) {
 
     if (!finalText) finalText = '답을 정리하지 못했어요. 질문을 조금 다르게 해 주시면 다시 찾아볼게요.';
 
-    return NextResponse.json({ success: true, response: finalText, functionsUsed });
+    return NextResponse.json({ success: true, response: finalText, functionsUsed, ...(trace ? { trace } : {}) });
   } catch (error: any) {
     console.error('AI Chat Error:', error);
     return NextResponse.json({ error: error.message || 'AI 응답 생성 중 오류가 발생했습니다.' }, { status: 500 });
