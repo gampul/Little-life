@@ -469,9 +469,9 @@ export default function MemoEditor({
 
         <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
 
-        {/* 작성일자 + 카테고리 */}
-        <div className="px-5 py-4 grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-3">
-          <div>
+        {/* 작성일자 · 카테고리 · 중요공지 — 한 줄 */}
+        <div className="px-5 py-4 flex items-end gap-2">
+          <div className="w-[7.75rem] flex-shrink-0">
             <label
               htmlFor="memo-editor-date"
               className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2"
@@ -490,83 +490,72 @@ export default function MemoEditor({
                 if (e.target.value) onCreatedDateChange?.(e.target.value);
               }}
               style={{ touchAction: 'manipulation' }}
-              className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+              className="w-full h-11 px-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
             />
           </div>
-          <div className="min-w-0">
-          <label
-            htmlFor="memo-editor-category"
-            className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2"
-          >
-            카테고리
-          </label>
-          <select
-            id="memo-editor-category"
-            value={selectedCategoryId ?? ''}
-            onChange={(e) => onCategoryChange(e.target.value ? e.target.value : null)}
-            style={{ touchAction: 'manipulation' }}
-            className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
-          >
-            <option value="">없음 (미분류)</option>
-            {(() => {
-              // 최상위 → 자식 순으로 정렬, 자식은 '— ' 들여쓰기 (부모·자식 모두 선택 가능)
-              const roots = categories.filter((c) => !c.parent_id);
-              const ordered: MemoEditorCategory[] = [];
-              for (const root of roots) {
-                ordered.push(root);
-                for (const child of categories.filter((c) => c.parent_id === root.id)) {
-                  ordered.push(child);
-                }
-              }
-              for (const c of categories) {
-                if (!ordered.some((o) => o.id === c.id)) ordered.push(c);
-              }
-              return ordered.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.parent_id ? `— ${cat.name}` : cat.name}
-                </option>
-              ));
-            })()}
-          </select>
-          </div>
-        </div>
-
-        {/* 중요공지 토글 */}
-        {onPinnedChange && (
-          <div className="px-5 pb-4 -mt-1">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isPinned}
-              onClick={() => onPinnedChange(!isPinned)}
-              style={{ touchAction: 'manipulation' }}
-              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border text-left transition-colors ${
-                isPinned
-                  ? 'border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20'
-                  : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80'
-              }`}
+          <div className="flex-1 min-w-0">
+            <label
+              htmlFor="memo-editor-category"
+              className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2"
             >
-              <span className="min-w-0">
-                <span className="block text-sm font-medium text-gray-900 dark:text-white">📌 중요공지로 표시</span>
-                <span className="block text-[11px] text-gray-500 dark:text-gray-400 leading-snug">
-                  Diary 를 열면 가장 먼저 보이는 중요공지 탭에 고정돼요
-                </span>
-              </span>
+              카테고리
+            </label>
+            <select
+              id="memo-editor-category"
+              value={selectedCategoryId ?? ''}
+              onChange={(e) => onCategoryChange(e.target.value ? e.target.value : null)}
+              style={{ touchAction: 'manipulation' }}
+              className="w-full h-11 px-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors truncate"
+            >
+              <option value="">없음 (미분류)</option>
+              {(() => {
+                // 최상위 → 자식 순으로 정렬, 자식은 '— ' 들여쓰기 (부모·자식 모두 선택 가능)
+                const roots = categories.filter((c) => !c.parent_id);
+                const ordered: MemoEditorCategory[] = [];
+                for (const root of roots) {
+                  ordered.push(root);
+                  for (const child of categories.filter((c) => c.parent_id === root.id)) {
+                    ordered.push(child);
+                  }
+                }
+                for (const c of categories) {
+                  if (!ordered.some((o) => o.id === c.id)) ordered.push(c);
+                }
+                return ordered.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.parent_id ? `— ${cat.name}` : cat.name}
+                  </option>
+                ));
+              })()}
+            </select>
+          </div>
+          {onPinnedChange && (
+            <div className="flex-shrink-0">
               <span
-                aria-hidden
-                className={`relative inline-block w-10 h-6 rounded-full flex-shrink-0 transition-colors ${
-                  isPinned ? 'bg-amber-500' : 'bg-gray-300 dark:bg-gray-600'
+                id="memo-editor-pinned-label"
+                className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 whitespace-nowrap"
+              >
+                중요공지
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isPinned}
+                aria-labelledby="memo-editor-pinned-label"
+                title={isPinned ? '중요공지 해제' : '중요공지로 표시 — Diary 를 열면 가장 먼저 보이는 탭에 고정돼요'}
+                onClick={() => onPinnedChange(!isPinned)}
+                style={{ touchAction: 'manipulation' }}
+                className={`w-full min-w-11 h-11 flex items-center justify-center rounded-xl border transition-colors ${
+                  isPinned
+                    ? 'border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-900/30'
+                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80'
                 }`}
               >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                    isPinned ? 'translate-x-4' : ''
-                  }`}
-                />
-              </span>
-            </button>
-          </div>
-        )}
+                <span aria-hidden className={`text-base transition ${isPinned ? '' : 'grayscale opacity-40'}`}>📌</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="h-px bg-gray-100 dark:bg-gray-800 mx-5" />
 
