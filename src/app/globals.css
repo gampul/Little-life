@@ -262,3 +262,140 @@ input[type="checkbox"]:focus {
 .dark .memo-content.prose ul[data-type='taskList'] > li[data-checked='true'] > div > p {
   color: #6b7280;
 }
+
+/* ── 글자색·형광펜 팔레트 (에디터 인라인 style 이 var() 를 참조 → 다크 모드에서 자동으로 밝은 톤) ── */
+:root {
+  --tc-gray: #6b7280;
+  --tc-red: #dc2626;
+  --tc-orange: #ea580c;
+  --tc-yellow: #ca8a04;
+  --tc-green: #16a34a;
+  --tc-blue: #2563eb;
+  --tc-purple: #9333ea;
+  --tc-pink: #db2777;
+  --hl-yellow: #fef08a;
+  --hl-green: #bbf7d0;
+  --hl-blue: #bfdbfe;
+  --hl-pink: #fbcfe8;
+  --hl-orange: #fed7aa;
+  --hl-purple: #e9d5ff;
+  --hl-gray: #e5e7eb;
+}
+.dark {
+  --tc-gray: #9ca3af;
+  --tc-red: #f87171;
+  --tc-orange: #fb923c;
+  --tc-yellow: #facc15;
+  --tc-green: #4ade80;
+  --tc-blue: #60a5fa;
+  --tc-purple: #c084fc;
+  --tc-pink: #f472b6;
+  --hl-yellow: rgba(234, 179, 8, 0.35);
+  --hl-green: rgba(34, 197, 94, 0.3);
+  --hl-blue: rgba(59, 130, 246, 0.35);
+  --hl-pink: rgba(236, 72, 153, 0.35);
+  --hl-orange: rgba(249, 115, 22, 0.35);
+  --hl-purple: rgba(168, 85, 247, 0.35);
+  --hl-gray: rgba(156, 163, 175, 0.3);
+}
+.ProseMirror mark,
+.memo-content mark {
+  border-radius: 0.2em;
+  padding: 0 0.1em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* ── 링크 북마크 카드 (에디터 + 상세 본문 공통) ── */
+.ProseMirror a.bookmark-card,
+.memo-content.prose a.bookmark-card {
+  display: flex;
+  align-items: stretch;
+  margin: 0.75rem 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+}
+.ProseMirror a.bookmark-card:hover,
+.memo-content.prose a.bookmark-card:hover {
+  color: inherit;
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
+.dark .ProseMirror a.bookmark-card,
+.dark .memo-content.prose a.bookmark-card {
+  border-color: #374151;
+  background: #1f2937;
+  color: inherit;
+}
+.dark .ProseMirror a.bookmark-card:hover,
+.dark .memo-content.prose a.bookmark-card:hover {
+  background: #273244;
+  border-color: #4b5563;
+}
+.ProseMirror a.bookmark-card.ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+.bookmark-card__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 0.875rem;
+}
+.bookmark-card__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #111827;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bookmark-card__desc {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #6b7280;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bookmark-card__url {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dark .bookmark-card__title { color: #f3f4f6; }
+.dark .bookmark-card__desc { color: #9ca3af; }
+.dark .bookmark-card__url { color: #6b7280; }
+.bookmark-card__thumb {
+  flex: 0 0 34%;
+  max-width: 160px;
+  min-height: 84px;
+  background: #f3f4f6;
+  position: relative;
+}
+.dark .bookmark-card__thumb { background: #111827; }
+.ProseMirror .bookmark-card__thumb img,
+.memo-content.prose .bookmark-card__thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  margin: 0;
+  border-radius: 0;
+  max-width: none;
+}
