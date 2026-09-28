@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '../../../lib/supabase';
+import { useScrollDirection } from '../../../hooks/useScrollDirection';
 
 /** 상단 sticky 바 안의 뒤로가기 — sticky+backdrop-blur 는 fixed 의 기준이 되므로 액션 버튼은 여기 두지 않음 */
 export function MemoDetailTopBar() {
@@ -28,6 +29,9 @@ export function MemoDetailActions({ id }: { id: string }) {
   const router = useRouter();
   const supabase = getSupabase();
   const [isDeleting, setIsDeleting] = useState(false);
+  // 목록의 글쓰기(+) 버튼과 동일: 아래로 스크롤하면 숨기고 위로 올리면 다시 표시 (삭제 중엔 항상 표시)
+  const visible = useScrollDirection() === 'up' || isDeleting;
+  const btnVisibility = visible ? 'pointer-events-auto' : 'pointer-events-none';
 
   const handleDelete = async () => {
     if (!supabase) return;
@@ -48,15 +52,21 @@ export function MemoDetailActions({ id }: { id: string }) {
     <>
       {/*
         수정/삭제 — 에디터의 취소/수정완료와 같은 위치(우하단 고정, FooterNav 위 bottom-24).
-        스크롤 위치와 무관하게 항상 접근 가능.
+        아래로 스크롤해 글을 읽는 동안에는 본문을 가리지 않게 숨기고, 위로 올리면 다시 나타남.
       */}
-      <div className="fixed bottom-24 right-4 z-[60] flex items-center gap-2 pointer-events-none">
+      <div
+        className={`fixed bottom-24 right-4 z-[60] flex items-center gap-2 pointer-events-none transition-all duration-200 ease-out ${
+          visible ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-90'
+        }`}
+        aria-hidden={!visible}
+      >
         <button
           type="button"
           onClick={handleDelete}
           disabled={isDeleting}
+          tabIndex={visible ? 0 : -1}
           style={{ touchAction: 'manipulation' }}
-          className="pointer-events-auto inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-medium bg-white/95 dark:bg-gray-800/95 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 shadow-lg backdrop-blur-sm hover:text-red-600 hover:border-red-200 dark:hover:text-red-400 disabled:opacity-50 transition-colors"
+          className={`${btnVisibility} inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-medium bg-white/95 dark:bg-gray-800/95 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 shadow-lg backdrop-blur-sm hover:text-red-600 hover:border-red-200 dark:hover:text-red-400 disabled:opacity-50 transition-colors`}
           title="삭제"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -67,8 +77,9 @@ export function MemoDetailActions({ id }: { id: string }) {
         <button
           type="button"
           onClick={() => router.push(`/memo?edit=${id}`)}
+          tabIndex={visible ? 0 : -1}
           style={{ touchAction: 'manipulation' }}
-          className="pointer-events-auto inline-flex items-center gap-1.5 h-11 px-5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-colors"
+          className={`${btnVisibility} inline-flex items-center gap-1.5 h-11 px-5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-lg transition-colors`}
           title="수정"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
