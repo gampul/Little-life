@@ -11,7 +11,26 @@ interface TokenRow {
   created_at: string;
   last_used_at: string | null;
   use_count: number;
+  /** 마지막 거절·테스트 기록 (card-ingest 가 남김) */
+  last_error?: string | null;
+  last_error_at?: string | null;
 }
+
+/** 서버가 남긴 마지막 기록을 사람이 읽을 문장으로 */
+const describeLastEvent = (t: TokenRow): { text: string; tone: 'ok' | 'warn' } | null => {
+  if (!t.last_error || !t.last_error_at) return null;
+  const when = fmtTime(t.last_error_at);
+  if (t.last_error.startsWith('test_run_ok')) {
+    return { text: `${when} 동작 테스트 성공 — 연결 정상. 실제 카드 문자가 오면 아래 목록에 들어와요.`, tone: 'ok' };
+  }
+  if (t.last_error.startsWith('unfilled_magic_text')) {
+    return { text: `${when} 알림 내용 대신 변수 이름이 그대로 왔어요. 본문 변수를 … 버튼으로 다시 넣어 주세요.`, tone: 'warn' };
+  }
+  if (t.last_error.startsWith('empty_text')) {
+    return { text: `${when} 알림 본문이 비어서 왔어요. 본문 설정을 확인해 주세요.`, tone: 'warn' };
+  }
+  return { text: `${when} ${t.last_error}`, tone: 'warn' };
+};
 
 interface RecentRow {
   id: string;
@@ -88,7 +107,7 @@ export default function CardIngestSettings() {
   const load = useCallback(async () => {
     if (!supabase) return;
     const [{ data: t }, { data: r }] = await Promise.all([
-      supabase.from('ingest_tokens').select('id, created_at, last_used_at, use_count').order('created_at', { ascending: false }),
+      supabase.from('ingest_tokens').select('id, created_at, last_used_at, use_count, last_error, last_error_at').order('created_at', { ascending: false }),
       supabase
         .from('pending_transactions')
         .select('id, created_at, status, amount, sender, item_name, raw_sms')
@@ -174,6 +193,16 @@ export default function CardIngestSettings() {
             ) : (
               <p className="text-xs text-gray-500 dark:text-gray-400">아직 발급한 토큰이 없어요.</p>
             )}
+            {active &&
+              (() => {
+                const ev = describeLastEvent(active);
+                if (!ev) return null;
+                return (
+                  <p className={`mt-1 text-[11px] ${ev.tone === 'ok' ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {ev.text}
+                  </p>
+                );
+              })()}
             <div className="mt-2 flex gap-1.5">
               <button
                 type="button"

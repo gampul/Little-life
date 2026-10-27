@@ -339,6 +339,18 @@ Deno.serve(async (req: Request) => {
     return json(400, { error });
   };
   const shape = { raw_len: raw.length, title_len: title.length, text_len: message.length, keys: Object.keys(body).slice(0, 8) };
+  // MacroDroid [동작 테스트]는 실제 알림이 없어 변수가 비거나 글자 그대로 온다 → 연결 확인으로 보고 200
+  // (예전에는 400 을 돌려줘 설정이 틀린 것처럼 보였음). 저장은 하지 않음.
+  const looksLikeTestRun =
+    (!message || isUnfilledMagicText(message)) && (!title || isUnfilledMagicText(title));
+  if (looksLikeTestRun) {
+    console.log(JSON.stringify({ test_run: true, ...shape }));
+    await admin
+      .from('ingest_tokens')
+      .update({ last_error: 'test_run_ok (연결 정상, 실제 알림 대기 중)', last_error_at: new Date().toISOString() })
+      .eq('id', tok.id);
+    return json(200, { status: 'test_ok', message: '연결 정상. 실제 알림이 오면 가계부 대기 목록에 들어갑니다.' });
+  }
   if (!message) return await reject('empty_text', shape, 'text(알림 본문)가 비어 있습니다');
   if (isUnfilledMagicText(message)) {
     return await reject(
