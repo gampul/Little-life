@@ -16,6 +16,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
 const MAX_HISTORY = 16; // 최근 대화 턴 수
 const MAX_TOOL_ROUNDS = 4; // 도구 호출 라운드 상한
+const MAX_MESSAGE_CHARS = 2000; // 한 번에 보낼 수 있는 질문 길이
 
 type ChatTurn = { role: 'user' | 'assistant'; content: string };
 
@@ -519,6 +520,17 @@ export async function POST(request: NextRequest) {
     const trace: Record<string, unknown>[] | undefined = body.debug === true ? [] : undefined;
 
     if (!message) return NextResponse.json({ error: '메시지가 필요합니다.' }, { status: 400 });
+    if (message.length > MAX_MESSAGE_CHARS) {
+      return NextResponse.json(
+        { error: `질문이 너무 깁니다. ${MAX_MESSAGE_CHARS.toLocaleString()}자 이내로 줄여 주세요.` },
+        { status: 400 }
+      );
+    }
+
+    // OpenAI 를 부르기 전에 로그인부터 확인 — 로그인하지 않은 호출이 API 비용을 쓰지 못하게
+    const { userId } = await getSupabaseWithUserId();
+    if (!userId) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+
     if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: 'API 키가 설정되지 않았습니다.' }, { status: 500 });
 
     // 최근 대화만, 내용 길이 제한
@@ -587,10 +599,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// 디버그용 — 환경변수·데이터 개수
+// 디버그용 — 환경변수·데이터 개수 (로그인한 본인만)
 export async function GET() {
   try {
     const { supabase, userId } = await getSupabaseWithUserId();
+    if (!userId) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
     const [daily, memos, checks] = await Promise.all([
       userId
         ? supabase.from('daily_records').select('id', { count: 'exact', head: true }).eq('user_id', userId)
