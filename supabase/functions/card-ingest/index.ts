@@ -329,9 +329,23 @@ Deno.serve(async (req: Request) => {
   const app = String(body.app ?? '').trim();
   const receivedAt = String(body.received_at ?? body.not_timestamp ?? '').trim() || new Date().toISOString();
 
-  if (!message) return json(400, { error: 'text(알림 본문)가 비어 있습니다' });
+  // 거절 이유를 진단용으로 남김 (알림 본문 내용은 남기지 않음 — 길이와 치환 안 된 변수 이름만)
+  const reject = async (reason: string, detail: Json, error: string) => {
+    console.log(JSON.stringify({ reject: reason, ...detail }));
+    await admin
+      .from('ingest_tokens')
+      .update({ last_error: `${reason} ${JSON.stringify(detail)}`.slice(0, 300), last_error_at: new Date().toISOString() })
+      .eq('id', tok.id);
+    return json(400, { error });
+  };
+  const shape = { raw_len: raw.length, title_len: title.length, text_len: message.length, keys: Object.keys(body).slice(0, 8) };
+  if (!message) return await reject('empty_text', shape, 'text(알림 본문)가 비어 있습니다');
   if (isUnfilledMagicText(message)) {
-    return json(400, { error: `알림 본문 대신 "${message}" 가 그대로 왔습니다. MacroDroid 매직 텍스트를 다시 넣어 주세요.` });
+    return await reject(
+      'unfilled_magic_text',
+      { ...shape, text: message.slice(0, 40), title: isUnfilledMagicText(title) ? title.slice(0, 40) : undefined },
+      `알림 본문 대신 "${message}" 가 그대로 왔습니다. MacroDroid 매직 텍스트를 다시 넣어 주세요.`
+    );
   }
 
   // 1시간 120건 제한
@@ -355,7 +369,7 @@ Deno.serve(async (req: Request) => {
 
   await admin
     .from('ingest_tokens')
-    .update({ last_used_at: new Date().toISOString(), use_count: (tok.use_count ?? 0) + 1 })
+    .update({ last_used_at: new Date().toISOString(), use_count: (tok.use_count ?? 0) + 1, last_error: null, last_error_at: null })
     .eq('id', tok.id);
 
   if (dup && dup.length > 0) return json(200, { status: 'duplicate', id: dup[0].id });

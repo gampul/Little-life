@@ -28,3 +28,7 @@ create policy ingest_tokens_insert_own on public.ingest_tokens
 create policy ingest_tokens_delete_own on public.ingest_tokens
   for delete to authenticated using (user_id = (select auth.uid()));
 -- update 는 Edge Function(service_role)만 (last_used_at, use_count)
+
+-- 진단: 마지막 거절 이유 (본문 내용 없이 이유·길이만) — 설정 화면에 표시
+alter table public.ingest_tokens add column if not exists last_error text;
+alter table public.ingest_tokens add column if not exists last_error_at timestamptz;
