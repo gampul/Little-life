@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createSupabaseServer } from '../../lib/supabase_ssr';
+import { authErrorMessage, checkPassword, PASSWORD_HINT } from '../../lib/passwordPolicy';
 
 export type AuthActionState = { error?: string };
 
@@ -16,7 +17,7 @@ export async function signInWithPasswordAction(
 
   const supabase = await createSupabaseServer();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: error.message };
+  if (error) return { error: authErrorMessage(error) };
 
   redirect('/ledger');
 }
@@ -29,11 +30,12 @@ export async function signUpWithPasswordAction(
   const password = String(formData.get('password') || '');
 
   if (!email || !password) return { error: '이메일과 비밀번호를 입력해주세요.' };
-  if (password.length < 6) return { error: '비밀번호는 6자 이상이어야 합니다.' };
+  const missing = checkPassword(password);
+  if (missing.length > 0) return { error: `비밀번호에 ${missing.join(', ')} 조건이 필요합니다. (${PASSWORD_HINT})` };
 
   const supabase = await createSupabaseServer();
   const { error } = await supabase.auth.signUp({ email, password });
-  if (error) return { error: error.message };
+  if (error) return { error: authErrorMessage(error) };
 
   // If email confirmation is off, session exists immediately; otherwise user must confirm email.
   redirect('/ledger');

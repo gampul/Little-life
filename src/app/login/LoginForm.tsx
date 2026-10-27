@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { signInWithPasswordAction, signUpWithPasswordAction, type AuthActionState } from '../actions/auth';
+import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../lib/passwordPolicy';
 
 const initialState: AuthActionState = {};
 
@@ -52,9 +53,12 @@ export function LoginForm() {
           name="password"
           type="password"
           required
-          placeholder="비밀번호(6자 이상)"
+          minLength={PASSWORD_MIN_LENGTH}
+          autoComplete="new-password"
+          placeholder={`비밀번호(${PASSWORD_MIN_LENGTH}자 이상)`}
           className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
         />
+        <p className="text-xs text-gray-500 dark:text-gray-400">{PASSWORD_HINT}</p>
         {signUpState?.error && <p className="text-sm text-red-600">{signUpState.error}</p>}
         <button
           type="submit"
