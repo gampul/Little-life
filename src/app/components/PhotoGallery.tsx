@@ -194,12 +194,17 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
   const hasPrev = index > 0;
   const hasNext = index < photos.length - 1;
   const [dragX, setDragX] = useState(0);
+  // 넘길 때 새 사진이 들어오는 방향 (1: 오른쪽에서, -1: 왼쪽에서)
+  const [enterDir, setEnterDir] = useState<0 | 1 | -1>(0);
   const touchRef = useRef<{ x: number; y: number; horizontal: boolean | null } | null>(null);
 
   const go = useCallback(
     (delta: number) => {
       const next = index + delta;
-      if (next >= 0 && next < photos.length) onIndexChange(next);
+      if (next >= 0 && next < photos.length) {
+        setEnterDir(delta > 0 ? 1 : -1);
+        onIndexChange(next);
+      }
     },
     [index, photos.length, onIndexChange]
   );
@@ -235,11 +240,25 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
     }
   }, [index, photos]);
 
+  // 새 사진이 옆에서 밀려 들어오는 애니메이션: 한 프레임 뒤 제자리로
+  useEffect(() => {
+    if (enterDir === 0) return;
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => setEnterDir(0)));
+    return () => cancelAnimationFrame(id);
+  }, [enterDir, index]);
+
+  // 뷰어 안의 터치는 바깥(SwipeNav: 좌우 스와이프로 메뉴 이동)으로 전달하지 않는다
   const onTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation();
+    if (e.touches.length !== 1) {
+      touchRef.current = null; // 두 손가락(확대)은 넘기기로 보지 않음
+      return;
+    }
     const t = e.touches[0];
     touchRef.current = { x: t.clientX, y: t.clientY, horizontal: null };
   };
   const onTouchMove = (e: React.TouchEvent) => {
+    e.stopPropagation();
     const s = touchRef.current;
     if (!s) return;
     const t = e.touches[0];
@@ -253,6 +272,7 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
     }
   };
   const onTouchEnd = (e: React.TouchEvent) => {
+    e.stopPropagation();
     const s = touchRef.current;
     touchRef.current = null;
     if (!s) return;
@@ -260,7 +280,7 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
     const dx = t.clientX - s.x;
     const dy = t.clientY - s.y;
     setDragX(0);
-    if (s.horizontal && Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
+    if (s.horizontal && Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); // 왼쪽으로 쓸면 다음, 오른쪽이면 이전
     else if (s.horizontal === false && dy > 100) onClose(); // 아래로 쓸어내리면 닫기
   };
 
@@ -269,6 +289,9 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
   return (
     <div
       className="fixed inset-0 z-[60] bg-black flex flex-col select-none"
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      data-swipe-ignore
       role="dialog"
       aria-modal="true"
       aria-label="사진 보기"
@@ -294,6 +317,7 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
       {/* 사진 */}
       <div
         className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden"
+        style={{ touchAction: 'pan-y pinch-zoom' }}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -309,8 +333,9 @@ function PhotoViewer({ photos, index, onIndexChange, onClose, onOpenRecord }: Vi
           draggable={false}
           className="max-w-full max-h-full object-contain"
           style={{
-            transform: `translateX(${dragX}px)`,
-            transition: dragX === 0 ? 'transform 180ms ease-out' : 'none',
+            transform: enterDir !== 0 ? `translateX(${enterDir * 40}%)` : `translateX(${dragX}px)`,
+            opacity: enterDir !== 0 ? 0 : 1,
+            transition: enterDir !== 0 || dragX !== 0 ? 'none' : 'transform 220ms ease-out, opacity 220ms ease-out',
           }}
         />
 

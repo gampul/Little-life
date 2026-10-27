@@ -10,6 +10,8 @@ function isInteractiveTarget(target: EventTarget | null) {
   const el = target as HTMLElement | null;
   if (!el) return false;
   if (el.isContentEditable) return true;
+  // 사진 뷰어처럼 자체 좌우 스와이프를 쓰는 영역은 메뉴 이동에서 제외
+  if (el.closest('[data-swipe-ignore]')) return true;
   // closest를 사용하여 부모 요소까지 확인 (예: <button><strong>B</strong></button>)
   return !!el.closest('button, a, input, textarea, select, label, [role="button"]');
 }
