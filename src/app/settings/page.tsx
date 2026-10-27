@@ -81,6 +81,130 @@ function CircularProgressChart({
   );
 }
 
+const DESCRIPTION_MAX = 200;
+
+/** 루틴 부가 설명: 추가 · 수정 · 삭제 (이름 저장 버튼과 별개로 바로 저장) */
+function RoutineDescriptionEditor({
+  description,
+  disabled,
+  onSave,
+}: {
+  description: string | null | undefined;
+  disabled?: boolean;
+  /** null 이면 삭제 */
+  onSave: (next: string | null) => Promise<boolean>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const current = (description ?? '').trim();
+
+  const start = () => {
+    setDraft(current);
+    setEditing(true);
+  };
+  const save = async () => {
+    const next = draft.trim();
+    if (next === current) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    const ok = await onSave(next || null);
+    setBusy(false);
+    if (ok) setEditing(false);
+  };
+  const remove = async () => {
+    if (!window.confirm('이 루틴의 설명을 삭제할까요?')) return;
+    setBusy(true);
+    await onSave(null);
+    setBusy(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="mt-1.5">
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.slice(0, DESCRIPTION_MAX))}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setEditing(false);
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save();
+          }}
+          rows={2}
+          autoFocus
+          placeholder="예: 아침 공복에 30분 걷기, 비 오면 실내 자전거"
+          className="w-full px-2 py-1.5 text-[12px] leading-snug bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="루틴 설명"
+        />
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 tabular-nums">
+            {draft.length}/{DESCRIPTION_MAX}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={busy}
+              className="px-2 py-0.5 text-[11px] rounded min-h-[26px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={busy}
+              className="px-2 py-0.5 text-[11px] rounded min-h-[26px] bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
+            >
+              {busy ? '저장중' : '설명 저장'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!current) {
+    return (
+      <button
+        type="button"
+        onClick={start}
+        disabled={disabled}
+        className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-50"
+      >
+        + 설명 추가
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex items-start gap-2">
+      <p className="flex-1 min-w-0 text-[11px] leading-snug text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words">
+        <span className="text-gray-400 dark:text-gray-500">설명 · </span>
+        {current}
+      </p>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={start}
+          disabled={disabled || busy}
+          className="px-1.5 py-0 text-[11px] rounded min-h-[22px] text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-gray-600"
+        >
+          수정
+        </button>
+        <button
+          type="button"
+          onClick={remove}
+          disabled={disabled || busy}
+          className="px-1.5 py-0 text-[11px] rounded min-h-[22px] text-red-500 hover:bg-red-50 dark:hover:bg-gray-600"
+        >
+          삭제
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // 루틴 아이템 컴포넌트
 function RoutineItemWithChart({
   template,
@@ -95,6 +219,7 @@ function RoutineItemWithChart({
   isDirty,
   isSaving,
   onPickIcon,
+  onSaveDescription,
 }: {
   template: RoutineTemplate;
   index: number;
@@ -112,6 +237,7 @@ function RoutineItemWithChart({
   isDirty: boolean;
   isSaving: boolean;
   onPickIcon: (templateId: string) => void;
+  onSaveDescription: (templateId: string, description: string | null) => Promise<boolean>;
 }) {
   return (
     <div className="bg-[rgb(254,252,247)] dark:bg-gray-700 rounded-lg p-1 sm:p-1.5 border border-gray-200 dark:border-gray-600">
@@ -283,6 +409,11 @@ function RoutineItemWithChart({
             disabled={isSaving}
           />
         )}
+        <RoutineDescriptionEditor
+          description={template.description}
+          disabled={isSaving}
+          onSave={(next) => onSaveDescription(template.id, next)}
+        />
         {isDirty && (
           <div className="mt-1 text-[11px] text-blue-600 dark:text-blue-400">
             변경됨 (저장 필요)
@@ -305,6 +436,8 @@ interface RoutineTemplate {
   sub_items?: RoutineSubItem[];
   /** 선택한 아이콘 키 (routine_templates.icon) */
   icon?: string | null;
+  /** 부가 설명 (routine_templates.description) */
+  description?: string | null;
 }
 
 export default function SettingsPage() {
@@ -391,14 +524,23 @@ export default function SettingsPage() {
         image_upload_enabled: t.image_upload_enabled ?? false,
         sub_items: normalizeSubItems(t.sub_items),
       }));
-      // 아이콘은 별도 조회 (icon 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
-      const { data: iconRows, error: iconErr } = await supabase
+      // 아이콘·설명은 별도 조회 (해당 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
+      let { data: iconRows, error: iconErr } = await supabase
         .from('routine_templates')
-        .select('id, icon')
+        .select('id, icon, description')
         .eq('user_id', userId);
+      if (iconErr) {
+        const retry = await supabase.from('routine_templates').select('id, icon').eq('user_id', userId);
+        iconRows = retry.data as typeof iconRows;
+        iconErr = retry.error;
+      }
       if (!iconErr && iconRows) {
-        const iconById = new Map(iconRows.map((r: any) => [r.id as string, (r.icon as string | null) ?? null]));
-        for (const t of templatesWithType as any[]) t.icon = iconById.get(t.id) ?? null;
+        const byId = new Map(iconRows.map((r: any) => [r.id as string, r]));
+        for (const t of templatesWithType as any[]) {
+          const r: any = byId.get(t.id);
+          t.icon = r?.icon ?? null;
+          t.description = (r?.description ?? '').trim() || null;
+        }
       }
       setRoutineTemplates(templatesWithType);
       setDirtyById(Object.fromEntries((templatesWithType || []).map(t => [t.id, false])));
@@ -680,6 +822,34 @@ export default function SettingsPage() {
     }
     setMessage('✅ 아이콘이 저장되었습니다.');
     setTimeout(() => setMessage(''), 2000);
+  };
+
+  /** 설명 추가·수정(문자열) / 삭제(null) → 바로 저장 */
+  const handleSaveDescription = async (templateId: string, description: string | null): Promise<boolean> => {
+    if (!supabase || !userId) return false;
+    const notify = (msg: string, ms: number) => {
+      setMessage(msg);
+      setTimeout(() => setMessage(''), ms);
+    };
+    const { data, error } = await supabase
+      .from('routine_templates')
+      .update({ description })
+      .eq('id', templateId)
+      .eq('user_id', userId)
+      .select('id');
+    if (error) {
+      const missing = error.code === '42703' || error.code === 'PGRST204' || /description/.test(error.message || '');
+      notify(missing ? '❌ 설명 저장에는 DB 변경이 필요해요. Supabase 에서 add_routine_description.sql 을 실행해 주세요.' : `❌ 설명 저장 실패: ${error.message}`, 6000);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      // 아직 저장하지 않은 새 루틴
+      notify('⚠️ 새 루틴은 먼저 [저장]을 누른 뒤 설명을 추가해 주세요.', 4000);
+      return false;
+    }
+    setRoutineTemplates((prev) => prev.map((t) => (t.id === templateId ? { ...t, description } : t)));
+    notify(description ? '✅ 설명이 저장되었습니다.' : '✅ 설명이 삭제되었습니다.', 2000);
+    return true;
   };
 
   const handleSaveOne = async (templateId: string) => {
@@ -1013,6 +1183,7 @@ export default function SettingsPage() {
                         isDirty={!!dirtyById[template.id]}
                         isSaving={!!savingById[template.id]}
                         onPickIcon={setIconPickerFor}
+                        onSaveDescription={handleSaveDescription}
                       />
                     );
                   })}

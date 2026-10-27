@@ -88,6 +88,8 @@ interface RoutineTemplate {
   sub_items?: RoutineSubItem[];
   /** 선택한 아이콘 키 (routine_templates.icon, add_routine_icon.sql) */
   icon?: string | null;
+  /** 부가 설명 (routine_templates.description, add_routine_description.sql) */
+  description?: string | null;
 }
 
 /** daily_routine_checks 행 — Home 에서 전 루틴을 한 번에 로드해 RoutineItem 으로 내려줌 */
@@ -805,15 +807,31 @@ export default function Home() {
         image_upload_enabled: t.image_upload_enabled ?? false,
         sub_items: normalizeSubItems(t.sub_items),
       }));
-      // 아이콘은 별도 조회 (icon 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
-      const { data: iconRows, error: iconErr } = await supabase
+      // 아이콘·설명은 별도 조회 (해당 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
+      let { data: iconRows, error: iconErr } = await supabase
         .from('routine_templates')
-        .select('id, icon')
+        .select('id, icon, description')
         .eq('user_id', userId);
-      const iconById = new Map<string, string | null>(
-        !iconErr && iconRows ? iconRows.map((r: any) => [r.id as string, (r.icon as string | null) ?? null]) : []
+      if (iconErr) {
+        const retry = await supabase.from('routine_templates').select('id, icon').eq('user_id', userId);
+        iconRows = retry.data as typeof iconRows;
+        iconErr = retry.error;
+      }
+      const extraById = new Map<string, { icon: string | null; description: string | null }>(
+        !iconErr && iconRows
+          ? iconRows.map((r: any) => [
+              r.id as string,
+              { icon: (r.icon as string | null) ?? null, description: ((r.description as string | null) ?? '').trim() || null },
+            ])
+          : []
       );
-      setRoutineTemplates(templatesWithType.map((t: any) => ({ ...t, icon: iconById.get(t.id) ?? null })));
+      setRoutineTemplates(
+        templatesWithType.map((t: any) => ({
+          ...t,
+          icon: extraById.get(t.id)?.icon ?? null,
+          description: extraById.get(t.id)?.description ?? null,
+        }))
+      );
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -3293,6 +3311,8 @@ function RoutineItem({
   /** 루틴 기록 피드에서 온 "이 날짜 입력 시트 열기" 요청 */
   openRequest?: { dateStr: string; nonce: number } | null;
 }) {
+  // 설정에서 남긴 부가 설명 (없으면 표시 안 함)
+  const routineDescription = routineTemplates.find((t) => t.id === routineId)?.description?.trim() || null;
   const [checkedDates, setCheckedDates] = useState<Record<string, Set<string>>>({});
   const [yearlyTotal, setYearlyTotal] = useState<number>(0);
   const [numberDateValues, setNumberDateValues] = useState<Record<string, number>>({});
@@ -3765,6 +3785,9 @@ function RoutineItem({
                     {getRoutineIcon(readingSheet.label, routineTemplates.find((t) => t.id === readingSheet.routineId)?.icon)}
                     {readingSheet.label}
                   </div>
+                  {routineDescription && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 whitespace-pre-wrap break-words">{routineDescription}</p>
+                  )}
                   <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                     {(() => {
                       const date = new Date(readingSheet.dateStr);
@@ -4004,8 +4027,15 @@ function RoutineItem({
           <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">
             {getRoutineIcon(label, routineTemplates.find((t) => t.id === routineId)?.icon)}
           </span>
-          <span className={`text-sm truncate ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
-            {label}
+          <span className="min-w-0 flex flex-col">
+            <span className={`text-sm truncate ${checked ? 'text-gray-900 dark:text-white font-medium' : 'text-gray-500 dark:text-gray-400'}`} style={{ lineHeight: '22px' }}>
+              {label}
+            </span>
+            {routineDescription && (
+              <span className="text-[11px] leading-[15px] text-gray-400 dark:text-gray-500 truncate" title={routineDescription}>
+                {routineDescription}
+              </span>
+            )}
           </span>
         </div>
         
