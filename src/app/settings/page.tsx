@@ -12,6 +12,7 @@ import SubItemsEditor from '../components/SubItemsEditor';
 import { normalizeSubItems, type RoutineSubItem, type RoutineType } from '../../lib/routineSubItems';
 import { RoutineIcon, resolveRoutineIconKey } from '../../lib/routineIcons';
 import RoutineIconPicker from '../components/RoutineIconPicker';
+import RoutineReminderSettings from '../components/RoutineReminderSettings';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
@@ -1111,6 +1112,9 @@ export default function SettingsPage() {
               다이어리(/memo) 글 분류용 카테고리를 추가·수정·삭제합니다.
             </p>
           </div>
+
+          {/* 루틴 알림 (오늘 안 한 루틴 푸시) */}
+          <RoutineReminderSettings />
 
           {/* 루틴 설정 */}
           <div className="mb-4 sm:mb-6">
