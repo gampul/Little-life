@@ -22,7 +22,6 @@ import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
-import { SwipeNav } from '../components/SwipeNav';
 import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/container';
 import {
   useMemos,
@@ -1172,7 +1171,7 @@ function MemoPageContent() {
 export default function MemoPage() {
   return (
     <AuthGuard>
-      <SwipeNav>
+      <>
         <Suspense fallback={
           <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
             <GlobalNav />
@@ -1186,7 +1185,7 @@ export default function MemoPage() {
         }>
           <MemoPageContent />
         </Suspense>
-      </SwipeNav>
+      </>
     </AuthGuard>
   );
 }

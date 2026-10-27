@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
-import { SwipeNav } from '../components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from '../components/container';
 import { getSupabase } from '../../lib/supabase';
 import { FinanceRow, getSortedMonths, formatMonthLabel } from './lib';
@@ -85,7 +84,7 @@ export default function DeployPage() {
 
   return (
     <AuthGuard>
-      <SwipeNav>
+      <>
         <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900">
           <GlobalNav />
 
@@ -171,7 +170,7 @@ export default function DeployPage() {
             />
           )}
         </div>
-      </SwipeNav>
+      </>
     </AuthGuard>
   );
 }

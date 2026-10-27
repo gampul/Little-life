@@ -25,7 +25,6 @@ import {
   type SubValues,
 } from '../lib/routineSubItems';
 import { AuthGuard } from './components/AuthGuard';
-import { SwipeNav } from './components/SwipeNav';
 import { APP_CONTENT_CONTAINER } from './components/container';
 import {
   IconSparkles,
@@ -1698,7 +1697,7 @@ export default function Home() {
 
   return (
     <AuthGuard>
-      <SwipeNav>
+      <>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         {/* 가계부 미처리 건수 배지 (상단 고정 간단 표시) */}
         {pendingCount > 0 && (
@@ -3169,7 +3168,7 @@ export default function Home() {
         
         <FooterNav />
       </div>
-      </SwipeNav>
+      </>
     </AuthGuard>
   );
 }
