@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline } from '@tabler/icons-react';
+import PhotoGallery, { type GalleryPhoto } from './PhotoGallery';
 import { summarizeSubValues, type RoutineSubItem, type RoutineType, type SubValues } from '../../lib/routineSubItems';
 
 interface RoutineTemplate {
@@ -111,6 +112,8 @@ export default function DailyLogFeed({
   const [monthIndex, setMonthIndex] = useState(0);
   const topRef = useRef<HTMLDivElement | null>(null);
   const [expandedMissed, setExpandedMissed] = useState<Record<string, boolean>>({});
+  // 기록(날짜별 글) ↔ 사진(날짜 상관없이 모아보기)
+  const [view, setView] = useState<'log' | 'photos'>('log');
 
   // 날짜별로 루틴 체크 + daily_records 를 머지 → 월 단위 그룹 (최신순)
   const months = useMemo(() => {
@@ -177,6 +180,29 @@ export default function DailyLogFeed({
     if (monthIndex > 0 && monthIndex >= months.length) setMonthIndex(Math.max(0, months.length - 1));
   }, [monthIndex, months.length]);
 
+  // 모든 날짜의 사진을 최신순으로 한 줄에 — 사진 모아보기용
+  const allPhotos = useMemo(() => {
+    const out: GalleryPhoto[] = [];
+    for (const month of months) {
+      for (const day of month.days) {
+        for (const { routine, row } of day.entries) {
+          const memo = row.memo?.trim() || undefined;
+          for (const url of getRowImages(row)) {
+            out.push({ url, date: day.date, label: routine.label, kind: 'routine', routineId: routine.id, memo });
+          }
+        }
+        const rec = day.record;
+        for (const url of rec?.weight_images ?? []) {
+          out.push({ url, date: day.date, label: '체중', kind: 'weight', memo: rec?.weight_memo?.trim() || undefined });
+        }
+        for (const url of rec?.meal_images ?? []) {
+          out.push({ url, date: day.date, label: '식사', kind: 'meal', memo: rec?.meal_memo?.trim() || undefined });
+        }
+      }
+    }
+    return out;
+  }, [months]);
+
   const current = months[Math.min(monthIndex, Math.max(0, months.length - 1))];
   const hasOlder = monthIndex < months.length - 1;
   const hasNewer = monthIndex > 0;
@@ -197,8 +223,46 @@ export default function DailyLogFeed({
     <section aria-label="루틴 기록" className="mb-2" ref={topRef}>
       <div className="flex items-baseline justify-between px-1 mt-4 mb-2">
         <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">루틴 기록</h3>
-        <span className="text-[11px] text-gray-400 dark:text-gray-500">아이콘을 누르면 기록 수정</span>
+        <div
+          className="inline-flex p-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+          role="tablist"
+          aria-label="루틴 기록 보기 방식"
+        >
+          {([
+            ['log', '기록'],
+            ['photos', `사진${allPhotos.length > 0 ? ` ${allPhotos.length}` : ''}`],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                view === key
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {view === 'photos' && (
+        <PhotoGallery
+          photos={allPhotos}
+          onOpenRecord={(p) => {
+            if (p.kind === 'routine' && p.routineId) onEntryClick(p.routineId, p.date);
+            else if (p.kind === 'weight') onWeightClick?.(p.date);
+          }}
+        />
+      )}
+
+      {view === 'log' && (
+      <>
+      <p className="px-1 -mt-1 mb-2 text-[11px] text-gray-400 dark:text-gray-500">아이콘을 누르면 기록 수정</p>
 
       {months.length === 0 && (
         <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
@@ -499,6 +563,8 @@ export default function DailyLogFeed({
             <IconChevronRight size={16} stroke={1.5} />
           </button>
         </div>
+      )}
+      </>
       )}
     </section>
   );
