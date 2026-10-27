@@ -13,6 +13,7 @@ import { normalizeSubItems, type RoutineSubItem, type RoutineType } from '../../
 import { RoutineIcon, resolveRoutineIconKey } from '../../lib/routineIcons';
 import RoutineIconPicker from '../components/RoutineIconPicker';
 import RoutineReminderSettings from '../components/RoutineReminderSettings';
+import CardIngestSettings from '../components/CardIngestSettings';
 
 // 원형 그래프 컴포넌트
 function CircularProgressChart({ 
@@ -1094,6 +1095,9 @@ export default function SettingsPage() {
               자산과 부채를 카테고리별로 그룹화하여 관리할 수 있습니다.
             </p>
           </div>
+
+          {/* 카드 결제 알림 연동 (MacroDroid → 가계부 대기 목록) */}
+          <CardIngestSettings />
 
           {/* 다이어리 카테고리 — /memo 기존 모달로 이동 (로직 변경 없음) */}
           <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
