@@ -75,16 +75,15 @@ function parseAmount(message: string): number | null {
   // 1) "N,NNN원" or "N원" 형태를 모두 수집
   const wonMatches = [...message.matchAll(/([0-9][0-9,]*)\s*원/g)];
   if (wonMatches.length > 0) {
-    // 가장 큰 금액을 선택 (보통 실제 거래 금액)
-    let best: number | null = null;
+    // 누적 사용액·잔액·한도처럼 결제 금액이 아닌 숫자는 건너뛰고, 처음 나오는 금액을 쓴다
+    // (예전에는 가장 큰 금액을 골라 "누적1,234,567원" 이 결제 금액으로 잡힐 수 있었음)
     for (const m of wonMatches) {
-      const raw = m[1].replace(/,/g, '');
-      const n = Number(raw);
-      if (Number.isFinite(n) && (best === null || n > best)) {
-        best = n;
-      }
+      const before = message.slice(Math.max(0, (m.index ?? 0) - 6), m.index ?? 0);
+      if (/누적|잔액|한도|잔여|이용가능|사용가능/.test(before)) continue;
+      const n = Number(m[1].replace(/,/g, ''));
+      if (Number.isFinite(n) && n > 0) return n;
     }
-    return best;
+    return null;
   }
 
   // 2) "원" 없는 경우: 콤마가 포함된 숫자를 찾기 (1,000 이상)
@@ -184,10 +183,13 @@ function parseItemName(message: string): string | null {
   // 2) Multi-line card format:
   //    "04/06 08:59"  ← 이 줄의 바로 다음 줄이 가맹점명
   //    "세븐일레븐롯데월드타워1호점"
+  const isMetaLine = (l: string) =>
+    /원(\s*(일시불|할부.*))?$/.test(l) || /^(일시불|\d+개월)/.test(l) || /누적|잔액|한도/.test(l) || /님$/.test(l);
   for (let i = 0; i < lines.length - 1; i++) {
     if (/^\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/.test(lines[i])) {
-      const next = lines[i + 1].trim();
-      if (next.length > 0) return next;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (!isMetaLine(lines[j])) return lines[j];
+      }
     }
   }
 
@@ -221,8 +223,20 @@ function parseItemName(message: string): string | null {
   return null;
 }
 
+/** 본문에서 카드사 이름 (우리카드(4025)체크승인 → 우리카드, KB국민카드1234승인 → KB국민카드) */
+function detectCardIssuer(message: string): string | null {
+  if (/KB\s*국민|국민카드|KB카드/i.test(message)) return 'KB국민카드';
+  const m = message.match(/(우리|신한|삼성|현대|롯데|하나|BC|비씨|NH|농협|씨티|카카오뱅크|토스뱅크)\s*카드/i);
+  if (m) return m[1].toUpperCase() === 'BC' || m[1] === '비씨' ? 'BC카드' : m[1] === '농협' ? 'NH카드' : `${m[1]}카드`;
+  return null;
+}
+
 function parseSenderName(senderHeader: string | undefined, message: string): string | null {
   const senderTrimmed = (senderHeader ?? '').trim();
+
+  // 0) 카드 승인 문자는 발신번호(1588-…)나 [Web발신] 대신 본문의 카드사 이름을 쓴다 → 결제수단 자동 선택
+  const issuer = detectCardIssuer(message);
+  if (issuer) return issuer;
 
   // 1) Prefer explicit institution name in [brackets] for Kakao notifications.
   //    Example:
@@ -260,6 +274,7 @@ function parseSenderName(senderHeader: string | undefined, message: string): str
 // ─── Category / Type Inference ──────────────────────────
 function inferCategory(message: string): string | null {
   const s = message;
+  if (/취소/.test(s) && /승인|결제/.test(s)) return '환불';
   // 키워드 기반 카테고리 추론 (우선순위 순)
   if (/배당/.test(s)) return '배당금';
   if (/급여|월급/.test(s)) return '급여';
@@ -278,6 +293,8 @@ function inferCategory(message: string): string | null {
 
 function inferTransactionType(message: string): 'income' | 'expense' | 'transfer' | null {
   const s = message;
+  // 승인취소·결제취소는 돈이 돌아오는 것 → 수입(환불)으로 두고 팝업에서 확인
+  if (/취소/.test(s) && /승인|결제/.test(s)) return 'income';
   if (/이체/.test(s)) return 'transfer';
   if (/입금|배당|급여|월급|이자/.test(s)) return 'income';
   if (/출금|결제|승인|인출/.test(s)) return 'expense';
