@@ -313,7 +313,7 @@ export default function DailyLogFeed({
       <>
 
       {months.length === 0 && (
-        <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
+        <div className="border-y border-gray-200 dark:border-gray-700 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
           아직 기록이 없습니다. 루틴을 체크하면 이곳에 그날의 글이 만들어져요.
         </div>
       )}
@@ -345,7 +345,7 @@ export default function DailyLogFeed({
             </button>
           </div>
 
-          <div className="space-y-1.5 mb-3">
+          <div className="mb-3 border-t border-gray-200 dark:border-gray-700">
             {month.days.map((day) => {
               const d = new Date(`${day.date}T00:00:00`);
               const weekday = WEEKDAYS[d.getDay()];
@@ -452,8 +452,8 @@ export default function DailyLogFeed({
                   <div
                     key={day.date}
                     id={`daylog-${day.date}`}
-                    className={`rounded-lg px-3 py-1.5 bg-transparent hover:bg-[rgb(254,252,247)] dark:hover:bg-gray-800/60 transition-colors ${
-                      highlightDate === day.date ? 'ring-2 ring-amber-400' : ''
+                    className={`border-b border-gray-200 dark:border-gray-700 px-1 py-2.5 hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors ${
+                      highlightDate === day.date ? 'bg-amber-50 dark:bg-amber-900/20' : ''
                     }`}
                   >
                     <button
@@ -474,8 +474,8 @@ export default function DailyLogFeed({
                 <article
                   key={day.date}
                   id={`daylog-${day.date}`}
-                  className={`bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 transition-shadow ${
-                    highlightDate === day.date ? 'ring-2 ring-amber-400' : ''
+                  className={`border-b border-gray-200 dark:border-gray-700 px-1 py-3.5 ${
+                    highlightDate === day.date ? 'bg-amber-50 dark:bg-amber-900/20' : ''
                   }`}
                 >
                   <header className="flex items-center justify-between gap-2 mb-2">

@@ -1672,7 +1672,7 @@ export default function Home() {
           {/* 입력 섹션 */}
           <div>
             {/* 날짜, 체중 입력, 수정 버튼 한 줄 배치 */}
-            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            <div className="border-b border-gray-200 dark:border-gray-700 py-4 sm:py-5">
               {/* 오늘 체중 카드 — 숫자를 누르면 체중 기록 창(체중·메모·사진·날짜) 하나로 통일 */}
               {(() => {
                 const today = getKstDateString();
@@ -1898,7 +1898,7 @@ export default function Home() {
             </div>
 
             {/* 체중 변화 그래프 */}
-            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            <div className="border-b border-gray-200 dark:border-gray-700 py-4 sm:py-5">
               <div className="flex flex-col gap-3 mb-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">📊 체중 변화</h3>
@@ -2492,7 +2492,7 @@ export default function Home() {
             </div>
 
             {/* 데일리 루틴 - 동적으로 렌더링 */}
-            <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 mb-2">
+            <div className="border-b border-gray-200 dark:border-gray-700 py-4 sm:py-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200">데일리 루틴</h3>
                 {/* 최근 5일 날짜 표시 */}
