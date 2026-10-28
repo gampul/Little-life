@@ -1,5 +1,5 @@
 -- Diary 글 → Daily "글쓰기" 루틴 자동 체크 (메모·사진 포함)
--- 상태: 작성 완료, 아직 프로덕션 미적용 (2026-10-28 적용 시도 중 승인 대기로 취소됨)
+-- 2026-10-28 프로덕션 적용 (Supabase migration: diary_to_writing_routine)
 --
 -- memos 가 생기거나(insert) 제목·본문·날짜·대표사진이 바뀌거나(update) 지워지면(delete)
 -- 그 글의 날짜(KST)에 대해 sync_writing_routine(user, date) 를 다시 계산한다.
