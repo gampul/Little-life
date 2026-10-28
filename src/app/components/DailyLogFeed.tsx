@@ -265,8 +265,8 @@ export default function DailyLogFeed({
         >
           {([
             ['log', '기록'],
-            ['photos', `사진${allPhotos.length > 0 ? ` ${allPhotos.length}` : ''}`],
             ['calendar', '달력'],
+            ['photos', '사진'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -311,7 +311,6 @@ export default function DailyLogFeed({
 
       {view === 'log' && (
       <>
-      <p className="px-1 -mt-1 mb-2 text-[11px] text-gray-400 dark:text-gray-500">아이콘을 누르면 기록 수정</p>
 
       {months.length === 0 && (
         <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 text-center text-sm text-gray-400 dark:text-gray-500">
