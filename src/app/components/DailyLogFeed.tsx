@@ -411,7 +411,7 @@ export default function DailyLogFeed({
               const doneIds = new Set(day.entries.map((e) => e.routine.id));
               const stampRoutines = [...routineTemplates].sort((a, b) => a.sort_order - b.sort_order);
               const stampRow = stampRoutines.length > 0 && (
-                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5" aria-label="루틴 완료 현황">
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-1" aria-label="루틴 완료 현황">
                   {stampRoutines.map((routine) => {
                     const done = doneIds.has(routine.id);
                     const glyph =
@@ -433,9 +433,9 @@ export default function DailyLogFeed({
                         title={`${routine.label}${done ? ' · 완료' : ' · 미완료'}`}
                         aria-label={`${routine.label} ${day.date} ${done ? '완료' : '미완료'}`}
                         aria-pressed={done}
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors ${
                           done
-                            ? 'text-[#474c56] dark:text-[#c9ccd3]'
+                            ? 'bg-gray-200 text-[#474c56] dark:bg-gray-700 dark:text-gray-100'
                             : 'text-gray-300 dark:text-gray-600 hover:text-gray-500'
                         }`}
                       >
