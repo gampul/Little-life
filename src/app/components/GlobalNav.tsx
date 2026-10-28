@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { IconBell, IconSettings } from '@tabler/icons-react';
+import { IconBell, IconLogout, IconSettings } from '@tabler/icons-react';
 import { signOutAction } from '../actions/auth';
 import { getSupabase } from '../../lib/supabase';
 import { APP_HORIZONTAL_CONTAINER } from './container';
@@ -140,10 +140,11 @@ export function GlobalNav(props: GlobalNavProps) {
                 )}
                 <form action={signOutAction}>
                   <button
-                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 whitespace-nowrap"
+                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     aria-label="로그아웃"
+                    title="로그아웃"
                   >
-                    로그아웃
+                    <IconLogout size={22} stroke={1.75} aria-hidden="true" />
                   </button>
                 </form>
               </div>
