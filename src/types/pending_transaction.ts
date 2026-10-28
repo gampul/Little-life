@@ -17,6 +17,8 @@ export interface PendingTransaction {
   memo: string | null;
   status: TransactionStatus;
   parsed_data: Record<string, unknown> | null;
+  /** 나중에/임시저장을 누른 시각 — 자동 팝업에서 제외 */
+  snoozed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

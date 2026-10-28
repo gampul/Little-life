@@ -21,6 +21,8 @@ interface PendingSmsPopupProps {
   }) => Promise<void>;
   onSkip: (id: string) => void;
   onDismiss: (id: string) => Promise<void>;
+  /** 이 건을 포함해 남은 확인 대기 건수 */
+  remaining?: number;
 }
 
 interface AssetBalance {
@@ -35,7 +37,7 @@ const TYPE_CONFIG = [
   { key: 'transfer' as TransactionType, label: '이체', emoji: '🔄', color: 'blue' },
 ];
 
-export function PendingSmsPopup({ item, onConfirm, onTempSave, onSkip, onDismiss }: PendingSmsPopupProps) {
+export function PendingSmsPopup({ item, onConfirm, onTempSave, onSkip, onDismiss, remaining = 1 }: PendingSmsPopupProps) {
   // memo 초기값: 임시저장된 memo > item_name > ''
   const initialMemo = item.memo ?? item.item_name ?? '';
   const [type, setType] = useState<TransactionType | null>(item.transaction_type ?? null);
@@ -223,6 +225,9 @@ export function PendingSmsPopup({ item, onConfirm, onTempSave, onSkip, onDismiss
             <div className="flex items-center gap-2">
               <span className="text-lg">📩</span>
               <span className="text-sm font-bold text-gray-900 dark:text-white">{senderDisplay}</span>
+              {remaining > 1 && (
+                <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500">외 {remaining - 1}건</span>
+              )}
             </div>
             <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">{dateTimeDisplay}</span>
           </div>

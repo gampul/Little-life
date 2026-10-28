@@ -186,9 +186,14 @@ export default function Home() {
   }, [supabase]);
 
   // Load initial pending list and count (상단 종 아이콘을 누르면 다시 불러와 팝업을 띄운다)
+  // 자동으로 뜨는 팝업은 "나중에"로 미룬 건(snoozed_at)을 빼고, 종을 눌렀을 때는 미룬 건까지 모두 보여준다
   const [pendingReloadTick, setPendingReloadTick] = useState(0);
+  const includeSnoozedRef = useRef(false);
   useEffect(() => {
-    const onOpen = () => setPendingReloadTick((n) => n + 1);
+    const onOpen = () => {
+      includeSnoozedRef.current = true;
+      setPendingReloadTick((n) => n + 1);
+    };
     window.addEventListener('little-life:open-pending', onOpen);
     return () => window.removeEventListener('little-life:open-pending', onOpen);
   }, []);
@@ -196,12 +201,26 @@ export default function Home() {
     if (!supabase || !userId) return;
     let isMounted = true;
     const load = async () => {
-      const { data } = await supabase
+      const includeSnoozed = includeSnoozedRef.current;
+      includeSnoozedRef.current = false;
+      let query = supabase
         .from('pending_transactions')
         .select('*')
         .eq('user_id', userId)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
+      if (!includeSnoozed) query = query.is('snoozed_at', null);
+      let { data, error } = await query;
+      // snoozed_at 컬럼이 없는 DB (마이그레이션 전) → 예전처럼 전부
+      if (error && /snoozed_at/.test(error.message || '')) {
+        const retry = await supabase
+          .from('pending_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        data = retry.data;
+      }
       if (!isMounted) return;
       setPendingQueue((data as PendingTransaction[]) ?? []);
       setPendingCount((data?.length as number) ?? 0);
@@ -313,20 +332,21 @@ export default function Home() {
     }
   }, [supabase, userId, pendingQueue]);
 
-  // ── 나중에: 팝업 닫기 (큐 뒤로 이동 또는 임시 숨김) ──
+  // ── 나중에: 이번에는 넘기고 보관 → 다음 건으로 (자동 팝업에서는 다시 안 뜸, 종 아이콘으로 다시 열기) ──
+  // 예전에는 큐 뒤로 보내기만 해서 건이 여러 개면 팝업이 끝없이 돌았음
   const handleSkipPending = useCallback((id: string) => {
-    setPendingQueue((q) => {
-      if (q.length <= 1) {
-        // 1개뿐이면 빈 배열로 → 팝업 닫힘 (큐에서 완전 제거는 아님, 새로고침 시 다시 로드)
-        return [];
-      }
-      const idx = q.findIndex((p) => p.id === id);
-      if (idx < 0) return q;
-      const item = q[idx];
-      return [...q.slice(0, idx), ...q.slice(idx + 1), item];
-    });
-    devLog('⏭️ [나중에] 스킵:', id);
-  }, []);
+    setPendingQueue((q) => q.filter((p) => p.id !== id));
+    devLog('⏭️ [나중에] 보관:', id);
+    if (!supabase || !userId) return;
+    supabase
+      .from('pending_transactions')
+      .update({ snoozed_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .then(({ error }) => {
+        if (error) console.error('❌ [나중에] 보관 실패:', error.message);
+      });
+  }, [supabase, userId]);
 
   // ── 임시저장: DB에 현재 편집 내용 저장 + 큐 뒤로 이동 ──
   const handleTempSavePending = useCallback(async (id: string, updates: {
@@ -348,6 +368,7 @@ export default function Home() {
           transaction_type: updates.transaction_type,
           memo: updates.memo,
           amount: updates.amount,
+          snoozed_at: new Date().toISOString(),
         })
         .eq('id', id)
         .eq('user_id', userId);
@@ -360,22 +381,8 @@ export default function Home() {
 
       devLog('💾 [임시저장] 성공:', id);
 
-      // 큐에서 해당 아이템 업데이트 + 뒤로 이동 (또는 1개면 팝업 닫기)
-      setPendingQueue((q) => {
-        const idx = q.findIndex((p) => p.id === id);
-        if (idx < 0) return q;
-        const updatedItem: PendingTransaction = {
-          ...q[idx],
-          transaction_type: updates.transaction_type,
-          memo: updates.memo,
-          amount: updates.amount,
-        };
-        if (q.length <= 1) {
-          // 1개뿐이면 팝업 닫기 (다음 로드 시 복원됨)
-          return [];
-        }
-        return [...q.slice(0, idx), ...q.slice(idx + 1), updatedItem];
-      });
+      // 임시저장도 "나중에"처럼 보관 → 다음 건으로 (종 아이콘으로 다시 열면 저장한 내용으로 이어서)
+      setPendingQueue((q) => q.filter((p) => p.id !== id));
     } catch (err) {
       console.error('❌ [임시저장] 예외:', err);
       alert('임시저장 중 오류가 발생했습니다.');
@@ -1733,6 +1740,7 @@ export default function Home() {
             onTempSave={handleTempSavePending}
             onSkip={handleSkipPending}
             onDismiss={handleDismissPending}
+            remaining={pendingQueue.length}
           />
         )}
         {/* 체중 입력 모달 */}
