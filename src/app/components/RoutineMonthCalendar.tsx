@@ -181,7 +181,7 @@ export default function RoutineMonthCalendar({
         })}
       </div>
 
-      <div className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-3 py-3">
+      <div className="border-y border-gray-200 dark:border-gray-700 py-3">
         {/* 월 이동 + 요약 */}
         <div className="flex items-center justify-between mb-1">
           <button
