@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { IconChevronLeft, IconChevronRight, IconToolsKitchen2, IconNotes, IconScaleOutline } from '@tabler/icons-react';
 import PhotoGallery, { type GalleryPhoto } from './PhotoGallery';
+import RoutineMonthCalendar from './RoutineMonthCalendar';
+import { getRowImages, isRoutineRowDone } from '../../lib/routineDone';
 import { summarizeSubValues, type RoutineSubItem, type RoutineType, type SubValues } from '../../lib/routineSubItems';
 
 interface RoutineTemplate {
@@ -55,6 +57,8 @@ interface Props {
   onWeightClick?: (dateStr: string) => void;
   /** 매트릭스와 같은 라인 아이콘 (없으면 아이콘 생략) */
   renderIcon?: (routine: { label: string; icon?: string | null }) => ReactNode;
+  /** Daily 위쪽 루틴 줄을 누르면 → 달력을 그 루틴으로 걸러 연다 */
+  calendarRequest?: { routineId: string; nonce: number } | null;
 }
 
 interface DayEntry {
@@ -80,14 +84,6 @@ const getKstTodayString = (): string => {
 const formatValue = (value: number): string =>
   Number.isInteger(value) ? String(value) : value.toFixed(1);
 
-/** 행의 사진 목록 (image_urls 우선, 없으면 기존 단일 image_url) */
-const getRowImages = (row: RoutineCheckRow): string[] => {
-  const list = Array.isArray(row.image_urls) ? row.image_urls.filter(Boolean) : [];
-  // 루틴별 캘린더(기존 단일 업로드)에서 사진을 바꾼 경우 image_url 만 갱신되므로 맨 앞에 합친다
-  if (row.image_url && !list.includes(row.image_url)) return [row.image_url, ...list].slice(0, 5);
-  return list;
-};
-
 const hasRecordContent = (r: DailyRecord): boolean =>
   r.weight != null ||
   !!r.meal_breakfast ||
@@ -107,13 +103,17 @@ export default function DailyLogFeed({
   onImageClick,
   onWeightClick,
   renderIcon,
+  calendarRequest,
 }: Props) {
   // 월 단위 페이지: 0 = 기록이 있는 가장 최근 달
   const [monthIndex, setMonthIndex] = useState(0);
   const topRef = useRef<HTMLDivElement | null>(null);
   const [expandedMissed, setExpandedMissed] = useState<Record<string, boolean>>({});
-  // 기록(날짜별 글) ↔ 사진(날짜 상관없이 모아보기)
-  const [view, setView] = useState<'log' | 'photos'>('log');
+  // 기록(날짜별 글) / 사진(날짜 상관없이 모아보기) / 달력(한 달 흐름, 전체·루틴별)
+  const [view, setView] = useState<'log' | 'photos' | 'calendar'>('log');
+  const [calendarRoutineId, setCalendarRoutineId] = useState<string | null>(null);
+  // 달력에서 "그날 기록 보기"로 왔을 때 잠깐 강조할 날짜
+  const [highlightDate, setHighlightDate] = useState<string | null>(null);
 
   // 날짜별로 루틴 체크 + daily_records 를 머지 → 월 단위 그룹 (최신순)
   const months = useMemo(() => {
@@ -123,16 +123,8 @@ export default function DailyLogFeed({
 
     for (const routine of ordered) {
       for (const row of checksByRoutine[routine.id] ?? []) {
-        if (!row.checked || row.date > todayStr) continue;
-        // 값이 0 이고 메모·사진도 없는 숫자 기록은 "하지 않음"으로 본다
-        if (
-          routine.type === 'number' &&
-          (row.value == null || row.value === 0) &&
-          !row.memo &&
-          getRowImages(row).length === 0
-        ) {
-          continue;
-        }
+        // 값이 0 이고 메모·사진도 없는 숫자 기록은 "하지 않음"으로 본다 (달력·알림과 같은 기준)
+        if (row.date > todayStr || !isRoutineRowDone(routine.type, row)) continue;
         if (!byDate.has(row.date)) byDate.set(row.date, new Map());
         byDate.get(row.date)!.set(routine.id, row);
       }
@@ -203,6 +195,49 @@ export default function DailyLogFeed({
     return out;
   }, [months]);
 
+  const orderedRoutines = useMemo(
+    () => [...routineTemplates].sort((a, b) => a.sort_order - b.sort_order),
+    [routineTemplates]
+  );
+  const logDates = useMemo(() => new Set(months.flatMap((mo) => mo.days.map((d) => d.date))), [months]);
+
+  const scrollToTop = () =>
+    requestAnimationFrame(() => {
+      const el = topRef.current;
+      if (!el) return;
+      const y = el.getBoundingClientRect().top + window.scrollY - 72;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    });
+
+  // 위쪽 루틴 줄에서 온 요청 → 달력(그 루틴)으로
+  const lastCalendarNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!calendarRequest || calendarRequest.nonce === lastCalendarNonce.current) return;
+    lastCalendarNonce.current = calendarRequest.nonce;
+    setCalendarRoutineId(calendarRequest.routineId);
+    setView('calendar');
+    scrollToTop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarRequest]);
+
+  // 달력 → 그날 기록 카드로 이동
+  const showDayLog = (date: string) => {
+    const idx = months.findIndex((mo) => mo.key === date.slice(0, 7));
+    if (idx < 0) return;
+    setMonthIndex(idx);
+    setView('log');
+    setExpandedMissed((prev) => ({ ...prev, [date]: true }));
+    setHighlightDate(date);
+    setTimeout(() => setHighlightDate((d) => (d === date ? null : d)), 2200);
+    // 렌더 후 카드 위치로
+    setTimeout(() => {
+      const el = document.getElementById(`daylog-${date}`);
+      if (!el) return;
+      const y = el.getBoundingClientRect().top + window.scrollY - 96;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }, 60);
+  };
+
   const current = months[Math.min(monthIndex, Math.max(0, months.length - 1))];
   const hasOlder = monthIndex < months.length - 1;
   const hasNewer = monthIndex > 0;
@@ -231,6 +266,7 @@ export default function DailyLogFeed({
           {([
             ['log', '기록'],
             ['photos', `사진${allPhotos.length > 0 ? ` ${allPhotos.length}` : ''}`],
+            ['calendar', '달력'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -257,6 +293,19 @@ export default function DailyLogFeed({
             if (p.kind === 'routine' && p.routineId) onEntryClick(p.routineId, p.date);
             else if (p.kind === 'weight') onWeightClick?.(p.date);
           }}
+        />
+      )}
+
+      {view === 'calendar' && (
+        <RoutineMonthCalendar
+          routines={orderedRoutines}
+          checksByRoutine={checksByRoutine}
+          selectedRoutineId={calendarRoutineId}
+          onSelectRoutine={setCalendarRoutineId}
+          onEntryClick={onEntryClick}
+          onShowDayLog={showDayLog}
+          hasDayLog={(d) => logDates.has(d)}
+          renderIcon={renderIcon}
         />
       )}
 
@@ -403,7 +452,10 @@ export default function DailyLogFeed({
                 return (
                   <div
                     key={day.date}
-                    className="rounded-lg px-3 py-1.5 bg-transparent hover:bg-[rgb(254,252,247)] dark:hover:bg-gray-800/60 transition-colors"
+                    id={`daylog-${day.date}`}
+                    className={`rounded-lg px-3 py-1.5 bg-transparent hover:bg-[rgb(254,252,247)] dark:hover:bg-gray-800/60 transition-colors ${
+                      highlightDate === day.date ? 'ring-2 ring-amber-400' : ''
+                    }`}
                   >
                     <button
                       type="button"
@@ -422,7 +474,10 @@ export default function DailyLogFeed({
               return (
                 <article
                   key={day.date}
-                  className="bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3"
+                  id={`daylog-${day.date}`}
+                  className={`bg-[rgb(254,252,247)] dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 transition-shadow ${
+                    highlightDate === day.date ? 'ring-2 ring-amber-400' : ''
+                  }`}
                 >
                   <header className="flex items-center justify-between gap-2 mb-2">
                     <h4 className="text-sm font-semibold text-gray-900 dark:text-white">{dateLabel}</h4>
