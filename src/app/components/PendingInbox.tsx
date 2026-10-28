@@ -197,6 +197,7 @@ export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
   const handleTempSavePending = useCallback(async (id: string, updates: {
     transaction_type: TransactionType | null;
     asset: string;
+    item_name: string;
     memo: string;
     amount: number;
   }) => {
@@ -211,7 +212,8 @@ export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
         .from('pending_transactions')
         .update({
           transaction_type: updates.transaction_type,
-          memo: updates.memo,
+          item_name: updates.item_name || null,
+          memo: updates.memo || null,
           amount: updates.amount,
           snoozed_at: new Date().toISOString(),
         })
