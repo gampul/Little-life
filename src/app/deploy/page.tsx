@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
+import { ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
 import { AuthGuard } from '../components/AuthGuard';
 import { APP_CONTENT_CONTAINER } from '../components/container';
 import { getSupabase } from '../../lib/supabase';
@@ -153,7 +154,7 @@ export default function DeployPage() {
           {/* FAB */}
           <button
             onClick={() => setShowModal(true)}
-            className="fixed bottom-24 right-[max(82px,calc(50%-124px))] sm:right-[calc(50%-112px)] z-[120] w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center text-3xl leading-none hover:bg-blue-700 transition-colors"
+            className={`fixed bottom-24 ${ASSET_FAB_RIGHT} z-[120] w-[54px] h-[54px] rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center text-3xl leading-none hover:bg-blue-700 transition-colors`}
             aria-label="투자 데이터 추가"
           >
             +
