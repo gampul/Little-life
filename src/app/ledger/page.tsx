@@ -1,400 +1,297 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconDownload,
+  IconPlus,
+  IconSearch,
+  IconUpload,
+  IconX,
+} from '@tabler/icons-react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
+import { useAuth } from '../components/AuthProvider';
 import { getSupabase } from '../../lib/supabase';
-import { Dashboard } from './components/Dashboard';
-import { TransactionForm, TransactionData } from './components/TransactionForm';
-import { TransactionList, Transaction } from './components/TransactionList';
-import { TransactionFilters, FilterState } from './components/TransactionFilters';
+import { TransactionForm, TransactionData, EditableTransaction, kstDateString } from './components/TransactionForm';
 import { ExcelUpload } from './components/ExcelUpload';
 import { APP_HORIZONTAL_CONTAINER } from '../components/container';
+import {
+  LedgerTx,
+  WEEKDAYS,
+  amountClass,
+  categoryIcon,
+  kstMonthStartIso,
+  kstTimeLabel,
+  kstYmd,
+  toKst,
+  won,
+} from './ledgerUtils';
 
-interface FinancialSummary {
-  total_income: number;
-  total_expense: number;
-  net_asset: number;
+type Tab = 'daily' | 'calendar' | 'monthly';
+
+interface Totals {
+  income: number;
+  expense: number;
 }
 
-interface AssetSummaryRpcRow {
-  total_assets: number;
-  total_liabilities: number;
-  net_worth: number;
-  asset_count: number;
-  liability_count: number;
+function sumTotals(list: Pick<LedgerTx, 'transaction_type' | 'amount'>[]): Totals {
+  let income = 0;
+  let expense = 0;
+  for (const t of list) {
+    if (t.transaction_type === '수입') income += Number(t.amount) || 0;
+    else if (t.transaction_type === '지출') expense += Number(t.amount) || 0;
+  }
+  return { income, expense };
 }
 
-function toSafeNumber(value: unknown): number {
-  const n = typeof value === 'string' ? Number(value) : (value as number);
-  return Number.isFinite(n) ? n : 0;
+function nowKst() {
+  const k = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return { year: k.getUTCFullYear(), month: k.getUTCMonth() + 1 };
+}
+
+/** 수입 · 지출 · 합계 한 줄 */
+function SummaryBar({ totals }: { totals: Totals }) {
+  const net = totals.income - totals.expense;
+  return (
+    <div className="grid grid-cols-3 border-b border-gray-200 dark:border-gray-700 py-2 text-center">
+      <div>
+        <div className="text-[12px] text-gray-500 dark:text-gray-400">수입</div>
+        <div className="text-[15px] font-semibold tabular-nums text-blue-600 dark:text-blue-400">{won(totals.income)}</div>
+      </div>
+      <div>
+        <div className="text-[12px] text-gray-500 dark:text-gray-400">지출</div>
+        <div className="text-[15px] font-semibold tabular-nums text-red-500 dark:text-red-400">{won(totals.expense)}</div>
+      </div>
+      <div>
+        <div className="text-[12px] text-gray-500 dark:text-gray-400">합계</div>
+        <div className="text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">{won(net)}</div>
+      </div>
+    </div>
+  );
+}
+
+/** 하루 묶음: 날짜 머리 + 거래 줄들 */
+function DayGroup({ ymd, items, onEdit }: { ymd: string; items: LedgerTx[]; onEdit: (t: LedgerTx) => void }) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const totals = sumTotals(items);
+  const badge =
+    dow === 0 ? 'bg-red-500 text-white' : dow === 6 ? 'bg-blue-500 text-white' : 'bg-gray-500 text-white dark:bg-gray-600';
+  return (
+    <section id={`ledger-day-${ymd}`} className="border-b-8 border-gray-100 dark:border-gray-800/70">
+      <div className="flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 px-1 py-2.5">
+        <span className="text-[22px] font-bold leading-none tabular-nums text-gray-900 dark:text-white">{d}</span>
+        <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${badge}`}>{WEEKDAYS[dow]}요일</span>
+        <span className="text-[12px] text-gray-400 tabular-nums">
+          {y}.{String(m).padStart(2, '0')}
+        </span>
+        <span className="ml-auto flex gap-3 text-[13px] font-medium tabular-nums">
+          <span className="text-blue-600 dark:text-blue-400">{won(totals.income)}원</span>
+          <span className="text-red-500 dark:text-red-400">{won(totals.expense)}원</span>
+        </span>
+      </div>
+      <ul>
+        {items.map((t) => {
+          const time = kstTimeLabel(t.date);
+          const isTransfer = t.transaction_type === '자산이체';
+          const title = (t.memo && t.memo.trim()) || (isTransfer ? '이체' : t.sub_category || t.category);
+          const assetLine = isTransfer && t.transfer_asset ? `${t.asset} → ${t.transfer_asset}` : t.asset;
+          return (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => onEdit(t)}
+                className="flex w-full items-center gap-2 px-1 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60"
+              >
+                <div className="w-[76px] shrink-0 min-w-0">
+                  <div className="truncate text-[13px] text-gray-600 dark:text-gray-300">
+                    {isTransfer ? '이체' : (
+                      <>
+                        <span className="mr-0.5">{categoryIcon(t.category)}</span>
+                        {t.category}
+                      </>
+                    )}
+                  </div>
+                  {!isTransfer && t.sub_category && (
+                    <div className="truncate text-[11px] text-gray-400">{t.sub_category}</div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] text-gray-900 dark:text-gray-100">{title}</div>
+                  <div className="truncate text-[12px] text-gray-400">
+                    {time && <span className="mr-2">{time}</span>}
+                    {assetLine}
+                  </div>
+                </div>
+                <div className={`shrink-0 text-[14px] font-medium tabular-nums ${amountClass(t.transaction_type)}`}>
+                  {won(t.amount)}원
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
 }
 
 export default function LedgerPage() {
   const supabase = getSupabase();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [showUpload, setShowUpload] = useState(false);
-  
-  // 재무 요약 데이터
-  const [summary, setSummary] = useState<FinancialSummary>({
-    total_income: 0,
-    total_expense: 0,
-    net_asset: 0,
-  });
-  
-  // 거래 목록
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const PAGE_SIZE = 20;
-  
-  // 필터
-  const [filters, setFilters] = useState<FilterState>({
-    period: 'all',
-    type: 'all',
-  });
-  
-  // 자산 필터
-  const [assetFilter, setAssetFilter] = useState<string | null>(null);
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
 
-  // 사용자 인증 확인
+  const init = nowKst();
+  const [year, setYear] = useState(init.year);
+  const [month, setMonth] = useState(init.month);
+  const [tab, setTab] = useState<Tab>('daily');
+
+  const [monthTx, setMonthTx] = useState<LedgerTx[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [yearTotals, setYearTotals] = useState<Record<number, Totals[]>>({});
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [showUpload, setShowUpload] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<LedgerTx | null>(null);
+
   useEffect(() => {
     if (!supabase) return;
-
-    let mounted = true;
-
-    const loadAuth = async () => {
-      // 1) 세션 기반 시도
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (!mounted) return;
-      if (sessionError) {
-        console.error('세션 오류:', sessionError);
-      }
-
-      const session = sessionData.session;
-      if (session?.user?.id) {
-        setUserId(session.user.id);
-        setAccessToken(session.access_token ?? null);
-        return;
-      }
-
-      // 2) 세션이 비어있을 때 getUser로 한 번 더 확인
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (!mounted) return;
-      if (userError) {
-        console.error('사용자 확인 오류:', userError);
-        setUserId(null);
-        setAccessToken(null);
-        return;
-      }
-
-      setUserId(userData.user?.id ?? null);
-    };
-
-    loadAuth();
-
-    // 3) 인증 상태 변화 반영
-    const { data: authSub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setUserId(session?.user?.id ?? null);
-      setAccessToken(session?.access_token ?? null);
-    });
-
-    return () => {
-      mounted = false;
-      authSub.subscription.unsubscribe();
-    };
+    supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
   }, [supabase]);
 
-  // 재무 요약 로드
-  const loadSummary = useCallback(async () => {
-    if (!supabase || !userId) {
-      setIsSummaryLoading(false);
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase.rpc('get_financial_summary', {
-        p_user_id: userId,
-      });
-
-      const { data: assetSummaryData, error: assetSummaryError } = await supabase.rpc('get_asset_summary', {
-        p_user_id: userId,
-      });
-
-      // rpc 응답이 배열/객체 어느 형태든 안전하게 처리
-      const financialRow = Array.isArray(data) ? (data[0] ?? null) : (data ?? null);
-      const assetRow = Array.isArray(assetSummaryData)
-        ? ((assetSummaryData[0] as AssetSummaryRpcRow | undefined) ?? null)
-        : ((assetSummaryData as AssetSummaryRpcRow | null) ?? null);
-
-      let fallbackIncome = toSafeNumber((financialRow as { total_income?: unknown } | null)?.total_income);
-      let fallbackExpense = toSafeNumber((financialRow as { total_expense?: unknown } | null)?.total_expense);
-      let fallbackNet = toSafeNumber((financialRow as { net_asset?: unknown } | null)?.net_asset);
-
-      // get_financial_summary가 실패/빈값이면 transactions를 직접 집계해서 숫자 보장
-      if (error || financialRow === null) {
-        console.log('재무 요약 RPC 실패 또는 빈 응답, 직접 집계로 fallback:', error?.message);
-
-        let allRows: Array<{ transaction_type: string | null; amount: number | null; is_transfer: boolean | null }> = [];
-        let page = 0;
-        const BATCH_SIZE = 1000;
-        let hasMoreRows = true;
-
-        while (hasMoreRows) {
-          const { data: rows, error: txError } = await supabase
-            .from('transactions')
-            .select('transaction_type, amount, is_transfer')
-            .eq('user_id', userId)
-            .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
-
-          if (txError) {
-            console.error('직접 집계용 거래 로드 실패:', txError);
-            break;
-          }
-
-          const safeRows = rows ?? [];
-          allRows = [...allRows, ...safeRows];
-          hasMoreRows = safeRows.length === BATCH_SIZE;
-          page += 1;
-        }
-
-        fallbackIncome = allRows.reduce((sum, row) => {
-          if (row.transaction_type === '수입') {
-            return sum + toSafeNumber(row.amount);
-          }
-          return sum;
-        }, 0);
-
-        fallbackExpense = allRows.reduce((sum, row) => {
-          if (row.transaction_type === '지출' && !row.is_transfer) {
-            return sum + toSafeNumber(row.amount);
-          }
-          return sum;
-        }, 0);
-
-        fallbackNet = fallbackIncome - fallbackExpense;
-      }
-
-      // "가계부 순자산"과 "자산 탭 순자산"을 동일 기준으로 고정
-      const alignedNetAsset = assetSummaryError
-        ? fallbackNet
-        : toSafeNumber(assetRow?.net_worth);
-
-      if (assetSummaryError) {
-        console.log('자산 요약 연동 실패로 재무 요약 값을 사용합니다:', assetSummaryError.message);
-      }
-
-      setSummary({
-        total_income: fallbackIncome,
-        total_expense: fallbackExpense,
-        net_asset: alignedNetAsset,
-      });
-    } catch (err) {
-      console.log('요약 로드 오류:', err);
-    } finally {
-      setIsSummaryLoading(false);
-    }
-  }, [supabase, userId]);
-
-  // 필터 조건 생성 함수
-  const getFilterConditions = useCallback(() => {
-    let startDate: Date | null = null;
-    
-    if (filters.period !== 'all') {
-      const now = new Date();
-      switch (filters.period) {
-        case '7days':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case '1month':
-          startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-          break;
-        case '3months':
-          startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-          break;
-        case '1year':
-          startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-          break;
-      }
-    }
-    
-    // 타입 매핑
-    let typeFilter: string | null = null;
-    if (filters.type !== 'all') {
-      const typeMap: Record<string, string> = {
-        'income': '수입',
-        'expense': '지출',
-        'transfer': '자산이체',
-      };
-      typeFilter = typeMap[filters.type] || null;
-    }
-    
-    return { startDate, type: typeFilter };
-  }, [filters]);
-
-  // 거래 목록 로드 (초기 로드)
-  const loadTransactions = useCallback(async () => {
-    if (!supabase || !userId) {
-      setIsLoading(false);
-      return;
-    }
-    
-    try {
-      const { startDate, type } = getFilterConditions();
-      
-      // 먼저 총 개수 조회
-      let countQuery = supabase
-        .from('transactions')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId);
-      
-      if (startDate) {
-        countQuery = countQuery.gte('date', startDate.toISOString());
-      }
-      if (type) {
-        countQuery = countQuery.eq('transaction_type', type);
-      }
-      
-      const { count } = await countQuery;
-      setTotalCount(count || 0);
-      
-      // 첫 페이지 데이터 조회
-      let dataQuery = supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false })
-        .range(0, PAGE_SIZE - 1);
-      
-      if (startDate) {
-        dataQuery = dataQuery.gte('date', startDate.toISOString());
-      }
-      if (type) {
-        dataQuery = dataQuery.eq('transaction_type', type);
-      }
-      
-      const { data, error } = await dataQuery;
-      
-      if (error) {
-        console.log('거래 로드: 테이블이 없거나 오류 발생');
-        setTransactions([]);
-        setHasMore(false);
-      } else {
-        setTransactions(data || []);
-        setHasMore((data?.length || 0) < (count || 0));
-      }
-    } catch (err) {
-      console.log('거래 로드:', err);
-      setTransactions([]);
-      setHasMore(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, userId, getFilterConditions]);
-
-  // 더 불러오기
-  const loadMoreTransactions = useCallback(async () => {
-    if (!supabase || !userId || isLoadingMore) return;
-    
-    setIsLoadingMore(true);
-    try {
-      const { startDate, type } = getFilterConditions();
-      const offset = transactions.length;
-      
-      let query = supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false })
-        .range(offset, offset + PAGE_SIZE - 1);
-      
-      if (startDate) {
-        query = query.gte('date', startDate.toISOString());
-      }
-      if (type) {
-        query = query.eq('transaction_type', type);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) {
-        console.log('추가 로드 오류');
-      } else if (data) {
-        setTransactions(prev => [...prev, ...data]);
-        setHasMore(transactions.length + data.length < totalCount);
-      }
-    } catch (err) {
-      console.log('추가 로드:', err);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [supabase, userId, getFilterConditions, transactions.length, totalCount, isLoadingMore]);
-
-  // 자산 필터링 - 특정 자산의 모든 거래 로드
-  const handleAssetFilter = useCallback(async (asset: string | null) => {
-    setAssetFilter(asset);
-    
-    if (!asset) {
-      // 필터 해제 시 원래 목록으로 복원
-      loadTransactions();
-      return;
-    }
-    
-    if (!supabase || !userId) return;
-    
-    setIsLoading(true);
-    try {
-      // 해당 자산의 모든 거래 조회 (asset 또는 transfer_asset이 일치)
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .or(`asset.eq.${asset},transfer_asset.eq.${asset}`)
-        .order('date', { ascending: false });
-      
-      if (error) {
-        console.error('자산 필터 오류:', error);
-      } else {
-        setTransactions(data || []);
-        setTotalCount(data?.length || 0);
-        setHasMore(false);
-      }
-    } catch (err) {
-      console.error('자산 필터:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, userId, loadTransactions]);
-
-  // 데이터 로드
+  // 한 달 거래 (KST 기준)
   useEffect(() => {
-    if (userId) {
-      setIsSummaryLoading(true);
-      setIsLoading(true);
-      loadSummary();
-      loadTransactions();
-    } else {
-      // userId가 없을 때 요약 카드가 영구 스켈레톤으로 남지 않도록 보장
-      setIsSummaryLoading(false);
-    }
-  }, [userId, loadSummary, loadTransactions]);
+    if (!supabase || !userId) return;
+    let cancelled = false;
+    setIsLoading(true);
+    (async () => {
+      const from = kstMonthStartIso(year, month);
+      const to = kstMonthStartIso(year, month + 1);
+      const all: LedgerTx[] = [];
+      const PAGE = 1000;
+      for (let off = 0; ; off += PAGE) {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('id, date, asset, category, sub_category, transaction_type, is_transfer, transfer_asset, amount, memo, created_at')
+          .eq('user_id', userId)
+          .gte('date', from)
+          .lt('date', to)
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .range(off, off + PAGE - 1);
+        if (error) {
+          console.error('거래 로드 오류:', error.message);
+          break;
+        }
+        all.push(...((data ?? []) as LedgerTx[]));
+        if (!data || data.length < PAGE) break;
+      }
+      if (!cancelled) {
+        setMonthTx(all);
+        setIsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [supabase, userId, year, month, reloadKey]);
 
-  // 거래 추가
-  const handleAddTransaction = async (data: TransactionData) => {
-    if (!supabase || !userId) {
-      throw new Error('로그인이 필요합니다');
+  // 월별 탭: 그 해 월별 합계
+  useEffect(() => {
+    if (tab !== 'monthly' || !supabase || !userId || yearTotals[year]) return;
+    (async () => {
+      const arr: Totals[] = Array.from({ length: 12 }, () => ({ income: 0, expense: 0 }));
+      const PAGE = 1000;
+      for (let off = 0; ; off += PAGE) {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('date, transaction_type, amount')
+          .eq('user_id', userId)
+          .in('transaction_type', ['수입', '지출'])
+          .gte('date', kstMonthStartIso(year, 1))
+          .lt('date', kstMonthStartIso(year + 1, 1))
+          .order('date', { ascending: true })
+          .range(off, off + PAGE - 1);
+        if (error) break;
+        for (const r of data ?? []) {
+          const mi = toKst(r.date).getUTCMonth();
+          if (r.transaction_type === '수입') arr[mi].income += Number(r.amount) || 0;
+          else arr[mi].expense += Number(r.amount) || 0;
+        }
+        if (!data || data.length < PAGE) break;
+      }
+      setYearTotals((p) => ({ ...p, [year]: arr }));
+    })();
+  }, [tab, supabase, userId, year, yearTotals]);
+
+  const visibleTx = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return monthTx;
+    return monthTx.filter((t) =>
+      [t.memo, t.category, t.sub_category, t.asset, t.transfer_asset]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [monthTx, query]);
+
+  const monthTotals = useMemo(() => sumTotals(visibleTx), [visibleTx]);
+
+  const byDay = useMemo(() => {
+    const map = new Map<string, LedgerTx[]>();
+    for (const t of visibleTx) {
+      const k = kstYmd(t.date);
+      const list = map.get(k);
+      if (list) list.push(t);
+      else map.set(k, [t]);
     }
-    
-    const { error } = await supabase.from('transactions').insert({
-      user_id: userId,
-      date: new Date(data.date).toISOString(),
+    return map;
+  }, [visibleTx]);
+  const dayKeys = useMemo(() => [...byDay.keys()].sort((a, b) => (a < b ? 1 : -1)), [byDay]);
+
+  const step = (dir: -1 | 1) => {
+    setSelectedDay(null);
+    if (tab === 'monthly') { setYear((y) => y + dir); return; }
+    let m = month + dir;
+    let y = year;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    setMonth(m);
+    setYear(y);
+  };
+
+  const invalidate = () => {
+    setReloadKey((k) => k + 1);
+    setYearTotals({});
+  };
+
+  const openAdd = () => {
+    setEditing(null);
+    setFormOpen(true);
+  };
+
+  const handleSubmit = async (data: TransactionData) => {
+    if (!supabase || !userId) throw new Error('로그인이 필요합니다');
+    const today = kstDateString();
+    let dateIso: string;
+    if (editing) {
+      if (kstYmd(editing.date) === data.date) {
+        dateIso = editing.date; // 날짜 그대로면 시각 유지
+      } else {
+        const hms = toKst(editing.date).toISOString().slice(11, 19);
+        dateIso = new Date(`${data.date}T${hms}+09:00`).toISOString();
+      }
+    } else {
+      dateIso = data.date === today ? new Date().toISOString() : new Date(`${data.date}T00:00:00+09:00`).toISOString();
+    }
+    const row = {
+      date: dateIso,
       amount: data.amount,
       transaction_type: data.transaction_type,
       is_transfer: data.is_transfer,
@@ -403,226 +300,260 @@ export default function LedgerPage() {
       category: data.category,
       sub_category: data.sub_category || null,
       memo: data.memo || null,
-      currency: 'KRW',
-      source: 'app',
-    });
-    
-    if (error) {
-      console.error('거래 추가 오류:', error);
-      throw error;
-    }
-    
-    // 데이터 새로고침
-    await loadSummary();
-    await loadTransactions();
-  };
-
-  // 거래 삭제
-  const handleDeleteTransaction = async (id: string) => {
-    if (!supabase || !userId) return;
-    
-    const confirmed = window.confirm('이 거래를 삭제하시겠습니까?');
-    if (!confirmed) return;
-    
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
-    
-    if (error) {
-      console.error('거래 삭제 오류:', error);
-      alert('삭제 중 오류가 발생했습니다');
+    };
+    if (editing) {
+      const { error } = await supabase.from('transactions').update(row).eq('id', editing.id).eq('user_id', userId);
+      if (error) throw error;
     } else {
-      await loadSummary();
-      await loadTransactions();
+      const { error } = await supabase
+        .from('transactions')
+        .insert({ ...row, user_id: userId, currency: 'KRW', source: 'app' });
+      if (error) throw error;
     }
+    invalidate();
   };
 
-  // 업로드 완료 핸들러
-  const handleUploadComplete = () => {
-    loadSummary();
-    loadTransactions();
-    setShowUpload(false);
-  };
-
-  // 엑셀 다운로드 (전체 거래내역)
-  const handleExcelDownload = async () => {
+  const handleDelete = async (id: string) => {
     if (!supabase || !userId) return;
-    
-    try {
-      // 전체 거래 데이터 로드 (페이지네이션)
-      let allData: Transaction[] = [];
-      let hasMoreData = true;
-      let page = 0;
-      const BATCH_SIZE = 1000;
-      
-      while (hasMoreData) {
-        const { data, error } = await supabase
-          .from('transactions')
-          .select('*')
-          .eq('user_id', userId)
-          .order('date', { ascending: true })
-          .range(page * BATCH_SIZE, (page + 1) * BATCH_SIZE - 1);
-        
-        if (error) {
-          console.error('다운로드 오류:', error);
-          hasMoreData = false;
-        } else if (data && data.length > 0) {
-          allData = [...allData, ...data];
-          hasMoreData = data.length === BATCH_SIZE;
-          page++;
-        } else {
-          hasMoreData = false;
-        }
-      }
-      
-      if (allData.length === 0) {
-        alert('다운로드할 거래 데이터가 없습니다.');
-        return;
-      }
-      
-      // CSV 생성
-      const headers = ['날짜', '거래유형', '카테고리', '소분류', '금액', '자산', '이체자산', '메모'];
-      const csvRows = [
-        headers.join(','),
-        ...allData.map(tx => {
-          const date = new Date(tx.date).toISOString().split('T')[0];
-          const values = [
-            date,
-            tx.transaction_type || '',
-            tx.category || '',
-            tx.sub_category || '',
-            tx.amount || 0,
-            tx.asset || '',
-            tx.transfer_asset || '',
-            (tx.memo || '').replace(/,/g, ' ').replace(/"/g, "'"),
-          ];
-          return values.map(v => `"${v}"`).join(',');
-        })
-      ];
-      
-      const csvContent = '\uFEFF' + csvRows.join('\n'); // BOM for Korean encoding
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      
-      // 다운로드 링크 생성
-      const today = new Date().toISOString().split('T')[0];
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `거래내역_${today}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      alert(`${allData.length}건의 거래내역을 다운로드했습니다.`);
-    } catch (err) {
-      console.error('다운로드 오류:', err);
-      alert('다운로드 중 오류가 발생했습니다.');
-    }
+    const { error } = await supabase.from('transactions').delete().eq('id', id).eq('user_id', userId);
+    if (error) throw error;
+    invalidate();
   };
+
+  // 전체 거래내역 CSV 다운로드
+  const handleDownload = async () => {
+    if (!supabase || !userId) return;
+    const all: LedgerTx[] = [];
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('date', { ascending: true })
+        .range(off, off + 999);
+      if (error) { alert('다운로드 중 오류가 발생했습니다.'); return; }
+      all.push(...((data ?? []) as LedgerTx[]));
+      if (!data || data.length < 1000) break;
+    }
+    if (all.length === 0) { alert('다운로드할 거래 데이터가 없습니다.'); return; }
+    const headers = ['날짜', '거래유형', '카테고리', '소분류', '금액', '자산', '이체자산', '메모'];
+    const rows = all.map((tx) =>
+      [kstYmd(tx.date), tx.transaction_type, tx.category, tx.sub_category ?? '', tx.amount, tx.asset, tx.transfer_asset ?? '',
+        (tx.memo ?? '').replace(/,/g, ' ').replace(/"/g, "'")]
+        .map((v) => `"${v}"`).join(',')
+    );
+    const blob = new Blob(['﻿' + [headers.join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `거래내역_${kstDateString()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // 달력 칸
+  const calendarCells = useMemo(() => {
+    const first = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+    const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const cells: (string | null)[] = Array.from({ length: first }, () => null);
+    for (let d = 1; d <= days; d++) cells.push(`${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
+    while (cells.length % 7) cells.push(null);
+    return cells;
+  }, [year, month]);
+  const todayYmd = kstDateString();
+
+  const headerLabel = tab === 'monthly' ? `${year}년` : `${year}년 ${month}월`;
+  const yt = yearTotals[year];
+  const yearSum = yt ? yt.reduce((s, t) => ({ income: s.income + t.income, expense: s.expense + t.expense }), { income: 0, expense: 0 }) : null;
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-28">
         <GlobalNav />
-        
-        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6`}>
-          {/* 대시보드 (재무 요약) */}
-          <Dashboard
-            totalIncome={toSafeNumber(summary.total_income)}
-            totalExpense={toSafeNumber(summary.total_expense)}
-            netAsset={toSafeNumber(summary.net_asset)}
-            isLoading={isSummaryLoading}
-          />
-          
-          {/* 버튼 그룹 */}
-          <div className="my-4 flex gap-2">
-            <button
-              onClick={() => setIsFormOpen(true)}
-              className="flex-1 py-3 text-base bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-colors"
-            >
-              + 거래 추가
-            </button>
-            <button
-              onClick={() => setShowUpload(!showUpload)}
-              className={`px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
-                showUpload 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              CSV
-            </button>
-            <button
-              onClick={handleExcelDownload}
-              className="px-4 py-3 text-sm font-medium rounded-xl transition-colors bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-              title="전체 거래내역 다운로드"
-            >
-              📥
-            </button>
-          </div>
 
-          {/* CSV 업로드 영역 */}
+        {/* 상단 고정: 월 이동 · 탭 · 합계 */}
+        <div className="sticky top-16 z-40 bg-[rgb(254,252,247)]/95 dark:bg-gray-900/95 backdrop-blur">
+          <div className={APP_HORIZONTAL_CONTAINER}>
+            <div className="flex items-center gap-1 pt-2">
+              <button type="button" onClick={() => step(-1)} className="flex h-9 w-8 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="이전">
+                <IconChevronLeft size={20} />
+              </button>
+              <span className="min-w-[104px] text-center text-[17px] font-semibold tabular-nums text-gray-900 dark:text-white">{headerLabel}</span>
+              <button type="button" onClick={() => step(1)} className="flex h-9 w-8 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="다음">
+                <IconChevronRight size={20} />
+              </button>
+              <div className="ml-auto flex items-center">
+                <button type="button" onClick={() => { setSearchOpen((v) => !v); if (searchOpen) setQuery(''); }} className={`flex h-9 w-9 items-center justify-center rounded-lg ${searchOpen ? 'text-blue-600' : 'text-gray-600 dark:text-gray-300'}`} aria-label="검색">
+                  <IconSearch size={20} stroke={1.8} />
+                </button>
+                <button type="button" onClick={() => setShowUpload((v) => !v)} className={`flex h-9 w-9 items-center justify-center rounded-lg ${showUpload ? 'text-blue-600' : 'text-gray-600 dark:text-gray-300'}`} aria-label="CSV 올리기" title="CSV 올리기">
+                  <IconUpload size={20} stroke={1.8} />
+                </button>
+                <button type="button" onClick={handleDownload} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 dark:text-gray-300" aria-label="전체 내역 내려받기" title="전체 내역 CSV 내려받기">
+                  <IconDownload size={20} stroke={1.8} />
+                </button>
+              </div>
+            </div>
+
+            {searchOpen && (
+              <div className="relative pb-1">
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="이번 달에서 메모·분류·자산 검색"
+                  className="w-full rounded-lg bg-gray-100 dark:bg-gray-800 px-3 py-2 pr-8 text-sm outline-none"
+                />
+                {query && (
+                  <button type="button" onClick={() => setQuery('')} className="absolute right-2 top-2 text-gray-400" aria-label="지우기">
+                    <IconX size={16} />
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 border-b border-gray-200 dark:border-gray-700 text-[15px]" role="tablist">
+              {([['daily', '일일'], ['calendar', '달력'], ['monthly', '월별']] as [Tab, string][]).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === k}
+                  onClick={() => { setTab(k); setSelectedDay(null); }}
+                  className={`relative py-2.5 font-semibold ${tab === k ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}
+                >
+                  {label}
+                  {tab === k && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-red-500" />}
+                </button>
+              ))}
+            </div>
+
+            <SummaryBar totals={tab === 'monthly' ? (yearSum ?? { income: 0, expense: 0 }) : monthTotals} />
+          </div>
+        </div>
+
+        <main className={APP_HORIZONTAL_CONTAINER}>
           {showUpload && (
-            <div className="mb-4">
-              <ExcelUpload 
-                onUploadComplete={handleUploadComplete}
-                accessToken={accessToken}
-              />
+            <div className="my-3">
+              <ExcelUpload onUploadComplete={() => { invalidate(); setShowUpload(false); }} accessToken={accessToken} />
             </div>
           )}
-          
-          {/* 필터 */}
-          <div className="mb-3">
-            <TransactionFilters
-              filters={filters}
-              onChange={setFilters}
-            />
-          </div>
 
-          {/* 거래 리스트 */}
-          <div className="mb-4">
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-              거래 내역 {assetFilter ? `(${assetFilter})` : ''} ({transactions.length}건)
-            </p>
-            <TransactionList
-              transactions={transactions}
-              isLoading={isLoading}
-              onDelete={handleDeleteTransaction}
-              onAssetFilter={handleAssetFilter}
-              filterAsset={assetFilter}
-            />
-            
-            {/* 더 보기 버튼 */}
-            {hasMore && !isLoading && !assetFilter && (
-              <button
-                onClick={loadMoreTransactions}
-                disabled={isLoadingMore}
-                className="w-full mt-3 py-3 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors disabled:opacity-50"
-              >
-                {isLoadingMore ? '불러오는 중...' : `더 보기 (${totalCount - transactions.length}건 남음)`}
-              </button>
-            )}
-            
-            {/* 전체 로드 완료 메시지 */}
-            {!hasMore && transactions.length > 0 && transactions.length === totalCount && (
-              <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-3">
-                전체 {totalCount}건 로드 완료
-              </p>
-            )}
-          </div>
+          {/* 일일 */}
+          {tab === 'daily' && (
+            isLoading ? (
+              <div className="space-y-2 py-3">
+                {[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />)}
+              </div>
+            ) : dayKeys.length === 0 ? (
+              <div className="py-16 text-center text-sm text-gray-400">
+                {query ? '검색 결과가 없어요' : `${month}월 기록이 없어요`}
+              </div>
+            ) : (
+              dayKeys.map((k) => <DayGroup key={k} ymd={k} items={byDay.get(k)!} onEdit={(t) => { setEditing(t); setFormOpen(true); }} />)
+            )
+          )}
+
+          {/* 달력 */}
+          {tab === 'calendar' && (
+            <div className="pt-2">
+              <div className="grid grid-cols-7 text-center text-[11px] font-medium">
+                {WEEKDAYS.map((w, i) => (
+                  <div key={w} className={`py-1 ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-gray-500'}`}>{w}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 border-l border-t border-gray-200 dark:border-gray-700">
+                {calendarCells.map((ymd, i) => {
+                  if (!ymd) return <div key={`e${i}`} className="h-[68px] border-b border-r border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-800/30" />;
+                  const items = byDay.get(ymd) ?? [];
+                  const t = sumTotals(items);
+                  const dnum = Number(ymd.slice(8));
+                  const dow = i % 7;
+                  const sel = selectedDay === ymd;
+                  return (
+                    <button
+                      key={ymd}
+                      type="button"
+                      onClick={() => setSelectedDay(sel ? null : ymd)}
+                      className={`flex h-[68px] flex-col items-stretch border-b border-r border-gray-200 dark:border-gray-700 p-1 text-left ${sel ? 'bg-amber-50 dark:bg-amber-900/20' : ''}`}
+                    >
+                      <span className={`text-[11px] font-medium ${ymd === todayYmd ? 'inline-flex h-4 w-4 items-center justify-center self-start rounded-full bg-gray-900 text-white dark:bg-white dark:text-gray-900' : dow === 0 ? 'text-red-500' : dow === 6 ? 'text-blue-500' : 'text-gray-700 dark:text-gray-300'}`}>
+                        {dnum}
+                      </span>
+                      <span className="mt-auto text-right text-[9.5px] leading-tight tabular-nums">
+                        {t.income > 0 && <span className="block truncate text-blue-600 dark:text-blue-400">{won(t.income)}</span>}
+                        {t.expense > 0 && <span className="block truncate text-red-500 dark:text-red-400">{won(t.expense)}</span>}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedDay && (
+                <div className="mt-3">
+                  {byDay.get(selectedDay)?.length ? (
+                    <DayGroup ymd={selectedDay} items={byDay.get(selectedDay)!} onEdit={(t) => { setEditing(t); setFormOpen(true); }} />
+                  ) : (
+                    <div className="py-6 text-center text-sm text-gray-400">이날 기록이 없어요</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 월별 */}
+          {tab === 'monthly' && (
+            !yt ? (
+              <div className="space-y-2 py-3">
+                {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />)}
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {yt.map((t, i) => ({ m: i + 1, ...t })).reverse().map(({ m, income, expense }) => {
+                  const empty = income === 0 && expense === 0;
+                  return (
+                    <li key={m}>
+                      <button
+                        type="button"
+                        onClick={() => { setMonth(m); setTab('daily'); }}
+                        className={`flex w-full items-center gap-3 px-1 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800/60 ${empty ? 'opacity-40' : ''}`}
+                      >
+                        <span className="w-10 text-[17px] font-bold tabular-nums text-gray-900 dark:text-white">{m}월</span>
+                        <span className="ml-auto flex text-right text-[13px] tabular-nums">
+                          <span className="w-[86px] truncate text-blue-600 dark:text-blue-400">{won(income)}</span>
+                          <span className="w-[86px] truncate text-red-500 dark:text-red-400">{won(expense)}</span>
+                          <span className="w-[86px] truncate text-gray-900 dark:text-white">{won(income - expense)}</span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )
+          )}
         </main>
-        
+
+        {/* 거래 추가 — Asset 메뉴 왼쪽 */}
+        <button
+          type="button"
+          onClick={openAdd}
+          className="fixed bottom-24 right-[max(82px,calc(50%-124px))] sm:right-[calc(50%-112px)] z-[95] flex h-14 w-14 items-center justify-center rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600"
+          aria-label="거래 추가"
+        >
+          <IconPlus size={28} stroke={2.2} />
+        </button>
+
         <FooterNav />
       </div>
-      
-      {/* 거래 추가 폼 */}
+
       <TransactionForm
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        onSubmit={handleAddTransaction}
+        isOpen={formOpen}
+        onClose={() => { setFormOpen(false); setEditing(null); }}
+        onSubmit={handleSubmit}
+        editing={editing as EditableTransaction | null}
+        onDelete={handleDelete}
+        defaultDate={tab === 'calendar' && selectedDay ? selectedDay : undefined}
       />
     </AuthGuard>
   );
