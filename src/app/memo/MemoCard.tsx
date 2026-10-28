@@ -134,10 +134,10 @@ function MemoCardComponent({
 
   const rootClass =
     variant === 'grid'
-      ? 'memo-card bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden cursor-pointer hover:shadow-md transition-shadow flex flex-col'
+      ? 'memo-card overflow-hidden cursor-pointer flex flex-col pb-3 border-b border-gray-200 dark:border-gray-700'
       : variant === 'compact'
-        ? 'memo-card flex items-center gap-3 py-3 border-b border-gray-200 dark:border-gray-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors -mx-2 px-2 rounded-lg'
-        : 'memo-card py-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors -mx-2 px-2 rounded-lg';
+        ? 'memo-card flex items-center gap-3 py-3 px-1 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors'
+        : 'memo-card py-4 px-1 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/40 transition-colors';
 
   const bodyWrapClass =
     variant === 'grid'
@@ -148,12 +148,14 @@ function MemoCardComponent({
     variant === 'compact'
       ? 'hidden'
       : variant === 'grid'
-        ? 'relative aspect-video bg-gray-100 dark:bg-gray-700 overflow-hidden w-full'
-        : 'relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 order-2';
+        ? 'relative aspect-video bg-gray-100 dark:bg-gray-700 overflow-hidden w-full rounded-lg'
+        : thumbnail
+          ? 'relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 order-2'
+          : 'hidden';
 
   const contentClass =
     variant === 'grid'
-      ? 'p-3'
+      ? 'pt-2'
       : variant === 'compact'
         ? 'flex-1 min-w-0'
         : 'flex-1 min-w-0 order-1';
@@ -347,7 +349,7 @@ function CopyEditDelete({
       role="group"
       aria-label="글 액션"
       aria-hidden={!visible}
-      className={`inline-flex items-center gap-0.5 p-0.5 rounded-full bg-gray-100 dark:bg-gray-800 transition-all duration-200 ease-out ${
+      className={`inline-flex items-center gap-0.5 transition-all duration-200 ease-out ${
         visible
           ? 'opacity-100 translate-y-0'
           : 'opacity-0 translate-y-1 pointer-events-none'
@@ -364,8 +366,8 @@ function CopyEditDelete({
           aria-pressed={pinned}
           className={`${ACTION_BTN} ${btnSize} ${
             pinned
-              ? 'text-amber-600 bg-white dark:bg-gray-700 shadow-sm'
-              : 'text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm'
+              ? 'text-amber-600'
+              : 'text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:bg-gray-100 dark:hover:bg-gray-700'
           }`}
           style={{ touchAction: 'manipulation' }}
           title={pinned ? '중요공지 해제' : '중요공지로 지정'}
@@ -382,8 +384,8 @@ function CopyEditDelete({
         tabIndex={visible ? 0 : -1}
         className={`${ACTION_BTN} ${btnSize} ${
           copied
-            ? 'text-blue-600 bg-white dark:bg-gray-700 shadow-sm'
-            : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm'
+            ? 'text-blue-600'
+            : 'text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700'
         }`}
         style={{ touchAction: 'manipulation' }}
         title={copied ? '복사됨' : '링크 복사'}
@@ -398,7 +400,7 @@ function CopyEditDelete({
           onEdit(memo);
         }}
         tabIndex={visible ? 0 : -1}
-        className={`${ACTION_BTN} ${btnSize} text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
+        className={`${ACTION_BTN} ${btnSize} text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700`}
         style={{ touchAction: 'manipulation' }}
         title="수정"
         aria-label="수정"
@@ -412,7 +414,7 @@ function CopyEditDelete({
           onDelete(memo);
         }}
         tabIndex={visible ? 0 : -1}
-        className={`${ACTION_BTN} ${btnSize} text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-white dark:hover:bg-gray-700 hover:shadow-sm`}
+        className={`${ACTION_BTN} ${btnSize} text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700`}
         style={{ touchAction: 'manipulation' }}
         title="삭제"
         aria-label="삭제"

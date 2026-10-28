@@ -689,29 +689,29 @@ function MemoPageContent() {
         {!showEditor && (
           <div className="mb-4 space-y-3">
             {/* 상위 카테고리 칩 — 화면 폭 안에서 줄바꿈 (가로 스크롤 없음) */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-4 border-b border-gray-200 dark:border-gray-700">
               <button
                 onClick={selectPinned}
                 style={{ touchAction: 'manipulation' }}
                 aria-pressed={showPinnedOnly}
-                className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-1 ${'relative py-2.5 text-[15px] transition-colors'} ${
                   showPinnedOnly
-                    ? 'bg-amber-500 text-white'
-                    : 'border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                    ? 'font-semibold text-amber-600 dark:text-amber-400 after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-amber-500'
+                    : 'text-amber-600/80 dark:text-amber-400/80'
                 }`}
               >
                 📌 중요공지
                 {!!pinnedCount && (
-                  <span className={`text-[11px] ${showPinnedOnly ? 'text-amber-100' : 'text-amber-500'}`}>{pinnedCount}</span>
+                  <span className="text-[11px] text-amber-500">{pinnedCount}</span>
                 )}
               </button>
               <button
                 onClick={() => selectCategory(null)}
                 style={{ touchAction: 'manipulation' }}
-                className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                className={`${'relative py-2.5 text-[15px] transition-colors'} ${
                   !selectedCategoryFilter && !showPinnedOnly
-                    ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                    : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                    ? 'font-semibold text-gray-900 dark:text-white after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-red-500'
+                    : 'text-gray-400'
                 }`}
               >
                 전체
@@ -725,10 +725,10 @@ function MemoPageContent() {
                     onClick={() => selectCategory(cat.id)}
                     style={{ touchAction: 'manipulation' }}
                     aria-expanded={hasChildren ? isActive : undefined}
-                    className={`inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    className={`inline-flex items-center gap-1 ${'relative py-2.5 text-[15px] transition-colors'} ${
                       isActive
-                        ? 'bg-gray-900 dark:bg-white text-white dark:text-gray-900'
-                        : 'border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                        ? 'font-semibold text-gray-900 dark:text-white after:absolute after:inset-x-0 after:bottom-0 after:h-[3px] after:bg-red-500'
+                        : 'text-gray-400'
                     }`}
                   >
                     {cat.name}
@@ -756,7 +756,7 @@ function MemoPageContent() {
                 type="button"
                 onClick={() => setShowCategoryModal(true)}
                 style={{ touchAction: 'manipulation' }}
-                className="ml-auto w-8 h-8 inline-flex items-center justify-center rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                className="ml-auto w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-500 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                 title="카테고리 관리"
                 aria-label="카테고리 관리"
               >
@@ -812,7 +812,7 @@ function MemoPageContent() {
               </button>
             )}
 
-            <label className="flex items-center gap-2 h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus-within:border-blue-400 dark:focus-within:border-blue-500 transition-colors">
+            <label className="flex items-center gap-2 h-10 px-3 rounded-lg bg-gray-100 dark:bg-gray-800 focus-within:ring-2 focus-within:ring-blue-300 dark:focus-within:ring-blue-700 transition">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="18"
@@ -908,7 +908,7 @@ function MemoPageContent() {
         ) : displayedMemos.length > 0 ? (
           <div
             className={
-              viewMode === 'grid' ? 'grid grid-cols-2 gap-3' : 'flex flex-col'
+              viewMode === 'grid' ? 'grid grid-cols-2 gap-x-3 gap-y-4' : 'flex flex-col'
             }
           >
             {displayedMemos.map((memo) => (
