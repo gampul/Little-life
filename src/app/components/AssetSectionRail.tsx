@@ -20,8 +20,8 @@ export function assetSectionOf(pathname: string): string | null {
 }
 
 /**
- * 오른쪽에 떠서 스크롤해도 따라다니는 Asset 섹션 메뉴.
- * 본문(412px) 영역 안쪽 오른쪽 끝 — 본문 위에 겹쳐 뜸(본문 카드 오른쪽 끝선에서 4~8px 안쪽).
+ * 오른쪽 아래에 떠서 스크롤해도 따라다니는 Asset 섹션 메뉴.
+ * 본문(412px) 오른쪽 아래, 하단 메뉴 바로 위 — 본문 위에 겹쳐 뜸(카드 오른쪽 끝선에서 4~8px 안쪽). Deploy 의 + 버튼은 이 메뉴 왼쪽.
  */
 export function AssetSectionRail({ pathname }: { pathname: string }) {
   const current = assetSectionOf(pathname);
@@ -30,7 +30,7 @@ export function AssetSectionRail({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label="Asset 메뉴"
-      className="fixed right-[max(20px,calc(50%-186px))] sm:right-[calc(50%-174px)] top-1/2 z-[90] -translate-y-1/2 flex flex-col gap-1 rounded-2xl border border-gray-200/80 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 p-1 shadow-lg backdrop-blur-md"
+      className="fixed bottom-24 right-[max(20px,calc(50%-186px))] sm:right-[calc(50%-174px)] z-[90] flex flex-col gap-1 rounded-2xl border border-gray-200/80 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 p-1 shadow-lg backdrop-blur-md"
     >
       {ASSET_SECTIONS.map(({ href, label, icon: Icon }) => {
         const active = current === href;
