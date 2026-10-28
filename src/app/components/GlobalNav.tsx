@@ -8,6 +8,7 @@ import { signOutAction } from '../actions/auth';
 import { getSupabase } from '../../lib/supabase';
 import { APP_HORIZONTAL_CONTAINER } from './container';
 import { useAuth } from './AuthProvider';
+import PendingInbox from './PendingInbox';
 
 export interface GlobalNavProps {}
 
@@ -57,13 +58,9 @@ export function GlobalNav(props: GlobalNavProps) {
     };
   }, [userId, loadPendingCount]);
 
-  /** 종을 누르면 Daily 의 확인 팝업을 다시 띄운다 (다른 화면이면 Daily 로 이동 → 열리면서 팝업) */
+  /** 종을 누르면 지금 화면에서 바로 확인 팝업 (미룬 건 포함) */
   const openPending = () => {
-    if (pathname === '/daily' || pathname === '/') {
-      window.dispatchEvent(new CustomEvent('little-life:open-pending'));
-    } else {
-      router.push('/daily');
-    }
+    window.dispatchEvent(new CustomEvent('little-life:open-pending'));
   };
 
   const handleImageError = () => {
@@ -101,6 +98,8 @@ export function GlobalNav(props: GlobalNavProps) {
   };
 
   return (
+    <>
+    {userEmail && <PendingInbox autoOpen={pathname === '/daily' || pathname === '/'} />}
     <nav className="sticky top-0 z-50 bg-[rgb(254,252,247)]/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700">
       <div className={APP_HORIZONTAL_CONTAINER}>
         <div className="flex items-center justify-between h-16">
@@ -203,5 +202,6 @@ export function GlobalNav(props: GlobalNavProps) {
         </div>
       </div>
     </nav>
+    </>
   );
 }
