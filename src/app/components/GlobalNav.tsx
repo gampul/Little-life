@@ -120,27 +120,27 @@ export function GlobalNav(props: GlobalNavProps) {
             </span>
           </Link>
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0">
             {/* 로그인/로그아웃 */}
             {userEmail ? (
-              <div className="flex items-center gap-0.5 min-w-0">
+              <div className="flex items-center gap-0 min-w-0">
                 {pendingCount > 0 && (
                   <button
                     type="button"
                     onClick={openPending}
-                    className="relative min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="relative min-h-[40px] min-w-[32px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     aria-label={`가계부 확인 대기 ${pendingCount}건`}
                     title={`가계부 확인 대기 ${pendingCount}건`}
                   >
                     <IconBell size={22} stroke={1.75} aria-hidden="true" />
-                    <span className="absolute top-1.5 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[11px] font-bold leading-[18px] text-center tabular-nums">
+                    <span className="absolute top-1 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[11px] font-bold leading-[18px] text-center tabular-nums">
                       {pendingCount > 99 ? '99+' : pendingCount}
                     </span>
                   </button>
                 )}
                 <form action={signOutAction}>
                   <button
-                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="min-h-[40px] min-w-[32px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     aria-label="로그아웃"
                     title="로그아웃"
                   >
@@ -163,7 +163,7 @@ export function GlobalNav(props: GlobalNavProps) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className={`rounded-lg text-sm font-medium transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center ${
+                className={`rounded-lg text-sm font-medium transition-colors min-h-[40px] min-w-[32px] flex items-center justify-center ${
                   menuOpen || pathname === '/settings'
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
