@@ -153,7 +153,7 @@ export default function DeployPage() {
           {/* FAB */}
           <button
             onClick={() => setShowModal(true)}
-            className="fixed bottom-24 right-4 sm:right-[calc(50%-206px+16px)] z-[120] w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center text-3xl leading-none hover:bg-blue-700 transition-colors"
+            className="fixed bottom-24 right-[max(82px,calc(50%-124px))] sm:right-[calc(50%-112px)] z-[120] w-14 h-14 rounded-full bg-blue-600 text-white shadow-lg flex items-center justify-center text-3xl leading-none hover:bg-blue-700 transition-colors"
             aria-label="투자 데이터 추가"
           >
             +
