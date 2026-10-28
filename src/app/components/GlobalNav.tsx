@@ -2,8 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { IconBell, IconSettings } from '@tabler/icons-react';
 import { signOutAction } from '../actions/auth';
+import { getSupabase } from '../../lib/supabase';
 import { APP_HORIZONTAL_CONTAINER } from './container';
 import { useAuth } from './AuthProvider';
 
@@ -19,6 +21,50 @@ export function GlobalNav(props: GlobalNavProps) {
   const userEmail = user?.email ?? null;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // 가계부 확인 대기(카드 결제 알림 등) 건수 — 모든 화면 상단 종 아이콘에 표시
+  const [pendingCount, setPendingCount] = useState(0);
+  const userId = user?.id ?? null;
+
+  const loadPendingCount = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase || !userId) return;
+    const { count } = await supabase
+      .from('pending_transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'pending');
+    setPendingCount(count ?? 0);
+  }, [userId]);
+
+  useEffect(() => {
+    loadPendingCount();
+  }, [loadPendingCount, pathname]);
+
+  // 새 알림이 들어오거나 등록·삭제되면 바로 갱신
+  useEffect(() => {
+    const supabase = getSupabase();
+    if (!supabase || !userId) return;
+    const channel = supabase
+      .channel(`nav-pending-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pending_transactions', filter: `user_id=eq.${userId}` },
+        () => loadPendingCount()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, loadPendingCount]);
+
+  /** 종을 누르면 Daily 의 확인 팝업을 다시 띄운다 (다른 화면이면 Daily 로 이동 → 열리면서 팝업) */
+  const openPending = () => {
+    if (pathname === '/daily' || pathname === '/') {
+      window.dispatchEvent(new CustomEvent('little-life:open-pending'));
+    } else {
+      router.push('/daily');
+    }
+  };
 
   const handleImageError = () => {
     if (imgSrc.includes('.png')) {
@@ -83,12 +129,20 @@ export function GlobalNav(props: GlobalNavProps) {
             {/* 로그인/로그아웃 */}
             {userEmail ? (
               <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="hidden sm:block text-xs text-gray-600 dark:text-gray-300 max-w-[160px] truncate"
-                  title={userEmail}
-                >
-                  {userEmail}
-                </span>
+                {pendingCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={openPending}
+                    className="relative min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    aria-label={`가계부 확인 대기 ${pendingCount}건`}
+                    title={`가계부 확인 대기 ${pendingCount}건`}
+                  >
+                    <IconBell size={22} stroke={1.75} aria-hidden="true" />
+                    <span className="absolute top-1.5 right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[11px] font-bold leading-[18px] text-center tabular-nums">
+                      {pendingCount > 99 ? '99+' : pendingCount}
+                    </span>
+                  </button>
+                )}
                 <form action={signOutAction}>
                   <button
                     className="px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 whitespace-nowrap"
@@ -108,7 +162,7 @@ export function GlobalNav(props: GlobalNavProps) {
               </Link>
             )}
 
-            {/* 햄버거 메뉴 */}
+            {/* 설정 메뉴 */}
             <div className="relative" ref={menuRef}>
               <button
                 type="button"
@@ -118,22 +172,26 @@ export function GlobalNav(props: GlobalNavProps) {
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}
-                aria-label="메뉴"
+                aria-label="설정 메뉴"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
               >
-                <span className="flex flex-col gap-1 items-center justify-center">
-                  <span className="w-5 h-0.5 bg-current"></span>
-                  <span className="w-5 h-0.5 bg-current"></span>
-                  <span className="w-5 h-0.5 bg-current"></span>
-                </span>
+                <IconSettings size={22} stroke={1.75} aria-hidden="true" />
               </button>
 
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 z-50"
+                  className="absolute right-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg py-1 z-50"
                 >
+                  {userEmail && (
+                    <div className="px-4 pt-2 pb-2.5 mb-1 border-b border-gray-100 dark:border-gray-800">
+                      <div className="text-[11px] text-gray-400 dark:text-gray-500">로그인 계정</div>
+                      <div className="text-sm text-gray-800 dark:text-gray-100 truncate" title={userEmail}>
+                        {userEmail}
+                      </div>
+                    </div>
+                  )}
                   <button
                     type="button"
                     role="menuitem"

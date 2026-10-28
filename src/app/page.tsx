@@ -185,7 +185,13 @@ export default function Home() {
       });
   }, [supabase]);
 
-  // Load initial pending list and count
+  // Load initial pending list and count (상단 종 아이콘을 누르면 다시 불러와 팝업을 띄운다)
+  const [pendingReloadTick, setPendingReloadTick] = useState(0);
+  useEffect(() => {
+    const onOpen = () => setPendingReloadTick((n) => n + 1);
+    window.addEventListener('little-life:open-pending', onOpen);
+    return () => window.removeEventListener('little-life:open-pending', onOpen);
+  }, []);
   useEffect(() => {
     if (!supabase || !userId) return;
     let isMounted = true;
@@ -202,7 +208,7 @@ export default function Home() {
     };
     load();
     return () => { isMounted = false; };
-  }, [supabase, userId]);
+  }, [supabase, userId, pendingReloadTick]);
 
   // Realtime subscription
   useEffect(() => {
@@ -1718,19 +1724,6 @@ export default function Home() {
     <AuthGuard>
       <>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-        {/* 가계부 미처리 건수 배지 (상단 고정 간단 표시) */}
-        {pendingCount > 0 && (
-          <div className="sticky top-0 z-40">
-            <div className="max-w-[412px] mx-auto px-4 pt-2">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-600 text-white text-xs font-semibold shadow">
-                <span>가계부</span>
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-white text-red-600 font-bold text-[11px]">
-                  {pendingCount}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
         {/* SMS Pending Popup (modal) — key로 아이템 전환 시 컴포넌트 리셋 */}
         {currentPopup && (
           <PendingSmsPopup
