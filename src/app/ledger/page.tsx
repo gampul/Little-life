@@ -528,7 +528,7 @@ export default function LedgerPage() {
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         <GlobalNav />
         
-        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6 max-[539px]:!pr-[3.75rem]`}>
+        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6 !pr-[3.75rem]`}>
           {/* 대시보드 (재무 요약) */}
           <Dashboard
             totalIncome={toSafeNumber(summary.total_income)}
