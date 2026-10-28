@@ -10,7 +10,7 @@ import {
   IconWand,
 } from '@tabler/icons-react';
 import { APP_HORIZONTAL_CONTAINER } from './container';
-import { ASSET_LAST_SECTION_KEY, AssetSectionRail, assetSectionOf } from './AssetSectionRail';
+import { ASSET_LAST_SECTION_KEY, AssetSectionBar, AssetSectionSpacer, assetSectionOf } from './AssetSectionRail';
 
 export interface FooterNavProps {}
 
@@ -41,8 +41,9 @@ export function FooterNav(props: FooterNavProps) {
 
   return (
     <>
-      <AssetSectionRail pathname={pathname} />
+      <AssetSectionSpacer pathname={pathname} />
       <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-[rgb(254,252,247)] dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+        <AssetSectionBar pathname={pathname} />
         <div className={APP_HORIZONTAL_CONTAINER}>
           <div className="flex items-center justify-between gap-1 px-1 py-2">
             {navItems.map((item) => {

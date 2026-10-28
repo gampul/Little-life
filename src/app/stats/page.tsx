@@ -330,9 +330,12 @@ export default function StatsPage() {
                         if (!pos) return null;
                         const cx = Number(props.cx) || 0;
                         const cy = Number(props.cy) || 0;
-                        const x = cx + pos.lx;
+                        // 라벨이 그래프 영역 밖으로 잘리지 않게 (글자 폭 대략 추정)
+                        const estW = [...`${pos.name}`].length * 12.5 + 22;
+                        const rawX = cx + pos.lx;
+                        const x = pos.right ? Math.min(rawX, cx * 2 - estW - 2) : Math.max(rawX, estW + 2);
                         const y = cy + pos.ly;
-                        const elbowX = cx + pos.lx + (pos.right ? -8 : 8);
+                        const elbowX = x + (pos.right ? -8 : 8);
                         const color = colorAt(Number(props.index));
                         return (
                           <g>

@@ -12,7 +12,7 @@ import {
 } from '@tabler/icons-react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
-import { ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
+import { ASSET_FAB_BOTTOM, ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { getSupabase } from '../../lib/supabase';
@@ -539,7 +539,7 @@ export default function LedgerPage() {
         <button
           type="button"
           onClick={openAdd}
-          className={`fixed bottom-24 ${ASSET_FAB_RIGHT} z-[95] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600`}
+          className={`fixed ${ASSET_FAB_BOTTOM} ${ASSET_FAB_RIGHT} z-[95] flex h-[54px] w-[54px] items-center justify-center rounded-full bg-red-500 text-white shadow-lg hover:bg-red-600`}
           aria-label="거래 추가"
         >
           <IconPlus size={28} stroke={2.2} />
