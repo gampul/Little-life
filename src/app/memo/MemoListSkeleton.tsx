@@ -34,11 +34,11 @@ function ListCardSkeleton() {
 
 function GridCardSkeleton() {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div className="overflow-hidden pb-3 border-b border-gray-200 dark:border-gray-700">
       <div className="relative aspect-video">
-        <SkeletonPulse className="absolute inset-0 rounded-none" />
+        <SkeletonPulse className="absolute inset-0 rounded-lg" />
       </div>
-      <div className="p-3 space-y-2">
+      <div className="pt-2 space-y-2">
         <SkeletonPulse className="h-4 w-4/5" />
         <SkeletonPulse className="h-3 w-1/3" />
         <div className="flex gap-2 pt-1">
