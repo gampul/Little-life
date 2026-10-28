@@ -100,11 +100,6 @@ export function GlobalNav(props: GlobalNavProps) {
     }
   };
 
-  const goMemoCategories = () => {
-    setMenuOpen(false);
-    router.push('/memo?manageCategories=1');
-  };
-
   return (
     <nav className="sticky top-0 z-50 bg-[rgb(254,252,247)]/80 dark:bg-gray-900/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700">
       <div className={APP_HORIZONTAL_CONTAINER}>
@@ -199,14 +194,6 @@ export function GlobalNav(props: GlobalNavProps) {
                     className="w-full px-4 py-2.5 text-left text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
                   >
                     설정
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={goMemoCategories}
-                    className="w-full px-4 py-2.5 text-left text-sm text-gray-800 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
-                  >
-                    카테고리 관리
                   </button>
                 </div>
               )}
