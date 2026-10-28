@@ -7,6 +7,30 @@ interface TransactionFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: TransactionData) => Promise<void>;
+  /** 수정할 거래 (없으면 새로 추가) */
+  editing?: EditableTransaction | null;
+  /** 수정 모드에서 삭제 */
+  onDelete?: (id: string) => Promise<void>;
+  /** 새로 추가할 때 기본 날짜 (YYYY-MM-DD, KST) */
+  defaultDate?: string;
+}
+
+export interface EditableTransaction {
+  id: string;
+  date: string;
+  amount: number;
+  transaction_type: '수입' | '지출' | '자산이체';
+  is_transfer: boolean;
+  asset: string;
+  transfer_asset?: string | null;
+  category: string;
+  sub_category?: string | null;
+  memo?: string | null;
+}
+
+/** KST 기준 YYYY-MM-DD */
+export function kstDateString(d: Date = new Date()): string {
+  return new Date(d.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
 export interface TransactionData {
@@ -37,9 +61,9 @@ interface AssetItem {
   is_debt: boolean;
 }
 
-export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormProps) {
+export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onDelete, defaultDate }: TransactionFormProps) {
   const [formData, setFormData] = useState<TransactionData>({
-    date: new Date().toISOString().split('T')[0],
+    date: kstDateString(),
     amount: 0,
     transaction_type: '지출',
     is_transfer: false,
@@ -88,8 +112,8 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
             const expenseCategories = (categoryData || []).filter(
               (c: Category) => c.type === 'expense' && c.subcategory === null
             );
-            if (expenseCategories.length > 0 && !formData.category) {
-              setFormData(prev => ({ ...prev, category: expenseCategories[0].category }));
+            if (expenseCategories.length > 0) {
+              setFormData(prev => (prev.category ? prev : { ...prev, category: expenseCategories[0].category }));
             }
           }
           
@@ -104,8 +128,8 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
             setAssets(assetData || []);
             
             // 초기 자산 설정 (첫 번째 자산)
-            if (assetData && assetData.length > 0 && !formData.asset) {
-              setFormData(prev => ({ ...prev, asset: assetData[0].asset_name }));
+            if (assetData && assetData.length > 0) {
+              setFormData(prev => (prev.asset ? prev : { ...prev, asset: assetData[0].asset_name }));
             }
           }
         }
@@ -118,9 +142,36 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
     };
     
     if (isOpen) {
+      // 열 때마다 수정 대상 / 새 거래로 초기화
+      setError(null);
+      if (editing) {
+        setFormData({
+          date: kstDateString(new Date(editing.date)),
+          amount: Number(editing.amount) || 0,
+          transaction_type: editing.transaction_type,
+          is_transfer: editing.transaction_type === '자산이체',
+          asset: editing.asset || '',
+          transfer_asset: editing.transfer_asset || undefined,
+          category: editing.category || '',
+          sub_category: editing.sub_category || '',
+          memo: editing.memo || '',
+        });
+      } else {
+        setFormData({
+          date: defaultDate || kstDateString(),
+          amount: 0,
+          transaction_type: '지출',
+          is_transfer: false,
+          asset: '',
+          category: '',
+          sub_category: '',
+          memo: '',
+        });
+      }
       loadData();
     }
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editing?.id]);
 
   // 현재 타입에 맞는 대분류 목록
   const getMainCategories = () => {
@@ -196,7 +247,7 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
       await onSubmit(formData);
       // 폼 초기화
       setFormData({
-        date: new Date().toISOString().split('T')[0],
+        date: kstDateString(),
         amount: 0,
         transaction_type: '지출',
         is_transfer: false,
@@ -214,17 +265,33 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
     }
   };
 
+  const [isDeleting, setIsDeleting] = useState(false);
+  const handleDelete = async () => {
+    if (!editing || !onDelete) return;
+    if (!window.confirm('이 거래를 삭제할까요?')) return;
+    setIsDeleting(true);
+    try {
+      await onDelete(editing.id);
+      onClose();
+    } catch (err) {
+      setError('삭제 중 오류가 발생했습니다');
+      console.error(err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const isTransfer = formData.transaction_type === '자산이체';
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center">
-      <div className="w-full max-w-[412px] bg-white dark:bg-gray-800 rounded-t-2xl p-4 max-h-[85vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-[200] flex items-end justify-center" onClick={onClose}>
+      <div className="w-full max-w-[412px] bg-white dark:bg-gray-800 rounded-t-2xl p-4 pb-6 max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-lg font-bold text-gray-900 dark:text-white">
-            거래 추가
+            {editing ? '거래 수정' : '거래 추가'}
           </p>
           <button
             onClick={onClose}
@@ -304,6 +371,9 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
                 onChange={(e) => setFormData({ ...formData, asset: e.target.value })}
                 className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
               >
+                {formData.asset && !assets.some((a) => a.asset_name === formData.asset) && (
+                  <option value={formData.asset}>{formData.asset}</option>
+                )}
                 {assets.map((item) => (
                   <option key={item.asset_name} value={item.asset_name}>
                     {item.asset_name} {item.is_debt ? '(부채)' : ''}
@@ -325,6 +395,9 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
                 className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">선택하세요</option>
+                {formData.transfer_asset && !assets.some((a) => a.asset_name === formData.transfer_asset) && (
+                  <option value={formData.transfer_asset}>{formData.transfer_asset}</option>
+                )}
                 {assets.filter(a => a.asset_name !== formData.asset).map((item) => (
                   <option key={item.asset_name} value={item.asset_name}>
                     {item.asset_name} {item.is_debt ? '(부채)' : ''}
@@ -352,6 +425,9 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
                     onChange={(e) => handleCategoryChange(e.target.value)}
                     className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                   >
+                    {formData.category && !getMainCategories().some((c) => c.category === formData.category) && (
+                      <option value={formData.category}>{formData.category}</option>
+                    )}
                     {getMainCategories().map((cat) => (
                       <option key={cat.id} value={cat.category}>{cat.category}</option>
                     ))}
@@ -360,7 +436,7 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
               </div>
 
               {/* 소분류 (있는 경우만) */}
-              {getSubcategories().length > 0 && (
+              {(getSubcategories().length > 0 || !!formData.sub_category) && (
                 <div className="mb-3">
                   <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
                     세부 분류 <span className="text-gray-400">(선택)</span>
@@ -371,6 +447,9 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
                     className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">선택 안함</option>
+                    {formData.sub_category && !getSubcategories().some((c) => c.subcategory === formData.sub_category) && (
+                      <option value={formData.sub_category}>{formData.sub_category}</option>
+                    )}
                     {getSubcategories().map((cat) => (
                       <option key={cat.id} value={cat.subcategory || ''}>{cat.subcategory}</option>
                     ))}
@@ -401,6 +480,16 @@ export function TransactionForm({ isOpen, onClose, onSubmit }: TransactionFormPr
 
           {/* 버튼 */}
           <div className="flex gap-2">
+            {editing && onDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting || isSubmitting}
+                className="px-4 py-3 text-base bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 font-medium rounded-xl disabled:opacity-50"
+              >
+                {isDeleting ? '삭제 중…' : '삭제'}
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}

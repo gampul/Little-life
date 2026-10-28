@@ -112,8 +112,9 @@ export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
     try {
       // Find item for date/account mapping
       const item = pendingQueue.find((p) => p.id === id);
+      // 결제 날짜·시각(KST) 그대로 저장 — 시각이 없으면 그날 00:00 KST
       const dateIso = item?.transaction_date
-        ? new Date(item.transaction_date + 'T00:00:00Z').toISOString()
+        ? new Date(`${item.transaction_date}T${item.transaction_time || '00:00:00'}+09:00`).toISOString()
         : new Date().toISOString();
       const asset = updates.asset || item?.sender || 'SMS';
 
