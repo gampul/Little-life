@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Cell, Pie, PieChart, ResponsiveContainer, type PieLabelRenderProps } from 'recharts';
 import { IconChevronDown, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
@@ -9,6 +9,7 @@ import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { APP_HORIZONTAL_CONTAINER } from '../components/container';
 import { getSupabase } from '../../lib/supabase';
+import { categoryIcon, kstMonthStartIso, toKst, won } from '../ledger/ledgerUtils';
 
 type Mode = 'month' | 'year';
 type Kind = 'expense' | 'income';
@@ -22,7 +23,6 @@ interface Row {
 }
 
 interface Tx {
-  year: number;
   month: number; // 1-12 (KST)
   kind: Kind;
   category: string;
@@ -30,36 +30,30 @@ interface Tx {
   amount: number;
 }
 
-const KST_OFFSET = 9 * 60 * 60 * 1000;
-const won = (n: number) => new Intl.NumberFormat('ko-KR').format(Math.round(n));
-
-/** 1억 이상은 억, 1만 이상은 만 단위로 짧게 */
-function shortWon(n: number): string {
-  const a = Math.abs(n);
-  if (a >= 1e8) return `${(n / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, '')}억`;
-  if (a >= 1e4) return `${Math.round(n / 1e4).toLocaleString('ko-KR')}만`;
-  return won(n);
-}
-
-function toTx(r: Row): Tx | null {
-  const kind: Kind | null = r.transaction_type === '지출' ? 'expense' : r.transaction_type === '수입' ? 'income' : null;
-  if (!kind) return null; // 자산이체 제외
-  const d = new Date(new Date(r.date).getTime() + KST_OFFSET);
-  return {
-    year: d.getUTCFullYear(),
-    month: d.getUTCMonth() + 1,
-    kind,
-    category: (r.category || '미분류').trim(),
-    sub: (r.sub_category || '').trim(),
-    amount: Number(r.amount) || 0,
-  };
-}
-
 interface CatStat {
   name: string;
   total: number;
   count: number;
   subs: { name: string; total: number; count: number }[];
+}
+
+/** 큰 항목부터 빨강 → 주황 → 노랑 → 연두 → 초록 → 청록 → 파랑 → 보라 */
+const PALETTE = [
+  '#f8695c', '#fb914b', '#fdcb47', '#f7e23e', '#c9e64a', '#6fd06b',
+  '#4fdfd1', '#58b6f0', '#7a8cf2', '#a77af0', '#d77ae0', '#f07aa8',
+];
+const colorAt = (i: number) => PALETTE[i % PALETTE.length];
+
+function toTx(r: Row): Tx | null {
+  const kind: Kind | null = r.transaction_type === '지출' ? 'expense' : r.transaction_type === '수입' ? 'income' : null;
+  if (!kind) return null; // 자산이체 제외
+  return {
+    month: toKst(r.date).getUTCMonth() + 1,
+    kind,
+    category: (r.category || '미분류').trim(),
+    sub: (r.sub_category || '').trim(),
+    amount: Number(r.amount) || 0,
+  };
 }
 
 function groupByCategory(list: Tx[]): CatStat[] {
@@ -85,44 +79,84 @@ function groupByCategory(list: Tx[]): CatStat[] {
     .sort((a, b) => b.total - a.total);
 }
 
+const RAD = Math.PI / 180;
+const OUTER_R = 88;
+const LABEL_MIN_PCT = 0.025; // 2.5% 미만 조각은 라벨 생략
+const LABEL_GAP = 32; // 라벨 사이 최소 세로 간격(px)
+
+interface LabelPos {
+  /** 조각 바깥 끝 (중심 기준) */
+  ex: number; ey: number;
+  /** 라벨 위치 (중심 기준) */
+  lx: number; ly: number;
+  right: boolean;
+  name: string;
+  pct: number;
+}
+
+/**
+ * 조각 라벨 위치 계산 — 좌우로 나눠 세로로 겹치지 않게 밀어냄.
+ * 그래프는 12시에서 시계 방향 (startAngle 90 → endAngle -270).
+ */
+function layoutLabels(items: { name: string; value: number }[], total: number, halfH: number): Map<number, LabelPos> {
+  const out = new Map<number, LabelPos>();
+  if (total <= 0) return out;
+  const left: { i: number; pos: LabelPos }[] = [];
+  const right: { i: number; pos: LabelPos }[] = [];
+  let cum = 0;
+  items.forEach((it, i) => {
+    const frac = it.value / total;
+    const mid = 90 - 360 * (cum + frac / 2);
+    cum += frac;
+    if (frac < LABEL_MIN_PCT) return;
+    const cos = Math.cos(-mid * RAD);
+    const sin = Math.sin(-mid * RAD);
+    const isRight = cos >= 0;
+    const pos: LabelPos = {
+      ex: OUTER_R * cos, ey: OUTER_R * sin,
+      lx: (OUTER_R + 22) * cos + (isRight ? 10 : -10), ly: (OUTER_R + 22) * sin,
+      right: isRight, name: it.name, pct: frac,
+    };
+    (isRight ? right : left).push({ i, pos });
+  });
+  for (const side of [left, right]) {
+    side.sort((a, b) => a.pos.ly - b.pos.ly);
+    // 위에서 아래로 간격 확보
+    for (let k = 1; k < side.length; k++) {
+      const prev = side[k - 1].pos.ly;
+      if (side[k].pos.ly < prev + LABEL_GAP) side[k].pos.ly = prev + LABEL_GAP;
+    }
+    // 아래로 넘치면 위로 되밀기
+    const limit = halfH - 16;
+    for (let k = side.length - 1; k >= 0; k--) {
+      const maxY = k === side.length - 1 ? limit : side[k + 1].pos.ly - LABEL_GAP;
+      if (side[k].pos.ly > maxY) side[k].pos.ly = maxY;
+    }
+    for (const { i, pos } of side) {
+      // 세로로 밀린 만큼 가로도 바깥으로 살짝
+      const r = Math.sqrt(pos.ex * pos.ex + pos.ey * pos.ey);
+      if (Math.abs(pos.ly) > r) pos.lx = (pos.right ? 1 : -1) * Math.max(Math.abs(pos.lx), OUTER_R * 0.6);
+      out.set(i, pos);
+    }
+  }
+  return out;
+}
+
 export default function StatsPage() {
   const supabase = getSupabase();
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
+  const now = toKst(new Date().toISOString());
   const [mode, setMode] = useState<Mode>('month');
   const [kind, setKind] = useState<Kind>('expense');
-  const [year, setYear] = useState<number | null>(null);
-  const [month, setMonth] = useState<number>(1);
+  const [year, setYear] = useState(now.getUTCFullYear());
+  const [month, setMonth] = useState(now.getUTCMonth() + 1);
   const [cache, setCache] = useState<Record<number, Tx[]>>({});
-  const inflight = useRef<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [openCat, setOpenCat] = useState<string | null>(null);
-
-  // 처음 열 때: 기록이 있는 가장 최근 달 (없으면 이번 달)
-  useEffect(() => {
-    if (!supabase || !userId || year !== null) return;
-    (async () => {
-      const now = new Date(Date.now() + KST_OFFSET);
-      let y = now.getUTCFullYear();
-      let m = now.getUTCMonth() + 1;
-      const { data } = await supabase
-        .from('transactions')
-        .select('date')
-        .eq('user_id', userId)
-        .in('transaction_type', ['수입', '지출'])
-        .lte('date', new Date().toISOString())
-        .order('date', { ascending: false })
-        .limit(1);
-      if (data && data[0]) {
-        const d = new Date(new Date(data[0].date).getTime() + KST_OFFSET);
-        y = d.getUTCFullYear();
-        m = d.getUTCMonth() + 1;
-      }
-      setMonth(m);
-      setYear(y);
-    })();
-  }, [supabase, userId, year]);
+  const [modeMenu, setModeMenu] = useState(false);
+  const inflight = useRef<Set<number>>(new Set());
 
   // 연 단위로 불러와 캐시 (월간·연간 모두 같은 데이터 사용)
   const loadYear = useCallback(async (y: number) => {
@@ -130,8 +164,6 @@ export default function StatsPage() {
     inflight.current.add(y);
     setError(null);
     try {
-      const from = `${y}-01-01T00:00:00+09:00`;
-      const to = `${y + 1}-01-01T00:00:00+09:00`;
       const all: Tx[] = [];
       const PAGE = 1000;
       for (let off = 0; ; off += PAGE) {
@@ -140,8 +172,8 @@ export default function StatsPage() {
           .select('date, transaction_type, category, sub_category, amount')
           .eq('user_id', userId)
           .in('transaction_type', ['수입', '지출'])
-          .gte('date', from)
-          .lt('date', to)
+          .gte('date', kstMonthStartIso(y, 1))
+          .lt('date', kstMonthStartIso(y + 1, 1))
           .order('date', { ascending: true })
           .range(off, off + PAGE - 1);
         if (err) throw err;
@@ -159,16 +191,10 @@ export default function StatsPage() {
     }
   }, [supabase, userId, cache]);
 
-  useEffect(() => {
-    if (year === null) return;
-    loadYear(year);
-    // 전년·전월(1월) 비교용
-    if (mode === 'year' || month === 1) loadYear(year - 1);
-  }, [year, month, mode, loadYear]);
-
+  useEffect(() => { loadYear(year); }, [year, loadYear]);
   useEffect(() => { setOpenCat(null); }, [mode, kind, year, month]);
 
-  const yearTx = useMemo(() => (year !== null ? cache[year] : undefined), [cache, year]);
+  const yearTx = cache[year];
   const periodTx = useMemo(
     () => (yearTx ? (mode === 'year' ? yearTx : yearTx.filter((t) => t.month === month)) : []),
     [yearTx, mode, month]
@@ -180,34 +206,16 @@ export default function StatsPage() {
       if (t.kind === 'income') income += t.amount;
       else expense += t.amount;
     }
-    return { income, expense, net: income - expense };
+    return { income, expense };
   }, [periodTx]);
-
-  // 지난 기간 대비 (월간: 전월, 연간: 전년 — 전년은 캐시에 있을 때만)
-  const prevTotal = useMemo(() => {
-    if (year === null) return null;
-    let list: Tx[] | undefined;
-    if (mode === 'month') {
-      list = month === 1 ? cache[year - 1]?.filter((t) => t.month === 12) : yearTx?.filter((t) => t.month === month - 1);
-    } else {
-      list = cache[year - 1];
-    }
-    if (!list) return null;
-    return list.filter((t) => t.kind === kind).reduce((s, t) => s + t.amount, 0);
-  }, [cache, yearTx, year, month, mode, kind]);
 
   const cats = useMemo(() => groupByCategory(periodTx.filter((t) => t.kind === kind)), [periodTx, kind]);
   const kindTotal = kind === 'income' ? totals.income : totals.expense;
-
-  const monthly = useMemo(() => {
-    const arr = Array.from({ length: 12 }, (_, i) => ({ m: i + 1, label: `${i + 1}`, income: 0, expense: 0 }));
-    for (const t of yearTx ?? []) arr[t.month - 1][t.kind] += t.amount;
-    return arr;
-  }, [yearTx]);
+  const pieData = useMemo(() => cats.map((c) => ({ name: c.name, value: c.total })), [cats]);
+  const labelPos = useMemo(() => layoutLabels(pieData, kindTotal, 150), [pieData, kindTotal]);
 
   const step = (dir: -1 | 1) => {
-    if (year === null) return;
-    if (mode === 'year') { setYear(year + dir); return; }
+    if (mode === 'year') { setYear((y) => y + dir); return; }
     let m = month + dir, y = year;
     if (m < 1) { m = 12; y -= 1; }
     if (m > 12) { m = 1; y += 1; }
@@ -215,143 +223,143 @@ export default function StatsPage() {
     setYear(y);
   };
 
-  const loading = year === null || (!yearTx && !error);
-  const periodLabel = year === null ? '' : mode === 'year' ? `${year}년` : `${year}년 ${month}월`;
-  const accent = kind === 'expense' ? 'bg-rose-500' : 'bg-emerald-500';
-  const accentText = kind === 'expense' ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400';
+  const loading = !yearTx && !error;
+  const periodLabel = mode === 'year' ? `${year}년` : `${year}년 ${month}월`;
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-24">
+      <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-28">
         <GlobalNav />
-        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6`}>
-          <div className="mb-3 flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white">통계</h1>
-            <div className="grid grid-cols-2 gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5 text-xs font-semibold">
-              {(['month', 'year'] as Mode[]).map((m) => (
+
+        {/* 상단 고정: 기간 · 월간/연간 · 수입/지출 탭 */}
+        <div className="sticky top-16 z-40 bg-[rgb(254,252,247)]/95 dark:bg-gray-900/95 backdrop-blur">
+          <div className={APP_HORIZONTAL_CONTAINER}>
+            <div className="flex items-center gap-1 pt-2 pb-1">
+              <button type="button" onClick={() => step(-1)} className="flex h-9 w-8 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="이전">
+                <IconChevronLeft size={20} />
+              </button>
+              <span className="min-w-[104px] text-center text-[17px] font-semibold tabular-nums text-gray-900 dark:text-white">{periodLabel}</span>
+              <button type="button" onClick={() => step(1)} className="flex h-9 w-8 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="다음">
+                <IconChevronRight size={20} />
+              </button>
+              <div className="relative ml-auto">
                 <button
-                  key={m}
                   type="button"
-                  onClick={() => setMode(m)}
-                  className={`rounded-md px-3 py-1.5 transition ${
-                    mode === m ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'
-                  }`}
+                  onClick={() => setModeMenu((v) => !v)}
+                  className="flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-800 dark:text-gray-100"
+                  aria-haspopup="listbox"
+                  aria-expanded={modeMenu}
                 >
-                  {m === 'month' ? '월간' : '연간'}
+                  {mode === 'month' ? '월간' : '연간'}
+                  <IconChevronDown size={14} />
+                </button>
+                {modeMenu && (
+                  <ul role="listbox" className="absolute right-0 mt-1 w-24 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg z-10">
+                    {(['month', 'year'] as Mode[]).map((m) => (
+                      <li key={m}>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={mode === m}
+                          onClick={() => { setMode(m); setModeMenu(false); }}
+                          className={`w-full px-3 py-2 text-left text-sm ${mode === m ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'} hover:bg-gray-50 dark:hover:bg-gray-700`}
+                        >
+                          {m === 'month' ? '월간' : '연간'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 border-b border-gray-200 dark:border-gray-700" role="tablist">
+              {(['income', 'expense'] as Kind[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  role="tab"
+                  aria-selected={kind === k}
+                  onClick={() => setKind(k)}
+                  className={`relative py-3 text-[15px] ${kind === k ? 'font-semibold text-gray-900 dark:text-white' : 'text-gray-400'}`}
+                >
+                  {k === 'income' ? '수입' : '지출'}
+                  <span className="ml-2 tabular-nums">{loading ? '—' : `${won(k === 'income' ? totals.income : totals.expense)}원`}</span>
+                  {kind === k && <span className="absolute inset-x-0 bottom-0 h-[3px] bg-red-500" />}
                 </button>
               ))}
             </div>
           </div>
+        </div>
 
-          {/* 기간 이동 */}
-          <div className="mb-3 flex items-center justify-between">
-            <button type="button" onClick={() => step(-1)} className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="이전">
-              <IconChevronLeft size={20} />
-            </button>
-            <div className="text-base font-bold text-gray-900 dark:text-white tabular-nums">{periodLabel}</div>
-            <button type="button" onClick={() => step(1)} className="flex h-9 w-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="다음">
-              <IconChevronRight size={20} />
-            </button>
-          </div>
+        <main className={APP_HORIZONTAL_CONTAINER}>
+          {error && <div className="mt-3 rounded-xl bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-600">{error}</div>}
 
-          {error && <div className="mb-3 rounded-xl bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-600">{error}</div>}
-
-          {/* 합계 */}
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: '수입', value: totals.income, cls: 'text-emerald-600 dark:text-emerald-400', k: 'income' as Kind },
-              { label: '지출', value: totals.expense, cls: 'text-rose-600 dark:text-rose-400', k: 'expense' as Kind },
-              { label: '수입 − 지출', value: totals.net, cls: totals.net >= 0 ? 'text-gray-900 dark:text-white' : 'text-rose-600 dark:text-rose-400', k: null },
-            ].map((c) => (
-              <button
-                key={c.label}
-                type="button"
-                disabled={!c.k}
-                onClick={() => c.k && setKind(c.k)}
-                className={`rounded-xl border bg-white dark:bg-gray-800 p-3 text-left transition ${
-                  c.k && kind === c.k ? 'border-gray-900 dark:border-gray-300' : 'border-gray-100 dark:border-gray-700'
-                }`}
-              >
-                <div className="text-[11px] text-gray-500 dark:text-gray-400">{c.label}</div>
-                <div className={`mt-0.5 text-[15px] font-bold tabular-nums ${c.cls}`}>
-                  {loading ? '—' : shortWon(c.value)}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* 연간: 월별 막대 */}
-          {mode === 'year' && (
-            <div className="mt-3 rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
-              <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
-                <span>월별 {kind === 'expense' ? '지출' : '수입'} · 막대를 누르면 그 달로</span>
+          {loading ? (
+            <div className="py-6">
+              <div className="mx-auto h-56 w-56 animate-pulse rounded-full bg-gray-100 dark:bg-gray-800" />
+              <div className="mt-6 space-y-2">
+                {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />)}
               </div>
-              <div className="h-40">
+            </div>
+          ) : cats.length === 0 ? (
+            <div className="py-20 text-center text-sm text-gray-400">
+              {periodLabel} {kind === 'expense' ? '지출' : '수입'} 기록이 없어요
+            </div>
+          ) : (
+            <>
+              {/* 원형 그래프 */}
+              <div className="h-[300px] border-b border-gray-200 dark:border-gray-700">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthly} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} interval={0} />
-                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#9ca3af' }} tickFormatter={(v) => shortWon(Number(v))} width={44} />
-                    <Tooltip
-                      cursor={{ fill: 'rgba(0,0,0,0.04)' }}
-                      formatter={(v) => [`${won(Number(v))}원`, kind === 'expense' ? '지출' : '수입']}
-                      labelFormatter={(l) => `${l}월`}
-                      contentStyle={{ borderRadius: 10, fontSize: 12 }}
-                    />
-                    <Bar
-                      dataKey={kind}
-                      fill={kind === 'expense' ? '#f43f5e' : '#10b981'}
-                      radius={[4, 4, 0, 0]}
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={OUTER_R}
+                      startAngle={90}
+                      endAngle={-270}
+                      stroke="rgb(254,252,247)"
+                      strokeWidth={cats.length > 1 ? 1 : 0}
                       isAnimationActive={false}
-                      onClick={(d: { payload?: { m?: number } }) => {
-                        const m = d?.payload?.m;
-                        if (m) { setMonth(m); setMode('month'); }
+                      labelLine={false}
+                      label={(props: PieLabelRenderProps) => {
+                        const pos = labelPos.get(Number(props.index));
+                        if (!pos) return null;
+                        const cx = Number(props.cx) || 0;
+                        const cy = Number(props.cy) || 0;
+                        const x = cx + pos.lx;
+                        const y = cy + pos.ly;
+                        const elbowX = cx + pos.lx + (pos.right ? -8 : 8);
+                        const color = colorAt(Number(props.index));
+                        return (
+                          <g>
+                            <path
+                              d={`M${cx + pos.ex},${cy + pos.ey}L${elbowX},${y}L${x - (pos.right ? 2 : -2)},${y}`}
+                              stroke={color}
+                              strokeWidth={1.2}
+                              fill="none"
+                            />
+                            <text x={x} y={y} textAnchor={pos.right ? 'start' : 'end'} className="fill-gray-800 dark:fill-gray-100">
+                              <tspan x={x} dy="-0.15em" fontSize={12} fontWeight={600}>{`${categoryIcon(pos.name)} ${pos.name}`}</tspan>
+                              <tspan x={x} dy="1.25em" fontSize={11} className="fill-gray-500 dark:fill-gray-400">{`${(pos.pct * 100).toFixed(1)} %`}</tspan>
+                            </text>
+                          </g>
+                        );
                       }}
-                      style={{ cursor: 'pointer' }}
-                    />
-                  </BarChart>
+                      onClick={(d: { name?: string }) => d?.name && setOpenCat((o) => (o === d.name ? null : d.name!))}
+                    >
+                      {cats.map((c, i) => <Cell key={c.name} fill={colorAt(i)} style={{ cursor: 'pointer' }} />)}
+                    </Pie>
+                  </PieChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          )}
 
-          {/* 항목별 */}
-          <div className="mt-4">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="grid grid-cols-2 gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5 text-xs font-semibold">
-                {(['expense', 'income'] as Kind[]).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setKind(k)}
-                    className={`rounded-md px-3 py-1.5 transition ${
-                      kind === k ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'
-                    }`}
-                  >
-                    {k === 'expense' ? '지출' : '수입'} 항목
-                  </button>
-                ))}
-              </div>
-              {prevTotal !== null && !loading && (prevTotal > 0 || kindTotal > 0) && (
-                <span className="text-[11px] text-gray-500 dark:text-gray-400 tabular-nums">
-                  {mode === 'month' ? '전월' : '전년'} 대비{' '}
-                  <span className="font-semibold text-gray-800 dark:text-gray-200">
-                    {kindTotal >= prevTotal ? '+' : '−'}{shortWon(Math.abs(kindTotal - prevTotal))}
-                  </span>
-                </span>
-              )}
-            </div>
-
-            {loading ? (
-              <div className="space-y-2">
-                {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />)}
-              </div>
-            ) : cats.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 py-10 text-center text-sm text-gray-400">
-                {periodLabel} {kind === 'expense' ? '지출' : '수입'} 기록이 없어요
-              </div>
-            ) : (
-              <ul className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700">
-                {cats.map((c) => {
+              {/* 항목 목록 */}
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {cats.map((c, i) => {
                   const pct = kindTotal > 0 ? (c.total / kindTotal) * 100 : 0;
                   const open = openCat === c.name;
                   return (
@@ -359,30 +367,23 @@ export default function StatsPage() {
                       <button
                         type="button"
                         onClick={() => setOpenCat(open ? null : c.name)}
-                        className="w-full px-3.5 py-3 text-left"
+                        className="flex w-full items-center gap-3 px-1 py-3.5 text-left"
                         aria-expanded={open}
                       >
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="min-w-0 truncate text-sm font-medium text-gray-900 dark:text-white">
-                            {c.name}
-                            <span className="ml-1.5 text-[11px] font-normal text-gray-400">{c.count}건</span>
-                          </span>
-                          <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
-                            {won(c.total)}원
-                          </span>
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-2">
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
-                            <div className={`h-full rounded-full ${accent}`} style={{ width: `${Math.max(pct, 1)}%` }} />
-                          </div>
-                          <span className={`w-10 text-right text-[11px] font-semibold tabular-nums ${accentText}`}>
-                            {pct >= 10 ? Math.round(pct) : pct.toFixed(1)}%
-                          </span>
-                          <IconChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
-                        </div>
+                        <span
+                          className="w-12 shrink-0 rounded-md py-1 text-center text-[13px] font-medium tabular-nums text-gray-900"
+                          style={{ backgroundColor: colorAt(i) }}
+                        >
+                          {pct >= 1 ? Math.round(pct) : pct.toFixed(1)}%
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-[15px] text-gray-900 dark:text-gray-100">
+                          <span className="mr-1">{categoryIcon(c.name)}</span>
+                          {c.name}
+                        </span>
+                        <span className="shrink-0 text-[15px] tabular-nums text-gray-900 dark:text-gray-100">{won(c.total)}원</span>
                       </button>
                       {open && (
-                        <ul className="bg-gray-50 dark:bg-gray-900/40 px-3.5 py-2">
+                        <ul className="mb-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-1.5">
                           {c.subs.map((s) => (
                             <li key={s.name} className="flex items-baseline justify-between py-1 text-[13px]">
                               <span className="min-w-0 truncate text-gray-600 dark:text-gray-300">
@@ -398,9 +399,9 @@ export default function StatsPage() {
                   );
                 })}
               </ul>
-            )}
-            <p className="mt-2 text-[11px] text-gray-400">자산 간 이체는 통계에서 빠져요.</p>
-          </div>
+              <p className="mt-2 text-[11px] text-gray-400">자산 간 이체는 통계에서 빠져요. 항목을 누르면 세부 분류가 보여요.</p>
+            </>
+          )}
         </main>
         <FooterNav />
       </div>
