@@ -120,15 +120,15 @@ export function GlobalNav(props: GlobalNavProps) {
             </span>
           </Link>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
             {/* 로그인/로그아웃 */}
             {userEmail ? (
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center gap-0.5 min-w-0">
                 {pendingCount > 0 && (
                   <button
                     type="button"
                     onClick={openPending}
-                    className="relative min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="relative min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     aria-label={`가계부 확인 대기 ${pendingCount}건`}
                     title={`가계부 확인 대기 ${pendingCount}건`}
                   >
@@ -140,7 +140,7 @@ export function GlobalNav(props: GlobalNavProps) {
                 )}
                 <form action={signOutAction}>
                   <button
-                    className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     aria-label="로그아웃"
                     title="로그아웃"
                   >
@@ -163,7 +163,7 @@ export function GlobalNav(props: GlobalNavProps) {
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center ${
+                className={`rounded-lg text-sm font-medium transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center ${
                   menuOpen || pathname === '/settings'
                     ? 'bg-blue-600 text-white'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
