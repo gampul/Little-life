@@ -144,7 +144,7 @@ export default function AssetsPage() {
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
         <GlobalNav />
         
-        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6 max-[539px]:!pr-[3.75rem]`}>
+        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6 !pr-[3.75rem]`}>
           {/* 헤더 */}
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">

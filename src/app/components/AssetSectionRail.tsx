@@ -21,7 +21,7 @@ export function assetSectionOf(pathname: string): string | null {
 
 /**
  * 오른쪽에 떠서 스크롤해도 따라다니는 Asset 섹션 메뉴.
- * 넓은 화면에서는 본문(412px) 바로 오른쪽 바깥, 좁은 화면에서는 화면 오른쪽 끝.
+ * 본문(412px) 영역 안쪽 오른쪽 끝 — 페이지 main 의 !pr-[3.75rem] 으로 본문을 가리지 않음.
  */
 export function AssetSectionRail({ pathname }: { pathname: string }) {
   const current = assetSectionOf(pathname);
@@ -30,7 +30,7 @@ export function AssetSectionRail({ pathname }: { pathname: string }) {
   return (
     <nav
       aria-label="Asset 메뉴"
-      className="fixed right-1.5 min-[540px]:right-auto min-[540px]:left-[calc(50%+216px)] top-1/2 z-[90] -translate-y-1/2 flex flex-col gap-1 rounded-2xl border border-gray-200/80 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 p-1 shadow-lg backdrop-blur-md"
+      className="fixed right-[max(6px,calc(50%-200px))] top-1/2 z-[90] -translate-y-1/2 flex flex-col gap-1 rounded-2xl border border-gray-200/80 dark:border-gray-700 bg-white/90 dark:bg-gray-800/90 p-1 shadow-lg backdrop-blur-md"
     >
       {ASSET_SECTIONS.map(({ href, label, icon: Icon }) => {
         const active = current === href;

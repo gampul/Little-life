@@ -224,7 +224,7 @@ export default function StatsPage() {
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-24">
         <GlobalNav />
-        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6 max-[539px]:!pr-[3.75rem]`}>
+        <main className={`${APP_HORIZONTAL_CONTAINER} pt-4 sm:pt-6 !pr-[3.75rem]`}>
           <div className="mb-3 flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">통계</h1>
             <div className="grid grid-cols-2 gap-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5 text-xs font-semibold">

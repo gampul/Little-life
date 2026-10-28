@@ -88,7 +88,7 @@ export default function DeployPage() {
         <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900">
           <GlobalNav />
 
-          <main className={`${APP_CONTENT_CONTAINER} pb-28 max-[539px]:!pr-[3.75rem]`}>
+          <main className={`${APP_CONTENT_CONTAINER} pb-28 !pr-[3.75rem]`}>
             <div className="flex items-center justify-between mb-3">
               <h1 className="text-xl font-bold text-gray-900 dark:text-white">투자현황</h1>
             </div>
