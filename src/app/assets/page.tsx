@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { IconAdjustmentsHorizontal, IconChevronDown } from '@tabler/icons-react';
+import { IconAdjustmentsHorizontal } from '@tabler/icons-react';
 import { GlobalNav } from '../components/GlobalNav';
 import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
@@ -244,7 +244,6 @@ export default function AssetsPage() {
                           >
                             <span className="min-w-0 flex-1 truncate text-[15px] text-gray-900 dark:text-gray-100">{a.asset_name}</span>
                             <span className={`shrink-0 text-[15px] tabular-nums ${amountColor(a.balance)}`}>{won(a.balance)}원</span>
-                            <IconChevronDown size={14} className={`shrink-0 text-gray-300 transition-transform ${open ? 'rotate-180' : ''}`} />
                           </button>
                           {open && (
                             <div className="mb-1 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-1.5">
