@@ -5,7 +5,6 @@ import type { CSSProperties, ReactNode } from 'react';
 import { IconChevronLeft, IconChevronRight, IconPhotoEdit, IconTrophy } from '@tabler/icons-react';
 import { getRowImages, isRoutineRowDone, kstTodayString, type DoneCheckRow } from '../../lib/routineDone';
 import {
-  LEVEL_GRAYSCALE,
   MONTH_COMPLETE_RATIO,
   buildDayScores,
   monthProgress,
@@ -66,18 +65,30 @@ const ART_AHEAD_MONTHS = 3;
 const VIEW_KEY = 'little-life:calendar-view';
 type CalView = 'art' | 'heat';
 
-/** 칸 단계별 덮개 — 아래 그림을 흑백·흐리게 (backdrop-filter) */
-const LEVEL_VEIL = [0.42, 0.28, 0.16, 0.06, 0] as const;
+/**
+ * 칸 단계별 덮개 — 아래 그림을 단계마다 확 다르게 (backdrop-filter)
+ *  0개: 거의 검정 → 조금: 어두운 흑백 → 반쯤: 흐린 색 → 거의: 살짝 바랜 색 → 만점: 선명한 풀컬러
+ */
+const LEVEL_FILTER = [
+  'grayscale(1) brightness(0.16)',
+  'grayscale(1) brightness(0.42)',
+  'grayscale(0.7) brightness(0.68)',
+  'grayscale(0.3) brightness(0.9)',
+  'saturate(1.25) brightness(1.04)',
+] as const;
+const LEVEL_DIM = [0.35, 0.15, 0, 0, 0] as const;
+/** 범례 견본 색 */
+const LEVEL_SWATCH = ['#151515', '#4a4a4a', '#7d8a86', '#7fae9a', 'linear-gradient(135deg,#ff9f1c,#2ec4b6,#e71d36)'] as const;
 const veilStyle = (level: number, future = false): CSSProperties => {
-  const g = future ? 1 : LEVEL_GRAYSCALE[level];
-  const filter = g > 0 ? `grayscale(${g})` : 'none';
-  const veil = future ? 0.55 : LEVEL_VEIL[level];
+  // 아직 안 온 날·달 밖 칸은 밝은 회색 (0개 한 날의 검정과 구분)
+  const filter = future ? 'grayscale(1) brightness(1.1)' : LEVEL_FILTER[level];
+  const bg = future ? 'rgba(255,255,255,0.55)' : LEVEL_DIM[level] > 0 ? `rgba(0,0,0,${LEVEL_DIM[level]})` : undefined;
   return {
     // 칸 경계의 소수점 틈으로 컬러가 새지 않게 살짝 겹침
     margin: '-0.5px',
     backdropFilter: filter,
     WebkitBackdropFilter: filter,
-    backgroundColor: veil > 0 ? `rgba(255,255,255,${veil})` : undefined,
+    backgroundColor: bg,
   };
 };
 
@@ -439,7 +450,7 @@ export default function RoutineMonthCalendar({
                   >
                     <span
                       className={`absolute left-1 top-0.5 text-[10px] font-semibold tabular-nums ${
-                        level >= 3 ? 'text-white [text-shadow:0_0_3px_rgba(0,0,0,0.7)]' : 'text-gray-700 [text-shadow:0_0_2px_rgba(255,255,255,0.9)]'
+                        future ? 'text-gray-600 [text-shadow:0_0_2px_rgba(255,255,255,0.9)]' : 'text-white [text-shadow:0_0_3px_rgba(0,0,0,0.8)]'
                       }`}
                     >
                       {day}
@@ -523,9 +534,18 @@ export default function RoutineMonthCalendar({
 
         {/* 범례 / 안내 */}
         {artMode ? (
-          <p className="mt-2 text-right text-[10px] text-gray-400 dark:text-gray-500">
-            하루 루틴 {Math.max(1, Math.ceil(total * 0.8 - 1e-9))}개 이상이면 만점 ✨ · 한 달 80% 칠하면 그림 완성
-          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-y-1 text-[10px] text-gray-400 dark:text-gray-500">
+            <span className="inline-flex items-center gap-1">
+              0개
+              {LEVEL_SWATCH.map((c) => (
+                <span key={c} className="inline-block h-3 w-3 rounded-sm" style={{ background: c }} />
+              ))}
+              만점
+            </span>
+            <span>
+              하루 {Math.max(1, Math.ceil(total * 0.8 - 1e-9))}개 이상 만점 ✨ · 한 달 80% 칠하면 완성
+            </span>
+          </div>
         ) : !selected ? (
           <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-gray-400 dark:text-gray-500">
             적음
