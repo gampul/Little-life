@@ -67,22 +67,22 @@ type CalView = 'art' | 'heat';
 
 /**
  * 칸 단계별 덮개 — 아래 그림을 단계마다 확 다르게 (backdrop-filter)
- *  0개: 거의 검정 → 조금: 어두운 흑백 → 반쯤: 흐린 색 → 거의: 살짝 바랜 색 → 만점: 선명한 풀컬러
+ *  0개: 거의 흰색 → 조금: 옅은 흑백 → 반쯤: 흐린 색 → 거의: 살짝 바랜 색 → 만점: 선명한 풀컬러
  */
 const LEVEL_FILTER = [
-  'grayscale(1) brightness(0.16)',
-  'grayscale(1) brightness(0.42)',
-  'grayscale(0.7) brightness(0.68)',
-  'grayscale(0.3) brightness(0.9)',
+  'grayscale(1) brightness(1.5)',
+  'grayscale(1) brightness(1.2)',
+  'grayscale(0.7) brightness(1.05)',
+  'grayscale(0.3)',
   'saturate(1.25) brightness(1.04)',
 ] as const;
-const LEVEL_DIM = [0.35, 0.15, 0, 0, 0] as const;
+const LEVEL_WHITE = [0.82, 0.55, 0.28, 0.08, 0] as const;
 /** 범례 견본 색 */
-const LEVEL_SWATCH = ['#151515', '#4a4a4a', '#7d8a86', '#7fae9a', 'linear-gradient(135deg,#ff9f1c,#2ec4b6,#e71d36)'] as const;
+const LEVEL_SWATCH = ['#fbfbfb', '#d6d6d6', '#b3c1bb', '#7fae9a', 'linear-gradient(135deg,#ff9f1c,#2ec4b6,#e71d36)'] as const;
 const veilStyle = (level: number, future = false): CSSProperties => {
-  // 아직 안 온 날·달 밖 칸은 밝은 회색 (0개 한 날의 검정과 구분)
-  const filter = future ? 'grayscale(1) brightness(1.1)' : LEVEL_FILTER[level];
-  const bg = future ? 'rgba(255,255,255,0.55)' : LEVEL_DIM[level] > 0 ? `rgba(0,0,0,${LEVEL_DIM[level]})` : undefined;
+  // 아직 안 온 날·달 밖 칸은 회색 (0개 한 날의 흰색과 구분)
+  const filter = future ? 'grayscale(1) brightness(0.9)' : LEVEL_FILTER[level];
+  const bg = future ? 'rgba(209,213,219,0.82)' : LEVEL_WHITE[level] > 0 ? `rgba(255,255,255,${LEVEL_WHITE[level]})` : undefined;
   return {
     // 칸 경계의 소수점 틈으로 컬러가 새지 않게 살짝 겹침
     margin: '-0.5px',
@@ -450,7 +450,7 @@ export default function RoutineMonthCalendar({
                   >
                     <span
                       className={`absolute left-1 top-0.5 text-[10px] font-semibold tabular-nums ${
-                        future ? 'text-gray-600 [text-shadow:0_0_2px_rgba(255,255,255,0.9)]' : 'text-white [text-shadow:0_0_3px_rgba(0,0,0,0.8)]'
+                        future ? 'text-gray-500' : level >= 3 ? 'text-white [text-shadow:0_0_3px_rgba(0,0,0,0.8)]' : 'text-gray-700'
                       }`}
                     >
                       {day}
@@ -538,7 +538,7 @@ export default function RoutineMonthCalendar({
             <span className="inline-flex items-center gap-1">
               0개
               {LEVEL_SWATCH.map((c) => (
-                <span key={c} className="inline-block h-3 w-3 rounded-sm" style={{ background: c }} />
+                <span key={c} className="inline-block h-3 w-3 rounded-sm ring-1 ring-inset ring-gray-200 dark:ring-gray-600" style={{ background: c }} />
               ))}
               만점
             </span>
