@@ -90,6 +90,8 @@ export interface StatsRow {
   category: string | null;
   sub_category: string | null;
   amount: number;
+  asset?: string | null;
+  memo?: string | null;
 }
 
 /** 통계용 — 그 해 수입·지출 원본 행 */
@@ -100,7 +102,7 @@ export async function fetchStatsYear(userId: string, year: number): Promise<Stat
   for (let off = 0; ; off += PAGE) {
     const { data, error } = await supabase
       .from('transactions')
-      .select('date, transaction_type, category, sub_category, amount')
+      .select('date, transaction_type, category, sub_category, amount, asset, memo')
       .eq('user_id', userId)
       .in('transaction_type', ['수입', '지출'])
       .gte('date', kstMonthStartIso(year, 1))

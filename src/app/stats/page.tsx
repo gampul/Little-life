@@ -19,6 +19,8 @@ interface Row {
   category: string | null;
   sub_category: string | null;
   amount: number;
+  asset?: string | null;
+  memo?: string | null;
 }
 
 interface Tx {
@@ -27,13 +29,15 @@ interface Tx {
   category: string;
   sub: string;
   amount: number;
+  date: string;
+  label: string;
 }
 
 interface CatStat {
   name: string;
   total: number;
   count: number;
-  subs: { name: string; total: number; count: number }[];
+  subs: { name: string; total: number; count: number; items: Tx[] }[];
 }
 
 /** 큰 항목부터 빨강 → 주황 → 노랑 → 연두 → 초록 → 청록 → 파랑 → 보라 */
@@ -52,20 +56,23 @@ function toTx(r: Row): Tx | null {
     category: (r.category || '미분류').trim(),
     sub: (r.sub_category || '').trim(),
     amount: Number(r.amount) || 0,
+    date: r.date,
+    label: (r.memo || '').trim() || (r.asset || '').trim() || '-',
   };
 }
 
 function groupByCategory(list: Tx[]): CatStat[] {
-  const map = new Map<string, { total: number; count: number; subs: Map<string, { total: number; count: number }> }>();
+  const map = new Map<string, { total: number; count: number; subs: Map<string, { total: number; count: number; items: Tx[] }> }>();
   for (const t of list) {
     let c = map.get(t.category);
     if (!c) { c = { total: 0, count: 0, subs: new Map() }; map.set(t.category, c); }
     c.total += t.amount;
     c.count += 1;
     const key = t.sub || '기타';
-    const s = c.subs.get(key) ?? { total: 0, count: 0 };
+    const s = c.subs.get(key) ?? { total: 0, count: 0, items: [] };
     s.total += t.amount;
     s.count += 1;
+    s.items.push(t);
     c.subs.set(key, s);
   }
   return [...map.entries()]
@@ -73,7 +80,9 @@ function groupByCategory(list: Tx[]): CatStat[] {
       name,
       total: c.total,
       count: c.count,
-      subs: [...c.subs.entries()].map(([n, s]) => ({ name: n, ...s })).sort((a, b) => b.total - a.total),
+      subs: [...c.subs.entries()]
+        .map(([n, s]) => ({ name: n, ...s, items: [...s.items].sort((a, b) => (a.date < b.date ? 1 : -1)) }))
+        .sort((a, b) => b.total - a.total),
     }))
     .sort((a, b) => b.total - a.total);
 }
@@ -151,6 +160,7 @@ export default function StatsPage() {
   const [year, setYear] = useState(now.getUTCFullYear());
   const [month, setMonth] = useState(now.getUTCMonth() + 1);
   const [openCat, setOpenCat] = useState<string | null>(null);
+  const [openSub, setOpenSub] = useState<string | null>(null);
   const [modeMenu, setModeMenu] = useState(false);
 
   // 연 단위로 불러와 캐시 (월간·연간 모두 같은 데이터, 다시 열면 바로 표시)
@@ -357,22 +367,50 @@ export default function StatsPage() {
                       </button>
                       {open && (
                         <ul className="mb-2 rounded-lg bg-gray-50 dark:bg-gray-800/60 px-3 py-1.5">
-                          {c.subs.map((s) => (
-                            <li key={s.name} className="flex items-baseline justify-between py-1 text-[13px]">
-                              <span className="min-w-0 truncate text-gray-600 dark:text-gray-300">
-                                {s.name}
-                                <span className="ml-1.5 text-[11px] text-gray-400">{s.count}건</span>
-                              </span>
-                              <span className="shrink-0 tabular-nums text-gray-700 dark:text-gray-200">{won(s.total)}원</span>
-                            </li>
-                          ))}
+                          {c.subs.map((s) => {
+                            // 세부 분류가 하나뿐이면 바로 펼침
+                            const subKey = `${c.name}|${s.name}`;
+                            const subOpen = c.subs.length === 1 || openSub === subKey;
+                            return (
+                              <li key={s.name} className="py-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenSub(openSub === subKey ? null : subKey)}
+                                  aria-expanded={subOpen}
+                                  className="flex w-full items-baseline justify-between gap-2 py-1 text-left text-[13px]"
+                                >
+                                  <span className="min-w-0 truncate text-gray-600 dark:text-gray-300">
+                                    {s.name}
+                                    <span className="ml-1.5 text-[11px] text-gray-400">{s.count}건</span>
+                                  </span>
+                                  <span className="shrink-0 tabular-nums text-gray-700 dark:text-gray-200">{won(s.total)}원</span>
+                                </button>
+                                {subOpen && (
+                                  <ul className="mb-1 border-l-2 border-gray-200 dark:border-gray-700 pl-2">
+                                    {s.items.map((t, idx) => {
+                                      const k = toKst(t.date);
+                                      return (
+                                        <li key={`${t.date}-${idx}`} className="flex items-baseline gap-2 py-0.5 text-[12px]">
+                                          <span className="shrink-0 tabular-nums text-gray-400">
+                                            {String(k.getUTCMonth() + 1).padStart(2, '0')}.{String(k.getUTCDate()).padStart(2, '0')}
+                                          </span>
+                                          <span className="min-w-0 flex-1 truncate text-gray-600 dark:text-gray-300">{t.label}</span>
+                                          <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-300">{won(t.amount)}원</span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                )}
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-2 text-[11px] text-gray-400">자산 간 이체는 통계에서 빠져요. 항목을 누르면 세부 분류가 보여요.</p>
+              <p className="mt-2 text-[11px] text-gray-400">자산 간 이체는 통계에서 빠져요. 항목을 누르면 세부 분류가, 세부 분류를 누르면 전체 내역이 보여요.</p>
             </>
           )}
         </main>
