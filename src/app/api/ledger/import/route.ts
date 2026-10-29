@@ -14,6 +14,31 @@ const TYPE_MAPPING: Record<string, { transaction_type: string; is_transfer: bool
   '이체입금': { transaction_type: '자산이체', is_transfer: true },
 };
 
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/**
+ * 엑셀 날짜 → 실제 시각. 가계부 앱이 내보낸 시각은 한국 시간(KST) 기준이라
+ * 서버(UTC)에서 그대로 읽으면 9시간 밀려 오후 3시 이후 거래가 다음 날로 넘어감.
+ *  - 숫자(엑셀 시리얼): KST 벽시계 시각으로 보고 9시간 빼서 UTC 로
+ *  - 문자열 "2026. 01. 30 20:10:58": +09:00 을 붙여 해석
+ */
+function parseKstDate(v: unknown): Date | null {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return new Date(Math.round((v - 25569) * 86400 * 1000) - KST_OFFSET_MS);
+  }
+  if (typeof v === 'string' && v.trim()) {
+    const m = v.trim().match(/^(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})\.?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?/);
+    if (m) {
+      const [, y, mo, d, h = '0', mi = '0', se = '0', ms = '0'] = m;
+      return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +se, +ms.padEnd(3, '0')) - KST_OFFSET_MS);
+    }
+    const t = new Date(v);
+    return Number.isNaN(t.getTime()) ? null : t;
+  }
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+  return null;
+}
+
 interface ExcelRow {
   날짜?: string | number | Date;
   자산?: string;
@@ -91,7 +116,8 @@ export async function POST(request: NextRequest) {
 
     // 파일 읽기
     const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    // 날짜는 시리얼 숫자 그대로 받아 KST 로 직접 변환 (cellDates 는 서버 시간대·초 단위 오차가 생김)
+    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     
     // 첫 번째 시트 파싱
     const sheetName = workbook.SheetNames[0];
@@ -111,49 +137,39 @@ export async function POST(request: NextRequest) {
       const rowNum = i + 2; // Excel은 1-based, 헤더 제외
 
       try {
-        // 날짜 파싱
-        let dateValue: Date;
-        if (row.날짜 instanceof Date) {
-          dateValue = row.날짜;
-        } else if (typeof row.날짜 === 'number') {
-          // Excel 시리얼 날짜
-          dateValue = new Date((row.날짜 - 25569) * 86400 * 1000);
-        } else if (typeof row.날짜 === 'string') {
-          // "2026. 01. 30 20:10:58" 형식 파싱
-          const cleaned = row.날짜.replace(/\. /g, '-').replace(/ /, 'T');
-          dateValue = new Date(cleaned);
-          if (isNaN(dateValue.getTime())) {
-            dateValue = new Date(row.날짜);
-          }
-        } else {
+        // 날짜 파싱 (KST 기준)
+        if (row.날짜 == null || row.날짜 === '') {
           errors.push(`Row ${rowNum}: 날짜가 없습니다`);
           continue;
         }
-
-        if (isNaN(dateValue.getTime())) {
+        const dateValue = parseKstDate(row.날짜);
+        if (!dateValue) {
           errors.push(`Row ${rowNum}: 잘못된 날짜 형식`);
           continue;
         }
 
         // 금액 파싱 (금액(원) 또는 금액 컬럼)
         const rawAmount = row['금액(원)'] ?? row.금액;
-        let amount: number;
+        let signed: number;
         if (typeof rawAmount === 'number') {
-          amount = Math.abs(rawAmount);
+          signed = rawAmount;
         } else if (typeof rawAmount === 'string') {
-          amount = Math.abs(parseInt(rawAmount.replace(/[^0-9-]/g, '')) || 0);
+          signed = parseInt(rawAmount.replace(/[^0-9-]/g, '')) || 0;
         } else {
           errors.push(`Row ${rowNum}: 금액이 없습니다`);
           continue;
         }
 
+        const amount = Math.abs(signed);
         if (amount <= 0) {
           errors.push(`Row ${rowNum}: 금액은 0보다 커야 합니다`);
           continue;
         }
 
         // 거래 유형 매핑
-        const typeText = row['수입/지출']?.trim() || '';
+        let typeText = row['수입/지출']?.trim() || '';
+        // 음수 금액(잔액수정 등)은 부호를 버리지 않고 수입↔지출을 뒤집어 저장
+        if (signed < 0 && (typeText === '수입' || typeText === '지출')) typeText = typeText === '수입' ? '지출' : '수입';
         const typeInfo = TYPE_MAPPING[typeText];
         if (!typeInfo) {
           errors.push(`Row ${rowNum}: 알 수 없는 거래 유형 "${typeText}"`);
@@ -206,10 +222,49 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // 이미 있는 거래는 건너뜀 — 같은 자산·금액·유형이고 시각이 2초 안이면 같은 거래로 봄
+    // (예전 업로드와 밀리초 단위가 조금 달라도 중복으로 쌓이지 않게)
+    const times = transactions.map((t) => Date.parse(t.date));
+    const from = new Date(Math.min(...times) - 5000).toISOString();
+    const to = new Date(Math.max(...times) + 5000).toISOString();
+    const existing = new Set<string>();
+    for (let offset = 0; ; offset += 1000) {
+      const { data: page, error: exErr } = await supabase
+        .from('transactions')
+        .select('date, amount, asset, transaction_type')
+        .eq('user_id', userId)
+        .gte('date', from)
+        .lte('date', to)
+        .order('date', { ascending: true })
+        .range(offset, offset + 999);
+      if (exErr) break;
+      for (const e of page ?? []) {
+        const sec = Math.floor(Date.parse(e.date as string) / 1000);
+        existing.add(`${sec}|${e.amount}|${e.asset}|${e.transaction_type}`);
+      }
+      if (!page || page.length < 1000) break;
+    }
+    const isExisting = (t: TransactionInsert) => {
+      const sec = Math.floor(Date.parse(t.date) / 1000);
+      for (const d of [-2, -1, 0, 1, 2]) if (existing.has(`${sec + d}|${t.amount}|${t.asset}|${t.transaction_type}`)) return true;
+      return false;
+    };
+    const fresh = transactions.filter((t) => !isExisting(t));
+    if (fresh.length === 0) {
+      return NextResponse.json({
+        success: true,
+        imported: 0,
+        total: transactions.length,
+        skipped: transactions.length,
+        errors: errors.slice(0, 10),
+        import_batch_id: importBatchId,
+      });
+    }
+
     // Supabase에 삽입 (중복 무시)
     const { data: insertedData, error: insertError } = await supabase
       .from('transactions')
-      .upsert(transactions, {
+      .upsert(fresh, {
         onConflict: 'user_id,date,amount,asset,transaction_type',
         ignoreDuplicates: true,
       })
