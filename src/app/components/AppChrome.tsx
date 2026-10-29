@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import { GlobalNav } from './GlobalNav';
 import { FooterNav } from './FooterNav';
 import { useAuth } from './AuthProvider';
+import RoutineEntryReminder from './RoutineEntryReminder';
 
 /** 메뉴를 보여 줄 화면 (로그인·기타 단독 화면 제외) */
 const NAV_PREFIXES = ['/daily', '/memo', '/ledger', '/transaction', '/stats', '/assets', '/deploy', '/ai', '/settings'];
@@ -28,7 +29,13 @@ export function AppHeader() {
     return <div aria-hidden="true" className="h-16 border-b border-gray-200 dark:border-gray-700" />;
   }
   if (!user) return null;
-  return <GlobalNav />;
+  return (
+    <>
+      <GlobalNav />
+      {/* 앱에 들어올 때 오늘 안 한 루틴 알림 (푸시와 같은 13시·22시 시간대) */}
+      <RoutineEntryReminder />
+    </>
+  );
 }
 
 export function AppFooter() {
