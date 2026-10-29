@@ -1,8 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { IconChevronDown, IconX } from '@tabler/icons-react';
 import { getSupabase } from '../../../lib/supabase';
 import { useAuth } from '../../components/AuthProvider';
+import { categoryIcon } from '../ledgerUtils';
+
+/** 최근 1년 사용 기록 — 자산·분류를 자주 쓴 순서로 보여 주기 위함 */
+interface UsageRow {
+  asset: string | null;
+  transfer_asset: string | null;
+  category: string | null;
+  sub_category: string | null;
+  transaction_type: string;
+}
+
+type PickerKind = 'asset' | 'transfer' | 'category';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -84,6 +97,15 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
   // 자산 관련 상태
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+  const [usage, setUsage] = useState<UsageRow[]>([]);
+  const [picker, setPickerState] = useState<PickerKind | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const [showStale, setShowStale] = useState(false);
+  // 선택판은 시트 맨 위에 덮어 보이게 — 열 때 시트 스크롤을 맨 위로
+  const setPicker = (k: PickerKind | null) => {
+    if (k) sheetRef.current?.scrollTo({ top: 0 });
+    setPickerState(k);
+  };
 
   // 카테고리 및 자산 로드
   useEffect(() => {
@@ -124,6 +146,23 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
             p_user_id: user.id
           });
           
+          // 최근 1년 사용 기록 (자주 쓴 자산·분류 순서)
+          const since = new Date(Date.now() - 365 * 86400000).toISOString();
+          const rows: UsageRow[] = [];
+          for (let off = 0; off < 5000; off += 1000) {
+            const { data: page, error: uErr } = await supabase
+              .from('transactions')
+              .select('asset, transfer_asset, category, sub_category, transaction_type')
+              .eq('user_id', user.id)
+              .gte('date', since)
+              .order('date', { ascending: false })
+              .range(off, off + 999);
+            if (uErr || !page) break;
+            rows.push(...(page as UsageRow[]));
+            if (page.length < 1000) break;
+          }
+          setUsage(rows);
+
           if (assetError) {
             console.error('자산 로드 실패:', assetError);
           } else {
@@ -175,29 +214,57 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, editing?.id]);
 
-  // 현재 타입에 맞는 대분류 목록
-  const getMainCategories = () => {
-    const typeMap: Record<string, string> = {
-      '수입': 'income',
-      '지출': 'expense',
-      '자산이체': 'transfer'
-    };
-    const dbType = typeMap[formData.transaction_type];
-    return categories.filter(c => c.type === dbType && c.subcategory === null);
-  };
+  // ── 한 화면 선택판용 목록 (자주 쓴 순서) ──
+  const assetOptions = useMemo(() => {
+    const cnt = new Map<string, number>();
+    for (const u of usage) {
+      for (const a of [u.asset, u.transfer_asset]) {
+        const k = (a || '').trim();
+        if (k) cnt.set(k, (cnt.get(k) ?? 0) + 1);
+      }
+    }
+    const info = new Map(assets.map((a) => [a.asset_name.trim(), a]));
+    const names = new Set<string>([...info.keys(), ...cnt.keys()]);
+    return [...names]
+      .map((name) => ({ name, used: cnt.get(name) ?? 0, balance: Number(info.get(name)?.balance ?? 0), isDebt: !!info.get(name)?.is_debt }))
+      // 최근에 안 쓰고 잔액도 0인 자산은 뒤로
+      .sort((a, b) => b.used - a.used || Number(b.balance !== 0) - Number(a.balance !== 0) || a.name.localeCompare(b.name, 'ko'));
+  }, [assets, usage]);
 
-  // 선택된 대분류에 맞는 소분류 목록
-  const getSubcategories = () => {
-    const typeMap: Record<string, string> = {
-      '수입': 'income',
-      '지출': 'expense',
-      '자산이체': 'transfer'
+  const categoryOptions = useMemo(() => {
+    const dbType = formData.transaction_type === '수입' ? 'income' : 'expense';
+    const mains = new Map<string, { used: number; subs: Map<string, number> }>();
+    const touch = (main: string, sub: string | null, used: number) => {
+      const m = main.trim();
+      if (!m || m === '자산이체') return;
+      const e = mains.get(m) ?? { used: 0, subs: new Map<string, number>() };
+      e.used += used;
+      const sk = (sub || '').trim();
+      if (sk) e.subs.set(sk, (e.subs.get(sk) ?? 0) + used);
+      mains.set(m, e);
     };
-    const dbType = typeMap[formData.transaction_type];
-    return categories.filter(
-      c => c.type === dbType && c.category === formData.category && c.subcategory !== null
-    );
-  };
+    for (const c of categories) if (c.type === dbType) touch(c.category, c.subcategory, 0);
+    for (const u of usage) if (u.transaction_type === formData.transaction_type) touch(u.category || '', u.sub_category, 1);
+    return [...mains.entries()]
+      .map(([name, e]) => ({
+        name,
+        used: e.used,
+        subs: [...e.subs.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n),
+      }))
+      // 잔액수정은 일반 입력용이 아니라 맨 뒤로
+      .sort((a, b) => Number(a.name === '잔액수정') - Number(b.name === '잔액수정') || b.used - a.used || a.name.localeCompare(b.name, 'ko'));
+  }, [categories, usage, formData.transaction_type]);
+
+  // 새 거래: 자산·분류가 비어 있으면 가장 자주 쓴 것으로
+  useEffect(() => {
+    if (!isOpen || editing) return;
+    setFormData((prev) => {
+      let next = prev;
+      if (!prev.asset && assetOptions[0]) next = { ...next, asset: assetOptions[0].name };
+      if (prev.transaction_type !== '자산이체' && !prev.category && categoryOptions[0]) next = { ...next, category: categoryOptions[0].name };
+      return next;
+    });
+  }, [isOpen, editing, assetOptions, categoryOptions]);
 
   const handleTypeChange = (type: '수입' | '지출' | '자산이체') => {
     const isTransfer = type === '자산이체';
@@ -210,7 +277,8 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
     
     // 해당 타입의 첫 번째 대분류 가져오기
     const mainCats = categories.filter(c => c.type === dbType && c.subcategory === null);
-    const firstCategory = mainCats.length > 0 ? mainCats[0].category : '';
+    const usedFirst = usage.find((u) => u.transaction_type === type && u.category && !['자산이체', '잔액수정'].includes(u.category.trim()))?.category?.trim();
+    const firstCategory = usedFirst || (mainCats.length > 0 ? mainCats[0].category : '');
     
     setFormData({
       ...formData,
@@ -219,14 +287,6 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
       category: isTransfer ? '자산이체' : firstCategory,
       sub_category: '',
       transfer_asset: isTransfer ? formData.transfer_asset : undefined,
-    });
-  };
-
-  const handleCategoryChange = (category: string) => {
-    setFormData({
-      ...formData,
-      category,
-      sub_category: '', // 대분류 변경 시 소분류 초기화
     });
   };
 
@@ -289,7 +349,7 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[200] flex items-end justify-center" onClick={onClose}>
-      <div className="w-full max-w-[412px] bg-white dark:bg-gray-800 rounded-t-2xl p-4 pb-6 max-h-[88vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div ref={sheetRef} className={`relative w-full max-w-[412px] bg-white dark:bg-gray-800 rounded-t-2xl p-4 pb-6 max-h-[88vh] ${picker ? 'h-[88vh] overflow-hidden' : 'overflow-y-auto'}`} onClick={(e) => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-lg font-bold text-gray-900 dark:text-white">
@@ -363,26 +423,12 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
             <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
               {isTransfer ? '출금 자산' : '자산'}
             </label>
-            {isLoadingAssets ? (
-              <div className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-400">
-                로딩 중...
-              </div>
-            ) : (
-              <select
-                value={formData.asset}
-                onChange={(e) => setFormData({ ...formData, asset: e.target.value })}
-                className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {formData.asset && !assets.some((a) => a.asset_name === formData.asset) && (
-                  <option value={formData.asset}>{formData.asset}</option>
-                )}
-                {assets.map((item) => (
-                  <option key={item.asset_name} value={item.asset_name}>
-                    {item.asset_name} {item.is_debt ? '(부채)' : ''}
-                  </option>
-                ))}
-              </select>
-            )}
+            <PickerField
+              loading={isLoadingAssets}
+              value={formData.asset}
+              placeholder="자산 선택"
+              onClick={() => setPicker('asset')}
+            />
           </div>
 
           {/* 이체 대상 자산 (자산이체일 때만) */}
@@ -391,73 +437,22 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
               <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
                 입금 자산
               </label>
-              <select
-                value={formData.transfer_asset || ''}
-                onChange={(e) => setFormData({ ...formData, transfer_asset: e.target.value })}
-                className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">선택하세요</option>
-                {formData.transfer_asset && !assets.some((a) => a.asset_name === formData.transfer_asset) && (
-                  <option value={formData.transfer_asset}>{formData.transfer_asset}</option>
-                )}
-                {assets.filter(a => a.asset_name !== formData.asset).map((item) => (
-                  <option key={item.asset_name} value={item.asset_name}>
-                    {item.asset_name} {item.is_debt ? '(부채)' : ''}
-                  </option>
-                ))}
-              </select>
+              <PickerField value={formData.transfer_asset || ''} placeholder="선택하세요" onClick={() => setPicker('transfer')} />
             </div>
           )}
 
           {/* 분류 (자산이체가 아닐 때만) */}
           {!isTransfer && (
             <>
-              {/* 대분류 */}
               <div className="mb-3">
-                <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
-                  분류
-                </label>
-                {isLoadingCategories ? (
-                  <div className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-gray-400">
-                    로딩 중...
-                  </div>
-                ) : (
-                  <select
-                    value={formData.category}
-                    onChange={(e) => handleCategoryChange(e.target.value)}
-                    className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {formData.category && !getMainCategories().some((c) => c.category === formData.category) && (
-                      <option value={formData.category}>{formData.category}</option>
-                    )}
-                    {getMainCategories().map((cat) => (
-                      <option key={cat.id} value={cat.category}>{cat.category}</option>
-                    ))}
-                  </select>
-                )}
+                <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">분류</label>
+                <PickerField
+                  loading={isLoadingCategories}
+                  value={formData.category ? `${categoryIcon(formData.category)} ${formData.category}${formData.sub_category ? ` · ${formData.sub_category}` : ''}` : ''}
+                  placeholder="분류 선택"
+                  onClick={() => setPicker('category')}
+                />
               </div>
-
-              {/* 소분류 (있는 경우만) */}
-              {(getSubcategories().length > 0 || !!formData.sub_category) && (
-                <div className="mb-3">
-                  <label className="text-sm text-gray-700 dark:text-gray-300 mb-1 block">
-                    세부 분류 <span className="text-gray-400">(선택)</span>
-                  </label>
-                  <select
-                    value={formData.sub_category || ''}
-                    onChange={(e) => setFormData({ ...formData, sub_category: e.target.value || undefined })}
-                    className="w-full px-3 py-2.5 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">선택 안함</option>
-                    {formData.sub_category && !getSubcategories().some((c) => c.subcategory === formData.sub_category) && (
-                      <option value={formData.sub_category}>{formData.sub_category}</option>
-                    )}
-                    {getSubcategories().map((cat) => (
-                      <option key={cat.id} value={cat.subcategory || ''}>{cat.subcategory}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </>
           )}
 
@@ -508,7 +503,136 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
             </button>
           </div>
         </form>
+
+        {/* 자산·분류 선택판 — 한 화면에 모두 보이게 촘촘한 격자 */}
+        {picker && (
+          <div className="absolute inset-0 z-10 flex flex-col rounded-t-2xl bg-white dark:bg-gray-800">
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <p className="text-[15px] font-bold text-gray-900 dark:text-white">
+                {picker === 'asset' ? (isTransfer ? '출금 자산' : '자산') : picker === 'transfer' ? '입금 자산' : '분류'}
+              </p>
+              <button type="button" onClick={() => setPicker(null)} aria-label="닫기" className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 dark:bg-gray-700">
+                <IconX size={16} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+              {picker !== 'category' ? (
+                <>
+                <div className="grid grid-cols-3 gap-1">
+                  {assetOptions
+                    .filter((o) => picker !== 'transfer' || o.name !== formData.asset)
+                    // 1년간 안 쓰고 잔액 0인 자산은 접어 둠 (지금 고른 자산은 항상 보임)
+                    .filter((o) => showStale || o.used > 0 || o.balance !== 0 || o.name === (picker === 'transfer' ? formData.transfer_asset : formData.asset))
+                    .map((o) => {
+                      const current = picker === 'transfer' ? formData.transfer_asset : formData.asset;
+                      const active = current === o.name;
+                      const stale = o.used === 0 && o.balance === 0;
+                      return (
+                        <button
+                          key={o.name}
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev) => (picker === 'transfer' ? { ...prev, transfer_asset: o.name } : { ...prev, asset: o.name }));
+                            setPicker(null);
+                          }}
+                          title={o.name}
+                          className={`flex min-h-[36px] items-center justify-center rounded-lg px-1 py-1 text-center text-[11.5px] leading-tight break-keep ${
+                            active
+                              ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                              : `bg-gray-50 dark:bg-gray-700/60 ${stale ? 'text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-100'}`
+                          }`}
+                        >
+                          <span className="line-clamp-2">
+                            {o.name}
+                            {o.isDebt && <span className="ml-0.5 text-[10px] opacity-60">(부채)</span>}
+                          </span>
+                        </button>
+                      );
+                    })}
+                </div>
+                {(() => {
+                  const stale = assetOptions.filter((o) => o.used === 0 && o.balance === 0).length;
+                  if (!stale) return null;
+                  return (
+                    <button type="button" onClick={() => setShowStale((v) => !v)} className="mt-2 w-full py-1.5 text-center text-[12px] text-gray-500 dark:text-gray-400">
+                      {showStale ? '안 쓰는 자산 접기' : `안 쓰는 자산 ${stale}개 더 보기`}
+                    </button>
+                  );
+                })()}
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-4 gap-1">
+                    {categoryOptions.map((c) => {
+                      const active = formData.category === c.name;
+                      return (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onClick={() => {
+                            setFormData((prev) => ({ ...prev, category: c.name, sub_category: prev.category === c.name ? prev.sub_category : '' }));
+                            if (c.subs.length === 0) setPicker(null);
+                          }}
+                          className={`flex min-h-[48px] flex-col items-center justify-center rounded-lg px-1 py-1 text-[11px] leading-tight ${
+                            active ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-50 text-gray-800 dark:bg-gray-700/60 dark:text-gray-100'
+                          }`}
+                        >
+                          <span className="text-[15px] leading-none">{categoryIcon(c.name)}</span>
+                          <span className="mt-0.5 line-clamp-2 break-keep text-center">{c.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {(() => {
+                    const cur = categoryOptions.find((c) => c.name === formData.category);
+                    if (!cur || cur.subs.length === 0) return null;
+                    return (
+                      <div className="mt-3">
+                        <p className="mb-1 text-[12px] text-gray-500 dark:text-gray-400">{cur.name} 세부 분류</p>
+                        <div className="flex flex-wrap gap-1">
+                          {['', ...cur.subs].map((sub) => {
+                            const active = (formData.sub_category || '') === sub;
+                            return (
+                              <button
+                                key={sub || '__none'}
+                                type="button"
+                                onClick={() => {
+                                  setFormData((prev) => ({ ...prev, sub_category: sub }));
+                                  setPicker(null);
+                                }}
+                                className={`rounded-full px-2.5 py-1 text-[12px] ${
+                                  active ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
+                                }`}
+                              >
+                                {sub || '선택 안함'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+/** 선택 칸 (누르면 선택판이 열림) */
+function PickerField({ value, placeholder, onClick, loading }: { value: string; placeholder: string; onClick: () => void; loading?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={loading}
+      className="flex w-full items-center justify-between gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-left text-base outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+    >
+      <span className={`min-w-0 truncate ${value ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>{loading ? '로딩 중...' : value || placeholder}</span>
+      <IconChevronDown size={16} className="shrink-0 text-gray-400" />
+    </button>
   );
 }
