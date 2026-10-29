@@ -14,6 +14,7 @@ import {
 } from '../../lib/monthArt';
 import { useMonthArt, type MonthArt } from '../../lib/monthArtStore';
 import { useAuth } from './AuthProvider';
+import { summarizeSubValues, type RoutineSubItem, type SubValues } from '../../lib/routineSubItems';
 import { ArtCollection, ChangeArtSheet, CompleteCelebration, FALLBACK_ART, type PoolPhoto } from './MonthArtParts';
 
 interface CalendarRoutine {
@@ -24,11 +25,29 @@ interface CalendarRoutine {
   unit?: string;
   icon?: string | null;
   created_at?: string | null;
+  sub_items?: RoutineSubItem[];
 }
 
 interface CalendarCheckRow extends DoneCheckRow {
   date: string;
   routine_id: string;
+  book_title?: string | null;
+  sub_values?: SubValues | null;
+}
+
+/** 루틴별 달력 칸 아래 한 줄 — 무엇을 얼마나 했는지 */
+function entryNote(r: CalendarRoutine, row: CalendarCheckRow | undefined): string {
+  if (!row) return '';
+  if (r.type === 'number' && row.value != null && Number(row.value) !== 0) return `${fmtNum(Number(row.value))}${r.unit ?? ''}`;
+  if (r.type === 'multi') {
+    const sub = summarizeSubValues(row.sub_values, r.sub_items ?? []);
+    if (sub) return sub;
+  }
+  if (row.book_title?.trim()) return row.book_title.trim();
+  const memo = row.memo?.trim().split('\n')[0]?.replace(/^[•\-*]\s*/, '');
+  if (memo) return memo;
+  const photos = getRowImages(row).length;
+  return photos ? `📷${photos}` : '';
 }
 
 interface Props {
@@ -469,29 +488,31 @@ export default function RoutineMonthCalendar({
               const future = date > today;
               const isToday = date === today;
               const done = isDone(date, selected.id);
-              const row = rowByKey.get(`${date}|${selected.id}`);
-              const value = selected.type === 'number' && done && row?.value ? ` ${fmtNum(Number(row.value))}${selected.unit ?? ''}` : '';
+              const note = done ? entryNote(selected, rowByKey.get(`${date}|${selected.id}`)) : '';
               return (
                 <button
                   key={date}
                   type="button"
                   disabled={future}
                   onClick={() => onEntryClick(selected.id, date)}
-                  aria-label={`${m}월 ${day}일 ${selected.label} ${done ? `완료${value}` : '안 함'} — 눌러서 기록`}
-                  title={value ? value.trim() : undefined}
-                  className="aspect-square flex flex-col items-center justify-center gap-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/60 disabled:hover:bg-transparent"
+                  aria-label={`${m}월 ${day}일 ${selected.label} ${done ? `완료${note ? ` ${note}` : ''}` : '안 함'} — 눌러서 기록`}
+                  title={note || undefined}
+                  className="aspect-square min-w-0 flex flex-col items-center justify-center gap-0.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/60 disabled:hover:bg-transparent"
                 >
                   <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] tabular-nums ${
-                      isToday ? 'ring-1 ring-[#1E3A5F] dark:ring-gray-200' : ''
-                    } ${future ? 'text-gray-300 dark:text-gray-600' : 'text-gray-700 dark:text-gray-200'}`}
+                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[12px] tabular-nums ${
+                      done
+                        ? 'border-2 border-[#474c56] dark:border-gray-200 font-semibold text-gray-900 dark:text-white'
+                        : isToday
+                          ? 'bg-gray-200 dark:bg-gray-700 font-semibold text-gray-900 dark:text-white'
+                          : future
+                            ? 'text-gray-300 dark:text-gray-600'
+                            : 'text-gray-600 dark:text-gray-300'
+                    } ${done && isToday ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
                   >
                     {day}
                   </span>
-                  <span
-                    aria-hidden="true"
-                    className={`h-1.5 w-1.5 rounded-full ${done ? 'bg-[#474c56] dark:bg-gray-200' : 'bg-transparent'}`}
-                  />
+                  <span className="h-[12px] max-w-full truncate px-0.5 text-[9px] leading-[12px] text-gray-500 dark:text-gray-400">{note}</span>
                 </button>
               );
             })}
