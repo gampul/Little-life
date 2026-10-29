@@ -62,8 +62,6 @@ const prevDay = (date: string) => {
 };
 /** 그림 보기에서 미리 그림을 올려 둘 수 있는 달 수 (이번 달 이후) */
 const ART_AHEAD_MONTHS = 3;
-const VIEW_KEY = 'little-life:calendar-view';
-type CalView = 'art' | 'heat';
 
 /**
  * 칸 단계별 덮개 — 아래 그림을 단계마다 확 다르게 (backdrop-filter)
@@ -92,16 +90,7 @@ const veilStyle = (level: number, future = false): CSSProperties => {
 
 const fmtNum = (n: number) => (Number.isInteger(n) ? n.toLocaleString('ko-KR') : n.toFixed(1));
 
-/** 완료 비율 → 칸 색 (전체 보기) */
-const heatClass = (ratio: number) => {
-  if (ratio <= 0) return '';
-  if (ratio < 0.34) return 'bg-emerald-500/20';
-  if (ratio < 0.67) return 'bg-emerald-500/45';
-  if (ratio < 1) return 'bg-emerald-500/70 text-white';
-  return 'bg-emerald-600 text-white';
-};
-
-/** 루틴기록 > 달력: 전체(완료 비율 색) / 루틴별(완료 표시·값) 한 달 보기 */
+/** 루틴기록 > 달력: 이달의 그림(전체) / 루틴별(한 날 점) 한 달 보기 */
 export default function RoutineMonthCalendar({
   routines,
   checksByRoutine,
@@ -116,17 +105,6 @@ export default function RoutineMonthCalendar({
   const thisMonth = today.slice(0, 7);
   const [month, setMonth] = useState(thisMonth);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [calView, setCalView] = useState<CalView>('art');
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(VIEW_KEY);
-      if (v === 'art' || v === 'heat') setCalView(v);
-    } catch {}
-  }, []);
-  const changeView = (v: CalView) => {
-    setCalView(v);
-    try { localStorage.setItem(VIEW_KEY, v); } catch {}
-  };
   const { user } = useAuth();
   const { arts, loaded: artsLoaded, setArt, uploadArt, markComplete } = useMonthArt(user?.id ?? null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -152,7 +130,17 @@ export default function RoutineMonthCalendar({
   }, [routines, checksByRoutine, today, thisMonth]);
 
   const selected = routines.find((r) => r.id === selectedRoutineId) ?? null;
-  const artMode = !selected && calView === 'art';
+  const artMode = !selected;
+  // 루틴별 토글: 마지막으로 본 루틴 기억
+  const lastRoutineId = useRef<string | null>(null);
+  if (selected) lastRoutineId.current = selected.id;
+  const toggleByRoutine = () => {
+    if (selected) onSelectRoutine(null);
+    else {
+      const id = routines.some((r) => r.id === lastRoutineId.current) ? lastRoutineId.current : routines[0]?.id ?? null;
+      if (id) onSelectRoutine(id);
+    }
+  };
 
   // 하루 점수 (그날 있던 루틴의 80% 하면 만점)
   const { scoreByDate } = useMemo(() => buildDayScores(routines, checksByRoutine, today), [routines, checksByRoutine, today]);
@@ -193,7 +181,8 @@ export default function RoutineMonthCalendar({
     ...Array.from({ length: firstWeekday }, () => null),
     ...Array.from({ length: daysInMonth }, (_, i) => ymd(y, m, i + 1)),
   ];
-  while (cells.length % 7 !== 0) cells.push(null);
+  // 달마다 주 수가 달라도 달력 크기는 항상 같게 (6주 고정)
+  while (cells.length < 42) cells.push(null);
 
   const total = routines.length;
   const isDone = (date: string, routineId: string) => !!doneByDate.get(date)?.has(routineId);
@@ -281,31 +270,6 @@ export default function RoutineMonthCalendar({
 
   return (
     <div>
-      {/* 루틴 고르기 */}
-      <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-1 px-1" role="tablist" aria-label="달력에 볼 루틴">
-        {[{ id: null as string | null, label: '전체' }, ...routines.map((r) => ({ id: r.id as string | null, label: r.label }))].map((c) => {
-          const active = selectedRoutineId === c.id;
-          const r = routines.find((x) => x.id === c.id);
-          return (
-            <button
-              key={c.id ?? 'all'}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => onSelectRoutine(c.id)}
-              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                active
-                  ? 'bg-[#1E3A5F] border-[#1E3A5F] text-white dark:bg-gray-100 dark:border-gray-100 dark:text-gray-900'
-                  : 'bg-[rgb(254,252,247)] dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              {r && <span className="inline-flex scale-[0.85] -my-1">{glyph(r, true)}</span>}
-              {c.label}
-            </button>
-          );
-        })}
-      </div>
-
       <div className="border-y border-gray-200 dark:border-gray-700 py-3">
         {/* 월 이동 + 요약 */}
         <div className="flex items-center justify-between mb-1">
@@ -331,47 +295,69 @@ export default function RoutineMonthCalendar({
             <IconChevronRight size={18} stroke={1.5} />
           </button>
         </div>
-        {!selected && (
-          <div className="flex items-center justify-between mb-2">
-            <div className="inline-flex rounded-md bg-gray-100 dark:bg-gray-800 p-0.5" role="tablist" aria-label="달력 보기">
-              {([
-                ['art', '그림'],
-                ['heat', '색칠'],
-              ] as const).map(([k, label]) => (
+        <div className="flex items-center justify-end gap-1 mb-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!!selected}
+            onClick={toggleByRoutine}
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            <span
+              aria-hidden="true"
+              className={`relative inline-block h-[14px] w-[24px] rounded-full transition-colors ${selected ? 'bg-[#1E3A5F] dark:bg-gray-200' : 'bg-gray-300 dark:bg-gray-600'}`}
+            >
+              <span
+                className={`absolute top-[2px] h-[10px] w-[10px] rounded-full bg-white dark:bg-gray-900 shadow transition-all ${selected ? 'left-[12px]' : 'left-[2px]'}`}
+              />
+            </span>
+            루틴별
+          </button>
+          {artMode && (
+            <>
+              <button
+                type="button"
+                onClick={() => setCollectionOpen(true)}
+                className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <IconTrophy size={14} stroke={1.8} />
+                컬렉션 {completedArts.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSheetOpen(true)}
+                className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                <IconPhotoEdit size={14} stroke={1.8} />
+                그림 바꾸기
+              </button>
+            </>
+          )}
+        </div>
+        {/* 루틴 고르기 (루틴별 켰을 때) */}
+        {selected && (
+          <div className="flex gap-1.5 overflow-x-auto pb-2 mb-1 -mx-1 px-1" role="tablist" aria-label="달력에 볼 루틴">
+            {routines.map((r) => ({ id: r.id as string | null, label: r.label })).map((c) => {
+              const active = selectedRoutineId === c.id;
+              const r = routines.find((x) => x.id === c.id);
+              return (
                 <button
-                  key={k}
+                  key={c.id ?? 'all'}
                   type="button"
                   role="tab"
-                  aria-selected={calView === k}
-                  onClick={() => changeView(k)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-medium ${
-                    calView === k ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400'
+                  aria-selected={active}
+                  onClick={() => onSelectRoutine(c.id)}
+                  className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                    active
+                      ? 'bg-[#1E3A5F] border-[#1E3A5F] text-white dark:bg-gray-100 dark:border-gray-100 dark:text-gray-900'
+                      : 'bg-[rgb(254,252,247)] dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >
-                  {label}
+                  {r && <span className="inline-flex scale-[0.85] -my-1">{glyph(r, true)}</span>}
+                  {c.label}
                 </button>
-              ))}
-            </div>
-            {artMode && (
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setCollectionOpen(true)}
-                  className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <IconTrophy size={14} stroke={1.8} />
-                  컬렉션 {completedArts.length}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSheetOpen(true)}
-                  className="inline-flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[11px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <IconPhotoEdit size={14} stroke={1.8} />
-                  그림 바꾸기
-                </button>
-              </div>
-            )}
+              );
+            })}
           </div>
         )}
 
@@ -475,71 +461,45 @@ export default function RoutineMonthCalendar({
             )}
           </div>
         ) : (
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((date, i) => {
-            if (!date) return <div key={`b${i}`} className="aspect-square" />;
-            const day = Number(date.slice(8));
-            const future = date > today;
-            const isToday = date === today;
-            const doneCount = doneByDate.get(date)?.size ?? 0;
-            const isSel = selectedDay === date;
-
-            if (!selected) {
-              const ratio = total > 0 ? doneCount / total : 0;
+          /* 루틴별: 그림 보기와 같은 크기의 칸, 한 날은 동그라미 점 */
+          <div className="grid grid-cols-7 overflow-hidden rounded-xl">
+            {cells.map((date, i) => {
+              if (!date || !selected) return <div key={`b${i}`} className="aspect-square" />;
+              const day = Number(date.slice(8));
+              const future = date > today;
+              const isToday = date === today;
+              const done = isDone(date, selected.id);
+              const row = rowByKey.get(`${date}|${selected.id}`);
+              const value = selected.type === 'number' && done && row?.value ? ` ${fmtNum(Number(row.value))}${selected.unit ?? ''}` : '';
               return (
                 <button
                   key={date}
                   type="button"
                   disabled={future}
-                  onClick={() => setSelectedDay(isSel ? null : date)}
-                  aria-label={`${m}월 ${day}일 ${doneCount}/${total} 완료`}
-                  aria-pressed={isSel}
-                  className={`aspect-square rounded-lg flex flex-col items-center justify-center text-[12px] tabular-nums transition-colors ${
-                    future ? 'text-gray-300 dark:text-gray-600' : heatClass(ratio) || 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  } ${isToday ? 'ring-2 ring-[#1E3A5F] dark:ring-gray-200' : ''} ${isSel ? 'outline outline-2 outline-offset-1 outline-amber-400' : ''}`}
+                  onClick={() => onEntryClick(selected.id, date)}
+                  aria-label={`${m}월 ${day}일 ${selected.label} ${done ? `완료${value}` : '안 함'} — 눌러서 기록`}
+                  title={value ? value.trim() : undefined}
+                  className="aspect-square flex flex-col items-center justify-center gap-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/60 disabled:hover:bg-transparent"
                 >
-                  {day}
-                  {!future && doneCount > 0 && <span className="text-[9px] leading-none opacity-80">{doneCount}</span>}
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] tabular-nums ${
+                      isToday ? 'ring-1 ring-[#1E3A5F] dark:ring-gray-200' : ''
+                    } ${future ? 'text-gray-300 dark:text-gray-600' : 'text-gray-700 dark:text-gray-200'}`}
+                  >
+                    {day}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 rounded-full ${done ? 'bg-[#474c56] dark:bg-gray-200' : 'bg-transparent'}`}
+                  />
                 </button>
               );
-            }
-
-            const done = isDone(date, selected.id);
-            const row = rowByKey.get(`${date}|${selected.id}`);
-            const value = selected.type === 'number' && done && row?.value ? fmtNum(Number(row.value)) : '';
-            return (
-              <button
-                key={date}
-                type="button"
-                disabled={future}
-                onClick={() => onEntryClick(selected.id, date)}
-                aria-label={`${m}월 ${day}일 ${selected.label} ${done ? '완료' : '안 함'} — 눌러서 기록`}
-                className={`aspect-square rounded-lg flex flex-col items-center justify-center text-[12px] tabular-nums transition-colors ${
-                  future
-                    ? 'text-gray-300 dark:text-gray-600'
-                    : done
-                      ? 'bg-[#474c56] text-white dark:bg-gray-200 dark:text-gray-900'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                } ${isToday ? 'ring-2 ring-[#1E3A5F] dark:ring-gray-200 ring-offset-1 ring-offset-[rgb(254,252,247)] dark:ring-offset-gray-800' : ''}`}
-              >
-                {day}
-                {value && <span className="text-[9px] leading-none opacity-80 truncate max-w-full px-0.5">{value}</span>}
-              </button>
-            );
-          })}
-        </div>
+            })}
+          </div>
         )}
 
         {/* 범례 / 안내 */}
-        {artMode ? null : !selected ? (
-          <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-gray-400 dark:text-gray-500">
-            적음
-            {[0.2, 0.5, 0.8, 1].map((r) => (
-              <span key={r} className={`inline-block w-3 h-3 rounded-sm ${heatClass(r)}`} />
-            ))}
-            다 함
-          </div>
-        ) : (
+        {selected && (
           <p className="mt-2 text-right text-[10px] text-gray-400 dark:text-gray-500">날짜를 누르면 그날 기록을 고칠 수 있어요</p>
         )}
 
