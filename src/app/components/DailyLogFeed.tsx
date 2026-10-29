@@ -111,7 +111,7 @@ export default function DailyLogFeed({
   const topRef = useRef<HTMLDivElement | null>(null);
   const [expandedMissed, setExpandedMissed] = useState<Record<string, boolean>>({});
   // 기록(날짜별 글) / 사진(날짜 상관없이 모아보기) / 달력(한 달 흐름, 전체·루틴별)
-  const [view, setView] = useState<'log' | 'photos' | 'calendar'>('log');
+  const [view, setView] = useState<'log' | 'photos' | 'calendar'>('calendar');
   const [calendarRoutineId, setCalendarRoutineId] = useState<string | null>(null);
   // 달력에서 "그날 기록 보기"로 왔을 때 잠깐 강조할 날짜
   const [highlightDate, setHighlightDate] = useState<string | null>(null);
@@ -265,8 +265,8 @@ export default function DailyLogFeed({
           aria-label="루틴 기록 보기 방식"
         >
           {([
-            ['log', '기록'],
             ['calendar', '달력'],
+            ['log', '기록'],
             ['photos', '사진'],
           ] as const).map(([key, label]) => (
             <button
