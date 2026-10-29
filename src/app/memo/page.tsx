@@ -316,13 +316,15 @@ function MemoPageContent() {
         if (first.error && isMissingPinnedColumn(first.error)) {
           const second = await run({});
           if (!second.error && isPinned) {
-            alert('중요공지 설정은 저장되지 않았습니다. Supabase 에서 add_memo_pinned.sql 을 실행해 주세요.');
+            alert('공지 설정은 저장되지 않았습니다. Supabase 에서 add_memo_pinned.sql 을 실행해 주세요.');
           }
           return second;
         }
         return first;
       };
 
+      // 저장한 글 id — 저장 후 그 글 화면으로 이동
+      let savedId: string | null = null;
       if (editingId) {
         const { error } = await withPinnedFallback((pinnedPatch) =>
           supabase
@@ -346,6 +348,7 @@ function MemoPageContent() {
         if (error) throw error;
         setMessage('✅ 수정되었습니다!');
         requestMemoEmbedding(editingId);
+        savedId = editingId;
       } else {
         const { data: inserted, error } = await withPinnedFallback<{ id: string }[] | null>((pinnedPatch) =>
           supabase
@@ -367,6 +370,7 @@ function MemoPageContent() {
         setMessage('✅ 저장되었습니다!');
         const newId = inserted?.[0]?.id;
         if (newId) requestMemoEmbedding(newId);
+        savedId = newId ?? null;
       }
 
       setShowEditor(false);
@@ -379,6 +383,11 @@ function MemoPageContent() {
       setCurrentPage(1);
       
       await invalidateMemos();
+      // 저장한 글을 바로 보여 줌 (예전엔 목록 첫 화면 = 공지 탭으로 돌아갔음)
+      if (savedId) {
+        router.push(`/memo/${savedId}`);
+        return;
+      }
       setTimeout(() => setMessage(''), 3000);
     } catch (err: any) {
       let errorMessage = '알 수 없는 오류가 발생했습니다.';
@@ -481,9 +490,9 @@ function MemoPageContent() {
       const { error } = await supabase.from('memos').update({ is_pinned: next }).eq('id', memo.id);
       if (error) {
         if (isMissingPinnedColumn(error)) {
-          alert('중요공지 기능을 쓰려면 Supabase 에서 add_memo_pinned.sql 을 먼저 실행해 주세요.');
+          alert('공지 기능을 쓰려면 Supabase 에서 add_memo_pinned.sql 을 먼저 실행해 주세요.');
         } else {
-          alert('중요공지 설정에 실패했습니다.');
+          alert('공지 설정에 실패했습니다.');
         }
         return;
       }
@@ -641,7 +650,7 @@ function MemoPageContent() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <span className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                {showPinnedOnly ? '📌 중요공지' : selectedCategory ? selectedCategory.name : '전체글'}
+                {showPinnedOnly ? '📌 공지' : selectedCategory ? selectedCategory.name : '전체글'}
               </span>
               <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">({totalCount})</span>
             </div>
@@ -697,7 +706,7 @@ function MemoPageContent() {
                     : 'text-amber-600/80 dark:text-amber-400/80'
                 }`}
               >
-                📌 중요공지
+                📌 공지
                 {!!pinnedCount && (
                   <span className="text-[11px] text-amber-500">{pinnedCount}</span>
                 )}
@@ -929,7 +938,7 @@ function MemoPageContent() {
             {isSearchActive
               ? '검색 결과가 없습니다'
               : showPinnedOnly
-                ? '중요공지로 지정된 글이 없습니다. 글 카드의 📌 버튼이나 글쓰기 화면에서 지정할 수 있어요.'
+                ? '공지로 지정된 글이 없습니다. 글 카드의 📌 버튼이나 글쓰기 화면에서 지정할 수 있어요.'
                 : '작성된 글이 없습니다'}
           </div>
         )}

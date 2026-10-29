@@ -205,11 +205,8 @@ function MemoCardComponent({
         <div className={contentClass}>
           <h3 className={titleClass}>
             {memo.is_pinned && (
-              <span
-                className="inline-flex items-center align-middle mr-1.5 px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-semibold leading-none"
-                aria-label="중요공지"
-              >
-                📌 공지
+              <span className="mr-1 align-[1px] text-[0.9em]" role="img" aria-label="공지">
+                📌
               </span>
             )}
             {title}
@@ -370,8 +367,8 @@ function CopyEditDelete({
               : 'text-gray-500 dark:text-gray-400 hover:text-amber-600 hover:bg-gray-100 dark:hover:bg-gray-700'
           }`}
           style={{ touchAction: 'manipulation' }}
-          title={pinned ? '중요공지 해제' : '중요공지로 지정'}
-          aria-label={pinned ? '중요공지 해제' : '중요공지로 지정'}
+          title={pinned ? '공지 해제' : '공지로 지정'}
+          aria-label={pinned ? '공지 해제' : '공지로 지정'}
         >
           <IconPin filled={pinned} />
         </button>
