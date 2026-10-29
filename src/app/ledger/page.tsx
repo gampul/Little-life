@@ -56,19 +56,16 @@ function nowKst() {
 function SummaryBar({ totals }: { totals: Totals }) {
   const net = totals.income - totals.expense;
   return (
-    <div className="grid grid-cols-3 border-b border-gray-200 dark:border-gray-700 py-2 text-center">
-      <div>
-        <div className="text-[12px] text-gray-500 dark:text-gray-400">수입</div>
-        <div className="text-[15px] font-semibold tabular-nums text-blue-600 dark:text-blue-400">{won(totals.income)}</div>
-      </div>
-      <div>
-        <div className="text-[12px] text-gray-500 dark:text-gray-400">지출</div>
-        <div className="text-[15px] font-semibold tabular-nums text-red-500 dark:text-red-400">{won(totals.expense)}</div>
-      </div>
-      <div>
-        <div className="text-[12px] text-gray-500 dark:text-gray-400">합계</div>
-        <div className="text-[15px] font-semibold tabular-nums text-gray-900 dark:text-white">{won(net)}</div>
-      </div>
+    <div className="flex items-center justify-between gap-2 border-b border-gray-200 dark:border-gray-700 py-1 text-[12px] tabular-nums">
+      <span className="text-gray-500 dark:text-gray-400">
+        수입 <b className="font-semibold text-blue-600 dark:text-blue-400">{won(totals.income)}</b>
+      </span>
+      <span className="text-gray-500 dark:text-gray-400">
+        지출 <b className="font-semibold text-red-500 dark:text-red-400">{won(totals.expense)}</b>
+      </span>
+      <span className="text-gray-500 dark:text-gray-400">
+        합계 <b className="font-semibold text-gray-900 dark:text-white">{won(net)}</b>
+      </span>
     </div>
   );
 }
@@ -322,23 +319,40 @@ export default function LedgerPage() {
         {/* 상단 고정: 월 이동 · 탭 · 합계 */}
         <div className="sticky top-16 z-40 bg-[rgb(254,252,247)]/95 dark:bg-gray-900/95 backdrop-blur">
           <div className={APP_HORIZONTAL_CONTAINER}>
-            <div className="flex items-center gap-1 pt-2">
-              <button type="button" onClick={() => step(-1)} className="flex h-9 w-8 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="이전">
-                <IconChevronLeft size={20} />
+            {/* 한 줄: 월 이동 · 탭 · 도구 (모바일에서 자리 덜 차지하게) */}
+            <div className="flex items-center gap-1 py-1">
+              <button type="button" onClick={() => step(-1)} className="flex h-8 w-6 shrink-0 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="이전">
+                <IconChevronLeft size={18} />
               </button>
-              <span className="min-w-[104px] text-center text-[17px] font-semibold tabular-nums text-gray-900 dark:text-white">{headerLabel}</span>
-              <button type="button" onClick={() => step(1)} className="flex h-9 w-8 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="다음">
-                <IconChevronRight size={20} />
+              <span className="shrink-0 text-center text-[14px] font-semibold tabular-nums text-gray-900 dark:text-white">{headerLabel}</span>
+              <button type="button" onClick={() => step(1)} className="flex h-8 w-6 shrink-0 items-center justify-center text-gray-600 dark:text-gray-300" aria-label="다음">
+                <IconChevronRight size={18} />
               </button>
+              <div className="ml-1 inline-flex shrink-0 rounded-lg bg-gray-100 dark:bg-gray-800 p-0.5 text-[12px]" role="tablist">
+                {([['daily', '일일'], ['calendar', '달력'], ['monthly', '월별']] as [Tab, string][]).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === k}
+                    onClick={() => { setTab(k); setSelectedDay(null); }}
+                    className={`rounded-md px-2 py-1 font-semibold ${
+                      tab === k ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 dark:text-gray-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="ml-auto flex items-center">
-                <button type="button" onClick={() => { setSearchOpen((v) => !v); if (searchOpen) setQuery(''); }} className={`flex h-9 w-9 items-center justify-center rounded-lg ${searchOpen ? 'text-blue-600' : 'text-gray-600 dark:text-gray-300'}`} aria-label="검색">
-                  <IconSearch size={20} stroke={1.8} />
+                <button type="button" onClick={() => { setSearchOpen((v) => !v); if (searchOpen) setQuery(''); }} className={`flex h-8 w-7 items-center justify-center rounded-lg ${searchOpen ? 'text-blue-600' : 'text-gray-600 dark:text-gray-300'}`} aria-label="검색">
+                  <IconSearch size={18} stroke={1.8} />
                 </button>
-                <button type="button" onClick={() => setShowUpload((v) => !v)} className={`flex h-9 w-9 items-center justify-center rounded-lg ${showUpload ? 'text-blue-600' : 'text-gray-600 dark:text-gray-300'}`} aria-label="CSV 올리기" title="CSV 올리기">
-                  <IconUpload size={20} stroke={1.8} />
+                <button type="button" onClick={() => setShowUpload((v) => !v)} className={`flex h-8 w-7 items-center justify-center rounded-lg ${showUpload ? 'text-blue-600' : 'text-gray-600 dark:text-gray-300'}`} aria-label="CSV 올리기" title="CSV 올리기">
+                  <IconUpload size={18} stroke={1.8} />
                 </button>
-                <button type="button" onClick={handleDownload} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 dark:text-gray-300" aria-label="전체 내역 내려받기" title="전체 내역 CSV 내려받기">
-                  <IconDownload size={20} stroke={1.8} />
+                <button type="button" onClick={handleDownload} className="flex h-8 w-7 items-center justify-center rounded-lg text-gray-600 dark:text-gray-300" aria-label="전체 내역 내려받기" title="전체 내역 CSV 내려받기">
+                  <IconDownload size={18} stroke={1.8} />
                 </button>
               </div>
             </div>
@@ -359,22 +373,6 @@ export default function LedgerPage() {
                 )}
               </div>
             )}
-
-            <div className="grid grid-cols-3 border-b border-gray-200 dark:border-gray-700 text-[15px]" role="tablist">
-              {([['daily', '일일'], ['calendar', '달력'], ['monthly', '월별']] as [Tab, string][]).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === k}
-                  onClick={() => { setTab(k); setSelectedDay(null); }}
-                  className={`relative py-2.5 font-semibold ${tab === k ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}
-                >
-                  {label}
-                  {tab === k && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-red-500" />}
-                </button>
-              ))}
-            </div>
 
             <SummaryBar totals={tab === 'monthly' ? (yearSum ?? { income: 0, expense: 0 }) : monthTotals} />
           </div>
