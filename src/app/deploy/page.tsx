@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ASSET_FAB_BOTTOM, ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
 import { AuthGuard } from '../components/AuthGuard';
+import { useAuth } from '../components/AuthProvider';
 import { APP_CONTENT_CONTAINER } from '../components/container';
 import { getSupabase } from '../../lib/supabase';
 import { FinanceRow, getSortedMonths, formatMonthLabel } from './lib';
@@ -25,6 +26,8 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function DeployPage() {
   const supabase = getSupabase();
+  const { user } = useAuth();
+  const authUserId = user?.id ?? null;
   const [rows, setRows] = useState<FinanceRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +45,9 @@ export default function DeployPage() {
       return;
     }
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id;
-      if (!userId) {
-        setError('로그인이 필요합니다.');
-        setIsLoading(false);
-        return;
-      }
+      // 로그인 사용자는 AuthProvider 값 사용 (getUser 네트워크 호출 생략)
+      const userId = authUserId;
+      if (!userId) return; // 로그인 확인 전 — 확인되면 다시 불림
 
       const { data, error: queryError } = await supabase
         .from('finance_investments')
@@ -72,7 +71,7 @@ export default function DeployPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, authUserId]);
 
   useEffect(() => {
     loadData();

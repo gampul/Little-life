@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAuth } from '../../components/AuthProvider';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { OWNERS, DIVISIONS, BUCKETS, BUCKET_LABELS } from '../lib';
 
@@ -44,6 +45,7 @@ function initialForm(defaultMonth: string): FormState {
 }
 
 export function AddInvestmentModal({ supabase, defaultMonth, onClose, onSaved }: Props) {
+  const { user } = useAuth();
   const [form, setForm] = useState<FormState>(() => initialForm(defaultMonth));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,8 +73,7 @@ export function AddInvestmentModal({ supabase, defaultMonth, onClose, onSaved }:
 
     setSaving(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id ?? null;
+      const userId = user?.id ?? null;
 
       const dividend = Number(form.dividend) || 0;
       const taxFee = Number(form.tax_fee) || 0;

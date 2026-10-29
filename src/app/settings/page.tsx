@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { getSupabase } from '../../lib/supabase';
+import { useAuth } from '../components/AuthProvider';
 import { CategoryManager } from '../assets/components/CategoryManager';
 import { APP_CONTENT_CONTAINER } from '../components/container';
 import SubItemsEditor from '../components/SubItemsEditor';
@@ -442,7 +443,8 @@ interface RoutineTemplate {
 
 export default function SettingsPage() {
   const supabase = getSupabase();
-  const [userId, setUserId] = useState<string | null>(null);
+  const { user: authUser } = useAuth();
+  const userId = authUser?.id ?? null;
   const [routineTemplates, setRoutineTemplates] = useState<RoutineTemplate[]>([]);
   const [message, setMessage] = useState('');
   const { theme, setTheme } = useTheme();
@@ -459,12 +461,6 @@ export default function SettingsPage() {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-    });
-  }, [supabase]);
 
   // 루틴 템플릿 로드
   const loadRoutineTemplates = useCallback(async () => {

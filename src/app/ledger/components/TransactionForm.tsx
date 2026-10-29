@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../../lib/supabase';
+import { useAuth } from '../../components/AuthProvider';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -62,6 +63,7 @@ interface AssetItem {
 }
 
 export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onDelete, defaultDate }: TransactionFormProps) {
+  const { user: authUser } = useAuth();
   const [formData, setFormData] = useState<TransactionData>({
     date: kstDateString(),
     amount: 0,
@@ -94,7 +96,7 @@ export function TransactionForm({ isOpen, onClose, onSubmit, editing = null, onD
           console.error('Supabase 클라이언트 초기화 실패');
           return;
         }
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = authUser;
         
         if (user) {
           // 카테고리 로드
