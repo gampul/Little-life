@@ -1,5 +1,5 @@
 -- RLS 정책 성능 최적화 (2026-10-29)
--- 상태: 작성 완료, 프로덕션 미적용 (2026-10-29 시험 실행 중 승인 대기로 취소됨)
+-- 2026-10-29 프로덕션 적용 (Supabase migration: rls_initplan_optimize)
 -- auth.uid() 를 (select auth.uid()) 로 감싸 행마다 다시 계산하지 않고 쿼리당 한 번만 평가 (Supabase auth_rls_initplan 경고 33건)
 -- 정책의 의미(누가 어떤 행을 보는지)는 그대로. memo_categories 의 같은 내용 중복 정책 2개 제거, FK 인덱스 1개 추가
 
