@@ -77,8 +77,6 @@ const LEVEL_FILTER = [
   'saturate(1.25) brightness(1.04)',
 ] as const;
 const LEVEL_WHITE = [0.82, 0.55, 0.28, 0.08, 0] as const;
-/** 범례 견본 색 */
-const LEVEL_SWATCH = ['#fbfbfb', '#d6d6d6', '#b3c1bb', '#7fae9a', 'linear-gradient(135deg,#ff9f1c,#2ec4b6,#e71d36)'] as const;
 const veilStyle = (level: number, future = false): CSSProperties => {
   // 아직 안 온 날·달 밖 칸은 회색 (0개 한 날의 흰색과 구분)
   const filter = future ? 'grayscale(1) brightness(0.9)' : LEVEL_FILTER[level];
@@ -533,20 +531,7 @@ export default function RoutineMonthCalendar({
         )}
 
         {/* 범례 / 안내 */}
-        {artMode ? (
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-y-1 text-[10px] text-gray-400 dark:text-gray-500">
-            <span className="inline-flex items-center gap-1">
-              0개
-              {LEVEL_SWATCH.map((c) => (
-                <span key={c} className="inline-block h-3 w-3 rounded-sm ring-1 ring-inset ring-gray-200 dark:ring-gray-600" style={{ background: c }} />
-              ))}
-              만점
-            </span>
-            <span>
-              하루 {Math.max(1, Math.ceil(total * 0.8 - 1e-9))}개 이상 만점 ✨ · 한 달 80% 칠하면 완성
-            </span>
-          </div>
-        ) : !selected ? (
+        {artMode ? null : !selected ? (
           <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-gray-400 dark:text-gray-500">
             적음
             {[0.2, 0.5, 0.8, 1].map((r) => (
