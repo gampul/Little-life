@@ -535,14 +535,14 @@ export default function MemoEditor({
                 id="memo-editor-pinned-label"
                 className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 whitespace-nowrap"
               >
-                중요공지
+                공지
               </span>
               <button
                 type="button"
                 role="switch"
                 aria-checked={isPinned}
                 aria-labelledby="memo-editor-pinned-label"
-                title={isPinned ? '중요공지 해제' : '중요공지로 표시 — Diary 를 열면 가장 먼저 보이는 탭에 고정돼요'}
+                title={isPinned ? '공지 해제' : '공지로 표시 — Diary 를 열면 가장 먼저 보이는 탭에 고정돼요'}
                 onClick={() => onPinnedChange(!isPinned)}
                 style={{ touchAction: 'manipulation' }}
                 className={`w-full min-w-11 h-11 flex items-center justify-center rounded-xl border transition-colors ${
