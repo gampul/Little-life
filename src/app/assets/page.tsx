@@ -2,8 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { IconAdjustmentsHorizontal } from '@tabler/icons-react';
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { getSupabase } from '../../lib/supabase';
@@ -162,7 +160,6 @@ export default function AssetsPage() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-28">
-        <GlobalNav />
 
         {/* 상단 고정: 제목 · 자산/부채/합계 */}
         <div className="sticky top-16 z-40 bg-[rgb(254,252,247)]/95 dark:bg-gray-900/95 backdrop-blur">
@@ -295,7 +292,6 @@ export default function AssetsPage() {
           )}
         </main>
 
-        <FooterNav />
       </div>
 
       {userId && (

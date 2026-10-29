@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { getSupabase } from '../lib/supabase';
-import { GlobalNav } from './components/GlobalNav';
-import { FooterNav } from './components/FooterNav';
 import DailyLogFeed from './components/DailyLogFeed';
 import TodayInsight from './components/TodayInsight';
 import CheckCell from './components/CheckCell';
@@ -1665,7 +1663,6 @@ export default function Home() {
           </div>
         )}
 
-        <GlobalNav />
         <div className={APP_CONTENT_CONTAINER}>
 
         <div className="space-y-2">
@@ -2909,7 +2906,6 @@ export default function Home() {
           </div>
         </div>
         
-        <FooterNav />
       </div>
       </>
     </AuthGuard>

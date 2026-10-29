@@ -2,8 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ReportMarkdown } from './ReportMarkdown';
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { APP_HORIZONTAL_CONTAINER } from '../components/container';
 import { DiaryIndexCard } from './DiaryIndexCard';
 import { ArchivePanel, type ArchiveResult } from './ArchivePanel';
@@ -220,7 +218,6 @@ export default function AIPage() {
   return (
     <>
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
-      <GlobalNav />
 
       <div className={APP_HORIZONTAL_CONTAINER}>
         {/* 탭 네비게이션 */}
@@ -473,7 +470,6 @@ export default function AIPage() {
         )}
       </div>
 
-      <FooterNav />
     </div>
     </>
   );

@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, type PieLabelRenderProps } from 'recharts';
 import { IconChevronDown, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { APP_HORIZONTAL_CONTAINER } from '../components/container';
@@ -229,7 +227,6 @@ export default function StatsPage() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-28">
-        <GlobalNav />
 
         {/* 상단 고정: 기간 · 월간/연간 · 수입/지출 탭 */}
         <div className="sticky top-16 z-40 bg-[rgb(254,252,247)]/95 dark:bg-gray-900/95 backdrop-blur">
@@ -406,7 +403,6 @@ export default function StatsPage() {
             </>
           )}
         </main>
-        <FooterNav />
       </div>
     </AuthGuard>
   );

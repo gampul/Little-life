@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "./providers";
+import { AppHeader, AppFooter } from "./components/AppChrome";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -67,10 +68,12 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/little-life-logo.png" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[rgb(254,252,247)] dark:bg-gray-900`}
       >
         <ThemeProvider>
+          <AppHeader />
           {children}
+          <AppFooter />
         </ThemeProvider>
       </body>
     </html>
