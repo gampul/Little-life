@@ -426,7 +426,8 @@ export default function RoutineMonthCalendar({
             )}
             <div className="relative grid grid-cols-7">
               {cells.map((date, i) => {
-                if (!date) return <div key={`b${i}`} className="aspect-square" style={veilStyle(0, true)} />;
+                // 그 달이 아닌 빈 칸은 덮개 없이 그림 원래 색 그대로
+                if (!date) return <div key={`b${i}`} className="aspect-square" />;
                 const day = Number(date.slice(8));
                 const future = date > today;
                 const isToday = date === today;
