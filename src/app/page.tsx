@@ -11,6 +11,7 @@ import CheckCell from './components/CheckCell';
 import { compressImage } from '../lib/compressImage';
 import { WEIGHT_MEMO_TEMPLATE, normalizeWeightMemo, withWeightMemoTemplate } from '../lib/weightMemo';
 import AutoGrowTextarea from './components/AutoGrowTextarea';
+import { continueBullet, toggleBullets } from '../lib/memoBullets';
 import { RoutineIcon } from '../lib/routineIcons';
 import SubItemsInput from './components/SubItemsInput';
 import {
@@ -37,6 +38,7 @@ import {
   IconDeviceLaptop,
   IconCheckbox,
   IconCamera,
+  IconList,
   IconX,
   IconPencil,
 } from '@tabler/icons-react';
@@ -3108,6 +3110,15 @@ function RoutineItem({
   const [uploadingCount, setUploadingCount] = useState(0);
   const [readingUploading, setReadingUploading] = useState(false);
   const [readingMemo, setReadingMemo] = useState('');
+  const readingMemoRef = useRef<HTMLTextAreaElement | null>(null);
+  /** 불릿 편집 결과를 메모에 반영하고 커서 위치 복원 */
+  const applyMemoEdit = (edit: { value: string; selStart: number; selEnd: number }) => {
+    setReadingMemo(edit.value.slice(0, ROUTINE_MEMO_MAX));
+    requestAnimationFrame(() => {
+      const el = readingMemoRef.current;
+      if (el) { el.focus(); el.setSelectionRange(edit.selStart, edit.selEnd); }
+    });
+  };
   const [sheetChecked, setSheetChecked] = useState(true);
   // 복합 타입: 시트에서 편집 중인 하위 항목 값(키 존재 = 체크) + 입력 중 문자열
   const [sheetSubValues, setSheetSubValues] = useState<SubValues>({});
@@ -3590,17 +3601,17 @@ function RoutineItem({
                   aria-checked={sheetChecked}
                   onClick={() => setSheetChecked(v => !v)}
                   disabled={readingUploading}
-                  className="mb-5 w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 disabled:opacity-50"
+                  className="mb-4 w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-800 disabled:opacity-50"
                 >
                   <span
-                    className={`w-6 h-6 rounded-md flex items-center justify-center ${
+                    className={`w-5 h-5 rounded-md flex items-center justify-center ${
                       sheetChecked
                         ? 'bg-[#474c56]'
                         : 'bg-white dark:bg-gray-800 border border-gray-700 dark:border-gray-500'
                     }`}
                   >
                     {sheetChecked && (
-                      <svg width="14" height="11" viewBox="0 0 12 9" fill="none">
+                      <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
                         <path d="M1 4L4.5 7.5L11 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     )}
@@ -3613,24 +3624,123 @@ function RoutineItem({
 
               {/* 복합: 하위 항목 체크 + 체크 시 단위 값 입력 */}
               {routineType === 'multi' && (
-                <SubItemsInput
-                  items={subItems}
-                  values={sheetSubValues}
-                  drafts={sheetSubDrafts}
-                  onToggle={toggleSheetSubItem}
-                  onDraftChange={(key, text) => setSheetSubDrafts(prev => ({ ...prev, [key]: text }))}
-                  onSubmit={() => { if (!readingUploading) saveReadingSheet(); }}
-                  disabled={readingUploading}
-                />
+                <div className="mb-4">
+                  <SubItemsInput
+                    items={subItems}
+                    values={sheetSubValues}
+                    drafts={sheetSubDrafts}
+                    onToggle={toggleSheetSubItem}
+                    onDraftChange={(key, text) => setSheetSubDrafts(prev => ({ ...prev, [key]: text }))}
+                    onSubmit={() => { if (!readingUploading) saveReadingSheet(); }}
+                    disabled={readingUploading}
+                  />
+                </div>
               )}
 
-              {/* 숫자 입력 */}
+              {/* 메모 (모든 루틴 공통) → 루틴 기록 글에 합쳐져 보임. 내용만큼 늘어남 */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor={`routine-memo-${routineId}`} className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    메모
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {readingMemo.length > ROUTINE_MEMO_MAX * 0.8 && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500" aria-live="polite">
+                        {readingMemo.length}/{ROUTINE_MEMO_MAX}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        const el = readingMemoRef.current;
+                        const start = el?.selectionStart ?? readingMemo.length;
+                        const end = el?.selectionEnd ?? readingMemo.length;
+                        applyMemoEdit(toggleBullets(readingMemo, start, end));
+                      }}
+                      disabled={readingUploading}
+                      title="불릿 목록 (줄 앞에 • 붙이기/떼기)"
+                      aria-label="불릿 목록"
+                      className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      <IconList size={15} stroke={1.8} aria-hidden="true" />
+                      목록
+                    </button>
+                  </div>
+                </div>
+                <AutoGrowTextarea
+                  ref={readingMemoRef}
+                  id={`routine-memo-${routineId}`}
+                  minRows={8}
+                  maxLength={ROUTINE_MEMO_MAX}
+                  autoFocus={routineType === 'checkbox'}
+                  value={readingMemo}
+                  onChange={(e) => setReadingMemo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.nativeEvent.isComposing) return;
+                    // Ctrl/Cmd+Enter 로 저장
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !readingUploading) {
+                      e.preventDefault();
+                      saveReadingSheet();
+                      return;
+                    }
+                    // 불릿 줄에서 Enter → 다음 줄에도 불릿 / 빈 불릿 줄이면 목록 끝
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      const el = e.currentTarget;
+                      const edit = continueBullet(readingMemo, el.selectionStart, el.selectionEnd);
+                      if (edit) {
+                        e.preventDefault();
+                        applyMemoEdit(edit);
+                      }
+                    }
+                  }}
+                  placeholder="오늘 어땠는지 남겨보세요"
+                  disabled={readingUploading}
+                  className="w-full px-3.5 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:opacity-50"
+                />
+              </div>
+
+              {/* 사진 미리보기 (있을 때만, 작은 썸네일 한 줄) */}
+              {(readingImages.length > 0 || uploadingCount > 0) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {readingImages.map((url, idx) => (
+                    <div key={url} className="relative h-16 w-16">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`사진 ${idx + 1}`}
+                        className="h-full w-full object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+                      />
+                      {idx === 0 && readingImages.length > 1 && (
+                        <span className="absolute bottom-0.5 left-0.5 px-1 py-px rounded bg-black/60 text-white text-[9px]">대표</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setReadingImages(prev => prev.filter((_, i) => i !== idx))}
+                        disabled={readingUploading}
+                        aria-label={`사진 ${idx + 1} 삭제`}
+                        className="absolute -top-1.5 -right-1.5 p-0.5 bg-black/70 hover:bg-black rounded-full text-white transition-colors disabled:opacity-50"
+                      >
+                        <IconX size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {Array.from({ length: uploadingCount }).map((_, i) => (
+                    <div key={`uploading-${i}`} className="h-16 w-16 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                      <svg className="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" aria-label="업로드 중">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 한 줄 하단: 숫자 입력 · 사진 추가 · 취소 · 저장 */}
+            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex items-center gap-2 flex-shrink-0">
               {routineType === 'number' && (
-              <div className="mb-5">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {readingSheet.label} ({readingSheet.unit})
-                </label>
-                <div className="relative">
+                <div className="relative w-[92px] shrink-0">
                   <input
                     type="number"
                     inputMode="decimal"
@@ -3640,152 +3750,66 @@ function RoutineItem({
                     onChange={(e) => setReadingMinutes(e.target.value)}
                     onFocus={(e) => e.target.select()}
                     placeholder="0"
+                    aria-label={`${readingSheet.label} (${readingSheet.unit})`}
                     disabled={readingUploading}
-                    className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-lg focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
+                    className="h-10 w-full pl-3 pr-8 rounded-lg border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base font-semibold tabular-nums focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-sm">
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-500 dark:text-gray-400">
                     {readingSheet.unit}
                   </span>
                 </div>
-              </div>
               )}
 
-              {/* 메모 (모든 루틴 공통) → 루틴 기록 글에 합쳐져 보임. 내용만큼 늘어나 전체 글이 보임 */}
-              <div className="mb-5">
-                <div className="flex items-baseline justify-between mb-2">
-                  <label htmlFor={`routine-memo-${routineId}`} className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    메모 (선택)
-                  </label>
-                  {readingMemo.length > ROUTINE_MEMO_MAX * 0.8 && (
-                    <span className="text-xs text-gray-400 dark:text-gray-500" aria-live="polite">
-                      {readingMemo.length}/{ROUTINE_MEMO_MAX}
-                    </span>
-                  )}
-                </div>
-                <AutoGrowTextarea
-                  id={`routine-memo-${routineId}`}
-                  minRows={3}
-                  maxLength={ROUTINE_MEMO_MAX}
-                  autoFocus={routineType === 'checkbox'}
-                  value={readingMemo}
-                  onChange={(e) => setReadingMemo(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter 는 줄바꿈, Ctrl/Cmd+Enter 로 저장
-                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing && !readingUploading) {
-                      e.preventDefault();
-                      saveReadingSheet();
+              <label
+                title={`사진 추가 (최대 ${MAX_ROUTINE_PHOTOS}장)`}
+                className={`relative h-10 shrink-0 inline-flex items-center gap-1 rounded-lg border border-gray-300 dark:border-gray-700 px-2 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                  readingUploading || readingImages.length + uploadingCount >= MAX_ROUTINE_PHOTOS ? 'opacity-50 pointer-events-none' : 'cursor-pointer'
+                }`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={readingUploading || readingImages.length + uploadingCount >= MAX_ROUTINE_PHOTOS}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleReadingImageUpload(e.target.files);
                     }
+                    // 같은 파일을 다시 고를 수 있도록 초기화
+                    e.target.value = '';
                   }}
-                  placeholder="오늘 어땠는지 남겨보세요"
-                  disabled={readingUploading}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-700 bg-[rgb(254,252,247)] dark:bg-gray-800 text-gray-900 dark:text-white text-base leading-relaxed resize-none focus:ring-2 focus:ring-blue-500 outline-none disabled:opacity-50"
+                  className="hidden"
                 />
-              </div>
+                <IconCamera size={19} stroke={1.6} aria-hidden="true" />
+                <span className="text-xs font-medium tabular-nums">{readingImages.length}/{MAX_ROUTINE_PHOTOS}</span>
+              </label>
 
-              {/* 사진 (모든 루틴 공통, 최대 5장 동시 업로드) */}
-              <div>
-                <div className="flex items-baseline justify-between mb-2">
-                  <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">사진 (선택)</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500" aria-live="polite">
-                    {readingImages.length}/{MAX_ROUTINE_PHOTOS}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {readingImages.map((url, idx) => (
-                    <div key={url} className="relative aspect-square">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={url}
-                        alt={`사진 ${idx + 1}`}
-                        className="w-full h-full object-cover rounded-xl border border-gray-200 dark:border-gray-700"
-                      />
-                      {idx === 0 && readingImages.length > 1 && (
-                        <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-black/60 text-white text-[10px]">대표</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => setReadingImages(prev => prev.filter((_, i) => i !== idx))}
-                        disabled={readingUploading}
-                        aria-label={`사진 ${idx + 1} 삭제`}
-                        className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-black/80 rounded-full text-white transition-colors disabled:opacity-50"
-                      >
-                        <IconX size={14} />
-                      </button>
-                    </div>
-                  ))}
-
-                  {/* 업로드 중 자리 표시 */}
-                  {Array.from({ length: uploadingCount }).map((_, i) => (
-                    <div key={`uploading-${i}`} className="aspect-square rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <svg className="animate-spin h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" aria-label="업로드 중">
+              <div className="ml-auto flex shrink-0 items-center gap-1">
+                <button
+                  onClick={closeReadingSheet}
+                  disabled={readingUploading}
+                  className="h-10 px-3 whitespace-nowrap rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={saveReadingSheet}
+                  disabled={readingUploading}
+                  className="h-10 px-4 whitespace-nowrap rounded-lg bg-[#178CF2] hover:brightness-95 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {readingUploading ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                       </svg>
-                    </div>
-                  ))}
-
-                  {/* 추가 타일 */}
-                  {readingImages.length + uploadingCount < MAX_ROUTINE_PHOTOS && (
-                    <label
-                      className={`flex items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer ${
-                        readingUploading ? 'opacity-50 pointer-events-none' : ''
-                      } ${
-                        readingImages.length === 0 && uploadingCount === 0
-                          ? 'col-span-3 flex-row gap-2 py-4'
-                          : 'aspect-square flex-col gap-1'
-                      }`}
-                    >
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        disabled={readingUploading}
-                        onChange={(e) => {
-                          if (e.target.files && e.target.files.length > 0) {
-                            handleReadingImageUpload(e.target.files);
-                          }
-                          // 같은 파일을 다시 고를 수 있도록 초기화
-                          e.target.value = '';
-                        }}
-                        className="hidden"
-                      />
-                      <IconCamera size={22} stroke={1.5} className="text-gray-400" />
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                        {readingImages.length === 0 ? `사진 추가 (최대 ${MAX_ROUTINE_PHOTOS}장)` : '추가'}
-                      </span>
-                    </label>
+                      저장 중
+                    </>
+                  ) : (
+                    '저장'
                   )}
-                </div>
+                </button>
               </div>
-            </div>
-
-            {/* 액션 버튼 */}
-            <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex gap-3 flex-shrink-0">
-              <button
-                onClick={closeReadingSheet}
-                disabled={readingUploading}
-                className="flex-1 px-4 py-3 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors font-medium disabled:opacity-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={saveReadingSheet}
-                disabled={readingUploading}
-                className="flex-1 px-4 py-3 rounded-xl bg-[#178CF2] hover:brightness-95 text-white transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {readingUploading ? (
-                  <>
-                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    저장 중
-                  </>
-                ) : (
-                  '저장'
-                )}
-              </button>
             </div>
           </div>
         </div>
