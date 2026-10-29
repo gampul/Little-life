@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchDeployRows, financeKeys } from '../../lib/financeQueries';
 import { ASSET_FAB_BOTTOM, ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
@@ -28,54 +30,36 @@ export default function DeployPage() {
   const supabase = getSupabase();
   const { user } = useAuth();
   const authUserId = user?.id ?? null;
-  const [rows, setRows] = useState<FinanceRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('total');
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [showModal, setShowModal] = useState(false);
 
+  // 투자 데이터 — React Query 캐시 (다시 열면 바로 표시)
+  const queryClient = useQueryClient();
+  const deployQ = useQuery({
+    queryKey: financeKeys.deploy(authUserId ?? ''),
+    queryFn: () => fetchDeployRows<FinanceRow>(authUserId!),
+    enabled: !!supabase && !!authUserId,
+  });
+  const rows = useMemo<FinanceRow[]>(() => deployQ.data ?? [], [deployQ.data]);
+  const isLoading = deployQ.isPending;
+  const error = !supabase
+    ? 'Supabase 클라이언트를 초기화할 수 없습니다.'
+    : deployQ.error
+      ? ((deployQ.error as { message?: string }).message ?? '데이터를 불러오지 못했습니다.')
+      : null;
+  const loadData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: financeKeys.deploy(authUserId ?? '') });
+  }, [queryClient, authUserId]);
+
   const months = useMemo(() => getSortedMonths(rows), [rows]);
   const monthsDesc = useMemo(() => [...months].reverse(), [months]);
 
-  const loadData = useCallback(async () => {
-    if (!supabase) {
-      setError('Supabase 클라이언트를 초기화할 수 없습니다.');
-      setIsLoading(false);
-      return;
-    }
-    try {
-      // 로그인 사용자는 AuthProvider 값 사용 (getUser 네트워크 호출 생략)
-      const userId = authUserId;
-      if (!userId) return; // 로그인 확인 전 — 확인되면 다시 불림
-
-      const { data, error: queryError } = await supabase
-        .from('finance_investments')
-        .select('*')
-        .eq('user_id', userId)
-        .order('monthly_date', { ascending: true });
-
-      if (queryError) {
-        setError(queryError.message);
-        setIsLoading(false);
-        return;
-      }
-
-      const fetched = (data ?? []) as FinanceRow[];
-      setRows(fetched);
-
-      const sorted = getSortedMonths(fetched);
-      setSelectedMonth((prev) => (prev && sorted.includes(prev) ? prev : sorted[sorted.length - 1] ?? ''));
-    } catch (e: any) {
-      setError(e?.message ?? '데이터를 불러오지 못했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [supabase, authUserId]);
-
+  // 데이터가 바뀌면 고른 달 유지, 없으면 최신 달
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    const sorted = getSortedMonths(rows);
+    setSelectedMonth((prev) => (prev && sorted.includes(prev) ? prev : sorted[sorted.length - 1] ?? ''));
+  }, [rows]);
 
   const showMonthSelector = activeTab !== 'owner';
   const hasData = rows.length > 0;

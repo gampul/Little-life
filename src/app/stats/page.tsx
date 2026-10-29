@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchStatsYear, financeKeys } from '../../lib/financeQueries';
 import { Cell, Pie, PieChart, ResponsiveContainer, type PieLabelRenderProps } from 'recharts';
 import { IconChevronDown, IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { APP_HORIZONTAL_CONTAINER } from '../components/container';
-import { getSupabase } from '../../lib/supabase';
-import { categoryIcon, kstMonthStartIso, toKst, won } from '../ledger/ledgerUtils';
+import { categoryIcon, toKst, won } from '../ledger/ledgerUtils';
 
 type Mode = 'month' | 'year';
 type Kind = 'expense' | 'income';
@@ -141,7 +142,6 @@ function layoutLabels(items: { name: string; value: number }[], total: number, h
 }
 
 export default function StatsPage() {
-  const supabase = getSupabase();
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
@@ -150,49 +150,22 @@ export default function StatsPage() {
   const [kind, setKind] = useState<Kind>('expense');
   const [year, setYear] = useState(now.getUTCFullYear());
   const [month, setMonth] = useState(now.getUTCMonth() + 1);
-  const [cache, setCache] = useState<Record<number, Tx[]>>({});
-  const [error, setError] = useState<string | null>(null);
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [modeMenu, setModeMenu] = useState(false);
-  const inflight = useRef<Set<number>>(new Set());
 
-  // 연 단위로 불러와 캐시 (월간·연간 모두 같은 데이터 사용)
-  const loadYear = useCallback(async (y: number) => {
-    if (!supabase || !userId || cache[y] || inflight.current.has(y)) return;
-    inflight.current.add(y);
-    setError(null);
-    try {
-      const all: Tx[] = [];
-      const PAGE = 1000;
-      for (let off = 0; ; off += PAGE) {
-        const { data, error: err } = await supabase
-          .from('transactions')
-          .select('date, transaction_type, category, sub_category, amount')
-          .eq('user_id', userId)
-          .in('transaction_type', ['수입', '지출'])
-          .gte('date', kstMonthStartIso(y, 1))
-          .lt('date', kstMonthStartIso(y + 1, 1))
-          .order('date', { ascending: true })
-          .range(off, off + PAGE - 1);
-        if (err) throw err;
-        for (const r of (data ?? []) as Row[]) {
-          const t = toTx(r);
-          if (t) all.push(t);
-        }
-        if (!data || data.length < PAGE) break;
-      }
-      setCache((c) => ({ ...c, [y]: all }));
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '불러오지 못했습니다.');
-    } finally {
-      inflight.current.delete(y);
-    }
-  }, [supabase, userId, cache]);
-
-  useEffect(() => { loadYear(year); }, [year, loadYear]);
+  // 연 단위로 불러와 캐시 (월간·연간 모두 같은 데이터, 다시 열면 바로 표시)
+  const yearQ = useQuery({
+    queryKey: financeKeys.statsYear(userId ?? '', year),
+    queryFn: () => fetchStatsYear(userId!, year),
+    enabled: !!userId,
+  });
+  const error = yearQ.error ? (yearQ.error instanceof Error ? yearQ.error.message : '불러오지 못했습니다.') : null;
   useEffect(() => { setOpenCat(null); }, [mode, kind, year, month]);
 
-  const yearTx = cache[year];
+  const yearTx = useMemo(
+    () => (yearQ.data ? yearQ.data.map((r) => toTx(r as Row)).filter((t): t is Tx => !!t) : undefined),
+    [yearQ.data]
+  );
   const periodTx = useMemo(
     () => (yearTx ? (mode === 'year' ? yearTx : yearTx.filter((t) => t.month === month)) : []),
     [yearTx, mode, month]

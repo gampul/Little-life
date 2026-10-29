@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchLedgerMonth, fetchLedgerYearTotals, financeKeys, invalidateFinance } from '../../lib/financeQueries';
 import {
   IconChevronLeft,
   IconChevronRight,
@@ -22,7 +24,6 @@ import {
   WEEKDAYS,
   amountClass,
   categoryIcon,
-  kstMonthStartIso,
   kstTimeLabel,
   kstYmd,
   toKst,
@@ -147,11 +148,6 @@ export default function LedgerPage() {
   const [month, setMonth] = useState(init.month);
   const [tab, setTab] = useState<Tab>('daily');
 
-  const [monthTx, setMonthTx] = useState<LedgerTx[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  const [yearTotals, setYearTotals] = useState<Record<number, Totals[]>>({});
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -167,68 +163,21 @@ export default function LedgerPage() {
     supabase.auth.getSession().then(({ data }) => setAccessToken(data.session?.access_token ?? null));
   }, [supabase]);
 
-  // 한 달 거래 (KST 기준)
-  useEffect(() => {
-    if (!supabase || !userId) return;
-    let cancelled = false;
-    setIsLoading(true);
-    (async () => {
-      const from = kstMonthStartIso(year, month);
-      const to = kstMonthStartIso(year, month + 1);
-      const all: LedgerTx[] = [];
-      const PAGE = 1000;
-      for (let off = 0; ; off += PAGE) {
-        const { data, error } = await supabase
-          .from('transactions')
-          .select('id, date, asset, category, sub_category, transaction_type, is_transfer, transfer_asset, amount, memo, created_at')
-          .eq('user_id', userId)
-          .gte('date', from)
-          .lt('date', to)
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false })
-          .range(off, off + PAGE - 1);
-        if (error) {
-          console.error('거래 로드 오류:', error.message);
-          break;
-        }
-        all.push(...((data ?? []) as LedgerTx[]));
-        if (!data || data.length < PAGE) break;
-      }
-      if (!cancelled) {
-        setMonthTx(all);
-        setIsLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [supabase, userId, year, month, reloadKey]);
-
-  // 월별 탭: 그 해 월별 합계
-  useEffect(() => {
-    if (tab !== 'monthly' || !supabase || !userId || yearTotals[year]) return;
-    (async () => {
-      const arr: Totals[] = Array.from({ length: 12 }, () => ({ income: 0, expense: 0 }));
-      const PAGE = 1000;
-      for (let off = 0; ; off += PAGE) {
-        const { data, error } = await supabase
-          .from('transactions')
-          .select('date, transaction_type, amount')
-          .eq('user_id', userId)
-          .in('transaction_type', ['수입', '지출'])
-          .gte('date', kstMonthStartIso(year, 1))
-          .lt('date', kstMonthStartIso(year + 1, 1))
-          .order('date', { ascending: true })
-          .range(off, off + PAGE - 1);
-        if (error) break;
-        for (const r of data ?? []) {
-          const mi = toKst(r.date).getUTCMonth();
-          if (r.transaction_type === '수입') arr[mi].income += Number(r.amount) || 0;
-          else arr[mi].expense += Number(r.amount) || 0;
-        }
-        if (!data || data.length < PAGE) break;
-      }
-      setYearTotals((p) => ({ ...p, [year]: arr }));
-    })();
-  }, [tab, supabase, userId, year, yearTotals]);
+  // 한 달 거래 · 월별 합계 — React Query 캐시 (다시 열면 바로 보이고, 오래됐으면 뒤에서 새로 받음)
+  const queryClient = useQueryClient();
+  const monthQ = useQuery({
+    queryKey: financeKeys.ledgerMonth(userId ?? '', year, month),
+    queryFn: () => fetchLedgerMonth(userId!, year, month),
+    enabled: !!userId,
+    placeholderData: keepPreviousData,
+  });
+  const monthTx = useMemo(() => monthQ.data ?? [], [monthQ.data]);
+  const isLoading = monthQ.isPending;
+  const yearQ = useQuery({
+    queryKey: financeKeys.ledgerYearTotals(userId ?? '', year),
+    queryFn: () => fetchLedgerYearTotals(userId!, year),
+    enabled: !!userId && tab === 'monthly',
+  });
 
   const visibleTx = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -266,8 +215,7 @@ export default function LedgerPage() {
   };
 
   const invalidate = () => {
-    setReloadKey((k) => k + 1);
-    setYearTotals({});
+    invalidateFinance(queryClient);
   };
 
   const openAdd = () => {
@@ -364,7 +312,7 @@ export default function LedgerPage() {
   const todayYmd = kstDateString();
 
   const headerLabel = tab === 'monthly' ? `${year}년` : `${year}년 ${month}월`;
-  const yt = yearTotals[year];
+  const yt = yearQ.data;
   const yearSum = yt ? yt.reduce((s, t) => ({ income: s.income + t.income, expense: s.expense + t.expense }), { income: 0, expense: 0 }) : null;
 
   return (

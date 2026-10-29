@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchAssets, financeKeys } from '../../lib/financeQueries';
 import { IconAdjustmentsHorizontal } from '@tabler/icons-react';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
@@ -71,10 +73,6 @@ export default function AssetsPage() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const [balances, setBalances] = useState<AssetBalance[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [mappings, setMappings] = useState<Mapping[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [hideZero, setHideZero] = useState(false);
   const [openAsset, setOpenAsset] = useState<string | null>(null);
   const [assetTx, setAssetTx] = useState<Record<string, AssetTx[] | 'loading'>>({});
@@ -84,23 +82,23 @@ export default function AssetsPage() {
     try { setHideZero(localStorage.getItem('little-life:assets-hide-zero') === '1'); } catch {}
   }, []);
 
-  const load = useCallback(async () => {
-    if (!supabase || !userId) return;
-    setIsLoading(true);
-    const [balRes, catRes, mapRes] = await Promise.all([
-      supabase.rpc('get_asset_balances', { p_user_id: userId }),
-      supabase.from('asset_categories').select('id, name, type, sort_order').eq('user_id', userId).order('sort_order'),
-      supabase.from('asset_category_mappings').select('asset_name, category_id').eq('user_id', userId),
-    ]);
-    if (balRes.error) console.error('잔액 로드 오류:', balRes.error.message);
-    setBalances(((balRes.data ?? []) as AssetBalance[]).map((b) => ({ ...b, balance: Number(b.balance) || 0 })));
-    setCategories((catRes.data ?? []) as Category[]);
-    setMappings((mapRes.data ?? []) as Mapping[]);
-    setAssetTx({});
-    setIsLoading(false);
-  }, [supabase, userId]);
-
-  useEffect(() => { load(); }, [load]);
+  // 잔액·그룹 — React Query 캐시 (다시 열면 바로 표시, 오래됐으면 뒤에서 새로 받음)
+  const queryClient = useQueryClient();
+  const assetsQ = useQuery({
+    queryKey: financeKeys.assets(userId ?? ''),
+    queryFn: () => fetchAssets(userId!),
+    enabled: !!userId,
+  });
+  const balances = useMemo<AssetBalance[]>(() => assetsQ.data?.balances ?? [], [assetsQ.data]);
+  const categories = useMemo<Category[]>(() => assetsQ.data?.categories ?? [], [assetsQ.data]);
+  const mappings = useMemo<Mapping[]>(() => assetsQ.data?.mappings ?? [], [assetsQ.data]);
+  const isLoading = assetsQ.isPending;
+  if (assetsQ.error) console.error('잔액 로드 오류:', assetsQ.error);
+  // 새 데이터가 오면 펼쳐 둔 계좌 거래내역 캐시도 비움
+  useEffect(() => { setAssetTx({}); }, [assetsQ.dataUpdatedAt]);
+  const load = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: financeKeys.assets(userId ?? '') });
+  }, [queryClient, userId]);
 
   // 자산 / 부채 / 합계 — 부채 그룹(대출·카드 등)은 부채로, 나머지 음수 잔액은 자산 안에서 빼기
   const groups = useMemo(() => {

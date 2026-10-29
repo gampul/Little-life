@@ -7,7 +7,9 @@
  *  - 등록 / 임시저장 / 나중에(보관) / 삭제 처리 (예전 Daily page.tsx 에서 옮김)
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getSupabase } from '../../lib/supabase';
+import { invalidateFinance } from '../../lib/financeQueries';
 import { useAuth } from './AuthProvider';
 import { PendingSmsPopup } from './PendingSmsPopup';
 import type { PendingTransaction, TransactionType } from '../../types/pending_transaction';
@@ -19,6 +21,7 @@ const devLog = (...args: unknown[]) => {
 export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
   const supabase = getSupabase();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const userId = user?.id ?? null;
   const [pendingQueue, setPendingQueue] = useState<PendingTransaction[]>([]);
   // 예전 Daily 배지용 카운트 (지금은 GlobalNav 가 따로 셈) — 핸들러 호환을 위해 유지
@@ -169,6 +172,8 @@ export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
       }
 
       devLog('✅ [등록] 성공:', id);
+      // 가계부·통계·자산 캐시 갱신
+      invalidateFinance(queryClient);
       // 3) dequeue
       setPendingQueue((q) => q.filter((p) => p.id !== id));
       setPendingCount((c) => Math.max(0, c - 1));
@@ -176,7 +181,7 @@ export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
       console.error('❌ [등록] 예외:', err);
       alert('등록 중 오류가 발생했습니다.');
     }
-  }, [supabase, userId, pendingQueue]);
+  }, [supabase, userId, pendingQueue, queryClient]);
 
   // ── 나중에: 이번에는 넘기고 보관 → 다음 건으로 (자동 팝업에서는 다시 안 뜸, 종 아이콘으로 다시 열기) ──
   // 예전에는 큐 뒤로 보내기만 해서 건이 여러 개면 팝업이 끝없이 돌았음
