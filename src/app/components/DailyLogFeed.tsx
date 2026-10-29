@@ -17,6 +17,7 @@ interface RoutineTemplate {
   unit?: string;
   sub_items?: RoutineSubItem[];
   icon?: string | null;
+  created_at?: string | null;
 }
 
 interface RoutineCheckRow {

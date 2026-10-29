@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { useAuth } from './components/AuthProvider';
 import { getSupabase } from '../lib/supabase';
+import TodayPerfectToast from './components/TodayPerfectToast';
 import DailyLogFeed from './components/DailyLogFeed';
 import TodayInsight from './components/TodayInsight';
 import CheckCell from './components/CheckCell';
@@ -90,6 +91,8 @@ interface RoutineTemplate {
   icon?: string | null;
   /** 부가 설명 (routine_templates.description, add_routine_description.sql) */
   description?: string | null;
+  /** 만든 시각 — 이달의 그림 하루 만점 기준(그날 있던 루틴 수) 계산용 */
+  created_at?: string | null;
 }
 
 /** daily_routine_checks 행 — Home 에서 전 루틴을 한 번에 로드해 RoutineItem 으로 내려줌 */
@@ -630,18 +633,27 @@ export default function Home() {
       // 아이콘·설명은 별도 조회 (해당 컬럼이 없는 DB 에서도 위 조회가 깨지지 않게)
       let { data: iconRows, error: iconErr } = await supabase
         .from('routine_templates')
-        .select('id, icon, description')
+        .select('id, icon, description, created_at')
         .eq('user_id', userId);
+      if (iconErr) {
+        const retry = await supabase.from('routine_templates').select('id, icon, description').eq('user_id', userId);
+        iconRows = retry.data as typeof iconRows;
+        iconErr = retry.error;
+      }
       if (iconErr) {
         const retry = await supabase.from('routine_templates').select('id, icon').eq('user_id', userId);
         iconRows = retry.data as typeof iconRows;
         iconErr = retry.error;
       }
-      const extraById = new Map<string, { icon: string | null; description: string | null }>(
+      const extraById = new Map<string, { icon: string | null; description: string | null; created_at: string | null }>(
         !iconErr && iconRows
           ? iconRows.map((r: any) => [
               r.id as string,
-              { icon: (r.icon as string | null) ?? null, description: ((r.description as string | null) ?? '').trim() || null },
+              {
+                icon: (r.icon as string | null) ?? null,
+                description: ((r.description as string | null) ?? '').trim() || null,
+                created_at: (r.created_at as string | null) ?? null,
+              },
             ])
           : []
       );
@@ -649,6 +661,7 @@ export default function Home() {
         ...t,
         icon: extraById.get(t.id)?.icon ?? null,
         description: extraById.get(t.id)?.description ?? null,
+        created_at: extraById.get(t.id)?.created_at ?? null,
       }));
       armed.current.templates = nextTemplates;
       setRoutineTemplates(nextTemplates);
@@ -2948,6 +2961,7 @@ export default function Home() {
             </div>
 
             {/* 날짜별 루틴 기록 (하루 = 글 1개) — 기존 월간 캘린더 대체 */}
+            <TodayPerfectToast routines={routineTemplates} checksByRoutine={routineChecksByRoutine} signal={insightSignal} />
             <DailyLogFeed
               routineTemplates={routineTemplates}
               checksByRoutine={routineChecksByRoutine}
