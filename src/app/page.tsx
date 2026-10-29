@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import dynamic from 'next/dynamic';
 import { useAuth } from './components/AuthProvider';
 import { getSupabase } from '../lib/supabase';
@@ -234,6 +235,76 @@ export default function Home() {
     meal_images: [],
     daily_memo: '',
   });
+
+  // ── 화면 데이터 캐시 ─────────────────────────────────────────────
+  // 다른 메뉴에 갔다 돌아오면 받아 둔 데이터를 그리기 전에 먼저 꺼내 보여 주고(빈 화면 없음),
+  // 새 데이터는 아래 로더들이 지금처럼 받아서 바꿈. 상태가 바뀔 때마다 캐시도 같이 갱신(체크 토글 등).
+  // 캐시 쓰기는 "화면 상태가 불러온/꺼낸 값과 같아진 뒤"부터 — 초기 빈 상태로 캐시를 덮어쓰지 않게.
+  const queryClient = useQueryClient();
+  const dailyKey = useCallback((...k: unknown[]) => ['daily', userId, ...k], [userId]);
+  type Armed = { templates?: unknown; checksAll?: unknown; records?: unknown; record?: { date: string; v: unknown }; checks?: { date: string; v: unknown } };
+  const armed = useRef<Armed>({});
+  const ready = useRef<{ templates: boolean; checksAll: boolean; records: boolean; record: string | null; checks: string | null }>({
+    templates: false, checksAll: false, records: false, record: null, checks: null,
+  });
+
+  useLayoutEffect(() => {
+    if (!userId) return;
+    queryClient.setQueryDefaults(['daily'], { gcTime: 30 * 60_000 });
+    const t = queryClient.getQueryData<RoutineTemplate[]>(dailyKey('templates'));
+    if (t) { armed.current.templates = t; setRoutineTemplates(t); }
+    const c = queryClient.getQueryData<Record<string, RoutineCheckRow[]>>(dailyKey('checksAll'));
+    if (c) { armed.current.checksAll = c; setRoutineChecksByRoutine(c); }
+    const r = queryClient.getQueryData<DailyRecord[]>(dailyKey('records'));
+    if (r) { armed.current.records = r; setAllRecords(r); }
+  }, [userId, queryClient, dailyKey]);
+
+  useLayoutEffect(() => {
+    if (!userId) return;
+    const rec = queryClient.getQueryData<{ formData: DailyRecord; hasData: boolean }>(dailyKey('record', selectedDate));
+    if (rec) {
+      armed.current.record = { date: selectedDate, v: rec.formData };
+      setFormData(rec.formData);
+      setHasData(rec.hasData);
+      setIsEditMode(!rec.hasData);
+    }
+    const chk = queryClient.getQueryData<RoutineCheck[]>(dailyKey('checks', selectedDate));
+    if (chk) {
+      armed.current.checks = { date: selectedDate, v: chk };
+      setRoutineChecks(chk);
+      const values: Record<string, number | null> = {};
+      chk.forEach((c) => { values[c.routine_id] = c.value ?? null; });
+      setRoutineValues(values);
+    }
+  }, [userId, selectedDate, queryClient, dailyKey]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (!ready.current.templates && armed.current.templates === routineTemplates) ready.current.templates = true;
+    if (ready.current.templates) queryClient.setQueryData(dailyKey('templates'), routineTemplates);
+  }, [routineTemplates, userId, queryClient, dailyKey]);
+  useEffect(() => {
+    if (!userId) return;
+    if (!ready.current.checksAll && armed.current.checksAll === routineChecksByRoutine) ready.current.checksAll = true;
+    if (ready.current.checksAll) queryClient.setQueryData(dailyKey('checksAll'), routineChecksByRoutine);
+  }, [routineChecksByRoutine, userId, queryClient, dailyKey]);
+  useEffect(() => {
+    if (!userId) return;
+    if (!ready.current.records && armed.current.records === allRecords) ready.current.records = true;
+    if (ready.current.records) queryClient.setQueryData(dailyKey('records'), allRecords);
+  }, [allRecords, userId, queryClient, dailyKey]);
+  useEffect(() => {
+    if (!userId) return;
+    const a = armed.current.record;
+    if (a && a.date === selectedDate && a.v === formData) ready.current.record = selectedDate;
+    if (ready.current.record === selectedDate) queryClient.setQueryData(dailyKey('record', selectedDate), { formData, hasData });
+  }, [formData, hasData, selectedDate, userId, queryClient, dailyKey]);
+  useEffect(() => {
+    if (!userId) return;
+    const a = armed.current.checks;
+    if (a && a.date === selectedDate && a.v === routineChecks) ready.current.checks = selectedDate;
+    if (ready.current.checks === selectedDate) queryClient.setQueryData(dailyKey('checks', selectedDate), routineChecks);
+  }, [routineChecks, selectedDate, userId, queryClient, dailyKey]);
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
@@ -572,13 +643,13 @@ export default function Home() {
             ])
           : []
       );
-      setRoutineTemplates(
-        templatesWithType.map((t: any) => ({
-          ...t,
-          icon: extraById.get(t.id)?.icon ?? null,
-          description: extraById.get(t.id)?.description ?? null,
-        }))
-      );
+      const nextTemplates = templatesWithType.map((t: any) => ({
+        ...t,
+        icon: extraById.get(t.id)?.icon ?? null,
+        description: extraById.get(t.id)?.description ?? null,
+      }));
+      armed.current.templates = nextTemplates;
+      setRoutineTemplates(nextTemplates);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
     }
@@ -599,7 +670,9 @@ export default function Home() {
         // PGRST116은 "no rows returned" 에러로, 데이터가 없을 때 발생하는 정상적인 상황
         if (error.code === 'PGRST116') {
           devLog('📋 루틴 체크 데이터 없음 (정상):', date);
-          setRoutineChecks([]);
+          const empty: RoutineCheck[] = [];
+          armed.current.checks = { date, v: empty };
+          setRoutineChecks(empty);
           return;
         }
         
@@ -613,7 +686,9 @@ export default function Home() {
       }
 
       devLog('✅ 루틴 체크 로드 완료:', date, '개수:', data?.length || 0, '데이터:', data);
-      setRoutineChecks(data || []);
+      const nextChecks = (data || []) as RoutineCheck[];
+      armed.current.checks = { date, v: nextChecks };
+      setRoutineChecks(nextChecks);
       
       // 루틴 값 추출하여 state에 저장
       const values: Record<string, number | null> = {};
@@ -659,14 +734,13 @@ export default function Home() {
       }
 
       if (data) {
-        setFormData({
-          ...data,
-          meal_images: data.meal_images || []
-        });
+        const nextForm = { ...data, meal_images: data.meal_images || [] };
+        armed.current.record = { date, v: nextForm };
+        setFormData(nextForm);
         setHasData(true);
         setIsEditMode(false);
       } else {
-        setFormData({
+        const emptyForm: DailyRecord = {
           date: date,
           weight: null,
           meal_breakfast: false,
@@ -675,7 +749,9 @@ export default function Home() {
           meal_memo: '',
           meal_images: [],
           daily_memo: '',
-        });
+        };
+        armed.current.record = { date, v: emptyForm };
+        setFormData(emptyForm);
         setHasData(false);
         setIsEditMode(true);
       }
@@ -745,6 +821,7 @@ export default function Home() {
           : (record.date.includes(' ') ? record.date.split(' ')[0] : record.date)
       }));
       
+      armed.current.records = normalizedData;
       setAllRecords(normalizedData);
     } catch (err) {
       console.error('예상치 못한 오류:', err);
@@ -808,6 +885,7 @@ export default function Home() {
       for (const row of rows) {
         (grouped[row.routine_id] ||= []).push(row);
       }
+      armed.current.checksAll = grouped;
       setRoutineChecksByRoutine(grouped);
     };
 
