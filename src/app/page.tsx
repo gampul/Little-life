@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
+import { useAuth } from './components/AuthProvider';
 import { getSupabase } from '../lib/supabase';
 import DailyLogFeed from './components/DailyLogFeed';
 import TodayInsight from './components/TodayInsight';
@@ -147,35 +148,9 @@ const getRoutineIcon = (label: string, icon?: string | null) => <RoutineIcon lab
 export default function Home() {
   // Supabase 클라이언트 싱글톤 사용
   const supabase = getSupabase();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  useEffect(() => {
-    if (!supabase) {
-      console.error('❌ Supabase 클라이언트를 초기화할 수 없습니다.');
-      setAuthLoading(false);
-      return;
-    }
-    
-    devLog('🔍 사용자 인증 정보 확인 중...');
-    supabase.auth.getUser()
-      .then(({ data, error }) => {
-        if (error) {
-          console.error('❌ 인증 오류:', error);
-          setUserId(null);
-        } else {
-          devLog('✅ 사용자 인증 완료:', data.user?.id);
-          setUserId(data.user?.id ?? null);
-        }
-      })
-      .catch((err) => {
-        console.error('❌ 예상치 못한 인증 오류:', err);
-        setUserId(null);
-      })
-      .finally(() => {
-        setAuthLoading(false);
-      });
-  }, [supabase]);
+  // 로그인 사용자 — AuthProvider 가 앱 전체에서 한 번만 확인한 값을 그대로 사용 (예전엔 여기서 getUser 를 한 번 더 호출해 데이터 로드가 한 왕복 늦어졌음)
+  const { user: authUser, isLoading: authLoading } = useAuth();
+  const userId = authUser?.id ?? null;
 
   const [selectedDate, setSelectedDate] = useState<string>(
     getKstDateString()

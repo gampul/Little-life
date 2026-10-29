@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconChevronDown, IconCreditCard, IconX } from '@tabler/icons-react';
 import { getSupabase } from '../../lib/supabase';
+import { useAuth } from './AuthProvider';
 import type { PendingTransaction, TransactionType } from '../../types/pending_transaction';
 
 interface PendingSmsPopupProps {
@@ -70,6 +71,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export function PendingSmsPopup({ item, onConfirm, onTempSave, onSkip, onDismiss, remaining = 1 }: PendingSmsPopupProps) {
+  const { user: authUser } = useAuth();
   const [type, setType] = useState<TransactionType | null>(item.transaction_type ?? null);
   const [selectedAsset, setSelectedAsset] = useState<string>('');
   const [place, setPlace] = useState<string>(item.item_name ?? '');
@@ -87,14 +89,14 @@ export function PendingSmsPopup({ item, onConfirm, onTempSave, onSkip, onDismiss
     const load = async () => {
       const supabase = getSupabase();
       if (!supabase) { setAssetsLoaded(true); return; }
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setAssetsLoaded(true); return; }
+      const user = authUser;
+      if (!user) return; // 로그인 확인되면 다시 시도
       const { data, error } = await supabase.rpc('get_asset_balances', { p_user_id: user.id });
       if (!error && data) setAssetList(data);
       setAssetsLoaded(true);
     };
     load();
-  }, [assetsLoaded]);
+  }, [assetsLoaded, authUser]);
 
   const assets = useMemo(() => assetList.filter((a) => !a.is_debt), [assetList]);
   const debts = useMemo(() => assetList.filter((a) => a.is_debt), [assetList]);
