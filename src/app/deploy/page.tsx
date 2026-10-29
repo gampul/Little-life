@@ -1,8 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { ASSET_FAB_BOTTOM, ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
 import { AuthGuard } from '../components/AuthGuard';
 import { APP_CONTENT_CONTAINER } from '../components/container';
@@ -87,7 +85,6 @@ export default function DeployPage() {
     <AuthGuard>
       <>
         <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900">
-          <GlobalNav />
 
           <main className={`${APP_CONTENT_CONTAINER} pb-28`}>
             <div className="flex items-center justify-between mb-3">
@@ -160,7 +157,6 @@ export default function DeployPage() {
             +
           </button>
 
-          <FooterNav />
 
           {showModal && supabase && (
             <AddInvestmentModal

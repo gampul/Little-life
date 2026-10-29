@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import { getSupabase } from '../../lib/supabase';
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { CategoryManager } from '../assets/components/CategoryManager';
 import { APP_CONTENT_CONTAINER } from '../components/container';
 import SubItemsEditor from '../components/SubItemsEditor';
@@ -1038,7 +1036,6 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-      <GlobalNav />
       
       <div className={APP_CONTENT_CONTAINER}>
         <div className="bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 p-3 sm:p-5">
@@ -1214,7 +1211,6 @@ export default function SettingsPage() {
         </div>
       </div>
       
-      <FooterNav />
 
       {/* 카테고리 관리 모달 */}
       {userId && (

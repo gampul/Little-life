@@ -10,8 +10,6 @@ import {
   IconUpload,
   IconX,
 } from '@tabler/icons-react';
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { ASSET_FAB_BOTTOM, ASSET_FAB_RIGHT } from '../components/AssetSectionRail';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
@@ -372,7 +370,6 @@ export default function LedgerPage() {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-28">
-        <GlobalNav />
 
         {/* 상단 고정: 월 이동 · 탭 · 합계 */}
         <div className="sticky top-16 z-40 bg-[rgb(254,252,247)]/95 dark:bg-gray-900/95 backdrop-blur">
@@ -545,7 +542,6 @@ export default function LedgerPage() {
           <IconPlus size={28} stroke={2.2} />
         </button>
 
-        <FooterNav />
       </div>
 
       <TransactionForm

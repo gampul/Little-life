@@ -18,8 +18,6 @@ const requestMemoEmbedding = (memoId: string) => {
     /* ignore */
   }
 };
-import { GlobalNav } from '../components/GlobalNav';
-import { FooterNav } from '../components/FooterNav';
 import { AuthGuard } from '../components/AuthGuard';
 import { useAuth } from '../components/AuthProvider';
 import { APP_CONTENT_CONTAINER, APP_HORIZONTAL_CONTAINER } from '../components/container';
@@ -635,7 +633,6 @@ function MemoPageContent() {
 
   return (
     <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-      <GlobalNav />
       
       <div className={APP_CONTENT_CONTAINER}>
         
@@ -1147,7 +1144,6 @@ function MemoPageContent() {
         </div>
       )}
 
-      <FooterNav />
 
       <style jsx global>{`
         .line-clamp-2 {
@@ -1174,13 +1170,11 @@ export default function MemoPage() {
       <>
         <Suspense fallback={
           <div className="min-h-screen bg-[rgb(254,252,247)] dark:bg-gray-900 pb-20">
-            <GlobalNav />
             <div className={`${APP_HORIZONTAL_CONTAINER} py-8`}>
               <div className="flex items-center justify-center py-20">
                 <div className="text-gray-400">로딩 중...</div>
               </div>
             </div>
-            <FooterNav />
           </div>
         }>
           <MemoPageContent />

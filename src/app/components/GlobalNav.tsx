@@ -37,9 +37,10 @@ export function GlobalNav(props: GlobalNavProps) {
     setPendingCount(count ?? 0);
   }, [userId]);
 
+  // 메뉴는 layout 에 한 번만 있으므로 처음에 한 번 + 실시간 변경으로 갱신 (화면 이동마다 다시 세지 않음)
   useEffect(() => {
     loadPendingCount();
-  }, [loadPendingCount, pathname]);
+  }, [loadPendingCount]);
 
   // 새 알림이 들어오거나 등록·삭제되면 바로 갱신
   useEffect(() => {

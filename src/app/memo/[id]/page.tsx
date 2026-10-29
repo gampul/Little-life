@@ -2,8 +2,6 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { createSupabaseServer } from '../../../lib/supabase_ssr';
-import { GlobalNav } from '../../components/GlobalNav';
-import { FooterNav } from '../../components/FooterNav';
 import { APP_HORIZONTAL_CONTAINER } from '../../components/container';
 import { MemoDetailTopBar, MemoDetailFooter, MemoDetailActions } from './MemoDetailClient';
 
@@ -89,7 +87,6 @@ export default async function MemoDetailPage({
   if (error || !memo) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        <GlobalNav />
         <div className={`${APP_HORIZONTAL_CONTAINER} py-8`}>
           <div className="text-center py-20">
             <div className="text-4xl mb-4">📭</div>
@@ -102,7 +99,6 @@ export default async function MemoDetailPage({
             </Link>
           </div>
         </div>
-        <FooterNav />
       </div>
     );
   }
@@ -112,7 +108,6 @@ export default async function MemoDetailPage({
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-40">
-      <GlobalNav />
 
       {/* 상단 네비게이션 — 인터랙션은 client 섬 */}
       <div className="sticky top-0 z-10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-800">
@@ -161,7 +156,6 @@ export default async function MemoDetailPage({
       {/* 수정/삭제 고정 버튼 — sticky 바 바깥(뷰포트 기준 fixed) */}
       <MemoDetailActions id={memo.id} />
 
-      <FooterNav />
     </div>
   );
 }
