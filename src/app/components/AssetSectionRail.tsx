@@ -5,7 +5,7 @@ import { IconBuildingBank, IconChartLine, IconChartPie, IconReceipt2 } from '@ta
 
 /** Asset 메뉴 안의 네 화면 — 하단 Asset 탭과 그 위 가로 메뉴가 함께 씀 */
 export const ASSET_SECTIONS = [
-  { href: '/ledger', label: 'Ledger', icon: IconReceipt2 },
+  { href: '/ledger', label: '가계부', icon: IconReceipt2 },
   { href: '/stats', label: '통계', icon: IconChartPie },
   { href: '/assets', label: '자산', icon: IconBuildingBank },
   { href: '/deploy', label: 'Deploy', icon: IconChartLine },
