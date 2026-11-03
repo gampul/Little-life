@@ -155,7 +155,11 @@ export default function PendingInbox({ autoOpen }: { autoOpen: boolean }) {
           date: dateIso,
           asset,
           category: updates.category || typeKo,
-          sub_category: null,
+          // 배당 알림: 지난 기록에서 찾은 세부 분류 (분류를 바꾸지 않았을 때만)
+          sub_category:
+            item?.parsed_data && updates.category === item.category && typeof item.parsed_data.suggested_sub_category === 'string'
+              ? (item.parsed_data.suggested_sub_category as string)
+              : null,
           transaction_type: typeKo,
           is_transfer: updates.transaction_type === 'transfer',
           transfer_asset: null,
