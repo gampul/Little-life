@@ -176,7 +176,8 @@ function parseItemName(message: string): string | null {
     message.match(/가맹점\s*[:\-]\s*([^\n\r]+)/) ||
     message.match(/적요\s*[:\-]\s*([^\n\r]+)/);
   if (labeled) {
-    const name = labeled[1].replace(/^▶\s*/, '').trim();
+    // 줄바꿈 없이 한 줄로 온 알림톡에서도 다음 항목(▶·■·※) 앞에서 자름
+    const name = labeled[1].replace(/^▶\s*/, '').split(/[▶■※]/)[0].trim();
     if (name.length > 0) return name;
   }
 
@@ -301,6 +302,73 @@ function inferTransactionType(message: string): 'income' | 'expense' | 'transfer
   return null;
 }
 
+// ─── 배당금 알림 (키움·KB증권 알림톡) ────────────────────
+// 예) [키움]11/03 배당금이 입금되었습니다 / ▶종목명 : TIGER 리츠부동산인프라 / ▶배당입금 : 434,511 (세전) / 367,601 (세후)
+//     [KB증권] 퇴직연금 배당금 입금 안내 / ■ 계좌번호: 870-***-*13 [01]IRP / ■ 종목명: ACE 미국S&P500 / ■ 배당입금액: 67,201원
+const isDividendMessage = (s: string) => /배당/.test(s) && /입금/.test(s) && !/승인|결제/.test(s);
+
+/** 비교용: 대소문자·공백·기호 제거 ("TIGER 리츠부동산인프라" = "Tiger 리츠부동산 인프라") */
+const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/[\s()\[\]\-_.,·]/g, '');
+
+/** 계좌 종류 힌트 (IRP·연금저축·ISA) — 같은 종목을 여러 계좌에 갖고 있을 때 고르기 */
+function accountKind(s: string): string | null {
+  if (/IRP|퇴직연금/i.test(s)) return 'irp';
+  if (/ISA/i.test(s)) return 'isa';
+  if (/연금저축/.test(s)) return 'pension';
+  return null;
+}
+
+interface DividendGuess {
+  asset: string;
+  category: string;
+  sub_category: string | null;
+  basis: 'history' | 'asset_name' | 'default';
+}
+
+/** 지난 배당 기록에서 같은 종목의 자산·분류·세부 분류를 찾아 그대로 씀 (없으면 자산 이름으로만 맞춤) */
+async function guessDividend(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  itemName: string | null,
+  message: string
+): Promise<DividendGuess | null> {
+  const key = norm(itemName);
+  if (!key) return null;
+  const kind = accountKind(message);
+  const kindOk = (asset: string) => {
+    const a = asset.toLowerCase();
+    if (kind === 'irp') return a.includes('irp');
+    if (kind === 'isa') return a.includes('isa');
+    return true;
+  };
+
+  const { data: hist } = await admin
+    .from('transactions')
+    .select('asset, category, sub_category, memo, date')
+    .eq('user_id', userId)
+    .eq('transaction_type', '수입')
+    .ilike('category', '%금융소득%')
+    .order('date', { ascending: false })
+    .limit(500);
+  const rows = (hist ?? []) as { asset: string; category: string; sub_category: string | null; memo: string | null }[];
+  const byAsset = rows.find((r) => norm(r.asset).includes(key) && kindOk(r.asset));
+  const byMemo = rows.find((r) => norm(r.memo).includes(key) && kindOk(r.asset));
+  const hit = byAsset ?? byMemo ?? rows.find((r) => norm(r.asset).includes(key));
+  if (hit) return { asset: hit.asset, category: hit.category, sub_category: hit.sub_category, basis: 'history' };
+
+  // 기록이 없으면 자산 이름만 맞춰 봄
+  const { data: assetRows } = await admin
+    .from('transactions')
+    .select('asset')
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(2000);
+  const names = [...new Set(((assetRows ?? []) as { asset: string }[]).map((r) => r.asset))];
+  const asset = names.find((n) => norm(n).includes(key) && kindOk(n)) ?? names.find((n) => norm(n).includes(key));
+  const category = kind === 'irp' || kind === 'pension' || kind === 'isa' ? '금융소득(비과세)' : '금융소득(배당 및 이자)';
+  return { asset: asset ?? '', category, sub_category: null, basis: asset ? 'asset_name' : 'default' };
+}
+
 // ─── Main Handler ───────────────────────────────────────
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
@@ -386,15 +454,29 @@ Deno.serve(async (req: Request) => {
 
   if (dup && dup.length > 0) return json(200, { status: 'duplicate', id: dup[0].id });
 
-  const sender = parseSenderName(title, message);
+  let sender = parseSenderName(title, message);
   const amountBeforeTax = parseAmountBeforeTax(message);
-  const amount = parseAfterTaxAmount(message) ?? parseAmount(message);
+  const amountAfterTax = parseAfterTaxAmount(message);
+  let amount = amountAfterTax ?? parseAmount(message);
   const transactionDate = parseTransactionDate(message, receivedAt);
   const transactionTime = parseTransactionTime(message);
   const accountNumber = parseAccountNumber(message);
   const itemName = parseItemName(message);
-  const category = inferCategory(message);
+  let category = inferCategory(message);
   const txType = inferTransactionType(message);
+
+  // 배당금: 지난 기록대로 자산·분류를 채우고, 금액은 지금까지처럼 세전(없으면 입금액)
+  let memo: string | null = null;
+  let dividend: DividendGuess | null = null;
+  if (isDividendMessage(message)) {
+    dividend = await guessDividend(admin, userId, itemName, message);
+    if (amountBeforeTax) amount = amountBeforeTax;
+    if (dividend?.asset) sender = dividend.asset;
+    if (dividend) category = dividend.category;
+    if (amountBeforeTax && amountAfterTax && itemName) {
+      memo = `${itemName} · 세후 ${amountAfterTax.toLocaleString('ko-KR')}원`;
+    }
+  }
 
   const parsed: Json = {
     source: 'macrodroid',
@@ -409,6 +491,16 @@ Deno.serve(async (req: Request) => {
     detected_item_name: itemName,
     inferred_category: category,
     inferred_transaction_type: txType,
+    ...(dividend
+      ? {
+          kind: 'dividend',
+          detected_amount_after_tax: amountAfterTax,
+          suggested_asset: dividend.asset || null,
+          suggested_category: dividend.category,
+          suggested_sub_category: dividend.sub_category,
+          suggestion_basis: dividend.basis,
+        }
+      : {}),
   };
 
   // 금액이 없으면 결제 알림이 아닌 것으로 보고 팝업 없이 보관만
@@ -429,7 +521,7 @@ Deno.serve(async (req: Request) => {
       item_name: itemName,
       transaction_type: txType,
       category,
-      memo: null,
+      memo,
       status,
       parsed_data: parsed,
     })
