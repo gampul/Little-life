@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { IconBell, IconLogout, IconSettings } from '@tabler/icons-react';
 import { signOutAction } from '../actions/auth';
+import { clearTabLogin } from '../../lib/sessionPolicy';
 import { getSupabase } from '../../lib/supabase';
 import { APP_HORIZONTAL_CONTAINER } from './container';
 import { useAuth } from './AuthProvider';
@@ -138,7 +139,7 @@ export function GlobalNav(props: GlobalNavProps) {
                     </span>
                   </button>
                 )}
-                <form action={signOutAction}>
+                <form action={signOutAction} onSubmit={clearTabLogin}>
                   <button
                     className="min-h-[40px] min-w-[32px] flex items-center justify-center rounded-lg text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                     aria-label="로그아웃"

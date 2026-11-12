@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect } from 'react';
 import { signInWithPasswordAction, signUpWithPasswordAction, type AuthActionState } from '../actions/auth';
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../lib/passwordPolicy';
+import { clearTabLogin, markTabLoggedIn } from '../../lib/sessionPolicy';
 
 const initialState: AuthActionState = {};
 
@@ -10,9 +11,14 @@ export function LoginForm() {
   const [signInState, signInAction, signInPending] = useActionState(signInWithPasswordAction, initialState);
   const [signUpState, signUpAction, signUpPending] = useActionState(signUpWithPasswordAction, initialState);
 
+  // 로그인/가입에 실패하면 '이 탭에서 로그인함' 표식을 되돌린다
+  useEffect(() => {
+    if (signInState?.error || signUpState?.error) clearTabLogin();
+  }, [signInState, signUpState]);
+
   return (
     <div className="w-full max-w-sm space-y-4">
-      <form action={signInAction} className="space-y-3">
+      <form action={signInAction} onSubmit={markTabLoggedIn} className="space-y-3">
         <h1 className="text-xl font-bold text-gray-900 dark:text-white">로그인</h1>
         <input
           name="email"
@@ -25,6 +31,7 @@ export function LoginForm() {
           name="password"
           type="password"
           required
+          autoComplete="current-password"
           placeholder="비밀번호"
           className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
         />
@@ -40,7 +47,7 @@ export function LoginForm() {
 
       <div className="h-px bg-gray-200 dark:bg-gray-700" />
 
-      <form action={signUpAction} className="space-y-3">
+      <form action={signUpAction} onSubmit={markTabLoggedIn} className="space-y-3">
         <h2 className="text-base font-semibold text-gray-900 dark:text-white">회원가입</h2>
         <input
           name="email"

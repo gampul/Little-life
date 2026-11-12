@@ -1,5 +1,6 @@
 import { createBrowserClient, createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
+import { toSessionCookieOptions } from './sessionPolicy';
 
 function getEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -22,7 +23,8 @@ export async function createSupabaseServer() {
         return cookieStore.get(name)?.value;
       },
       set(name, value, options) {
-        cookieStore.set({ name, value, ...options });
+        // 로그인 유지 안 함: 만료일 없는 세션 쿠키로만 저장
+        cookieStore.set({ name, value, ...toSessionCookieOptions(options) });
       },
       remove(name, options) {
         cookieStore.set({ name, value: '', ...options, maxAge: 0 });

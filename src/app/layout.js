@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "./providers";
 import { AppHeader, AppFooter } from "./components/AppChrome";
+import { TAB_GATE_INLINE_SCRIPT } from "../lib/sessionPolicy";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -66,6 +67,8 @@ export default function RootLayout({ children }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Little Life" />
         <link rel="apple-touch-icon" href="/little-life-logo.png" />
+        {/* 새로 접속한 탭이면 로그인 화면으로 보내기 전까지 내용을 숨김 */}
+        <script dangerouslySetInnerHTML={{ __html: TAB_GATE_INLINE_SCRIPT }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-[rgb(254,252,247)] dark:bg-gray-900`}
