@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { toSessionCookieOptions } from './src/lib/sessionPolicy';
 
 function getEnv() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -46,7 +47,8 @@ export async function middleware(request: NextRequest) {
         return request.cookies.get(name)?.value;
       },
       set(name, value, options) {
-        response.cookies.set({ name, value, ...options });
+        // 로그인 유지 안 함: 토큰이 갱신돼도 만료일 없는 세션 쿠키로만 저장
+        response.cookies.set({ name, value, ...toSessionCookieOptions(options) });
       },
       remove(name, options) {
         response.cookies.set({ name, value: '', ...options, maxAge: 0 });

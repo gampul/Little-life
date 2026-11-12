@@ -11,6 +11,7 @@ import {
 } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { getSupabase } from '../../lib/supabase';
+import { clearAuthCookies, clearTabLogin, isTabLoggedIn } from '../../lib/sessionPolicy';
 
 interface AuthContextValue {
   user: User | null;
@@ -70,6 +71,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [supabase]);
 
   useEffect(() => {
+    // 접속할 때마다 로그인: 이 탭에서 로그인한 표식이 없으면(새 탭·새 창·앱 재실행)
+    // 남아 있는 세션을 이 기기에서 지우고 로그인 화면으로 보낸다. 같은 탭 새로고침은 유지.
+    if (window.location.pathname !== '/login' && !isTabLoggedIn()) {
+      let cancelled = false;
+      (async () => {
+        try {
+          await supabase?.auth.signOut({ scope: 'local' });
+        } catch {
+          // 네트워크 오류여도 아래에서 쿠키를 직접 지움
+        }
+        clearAuthCookies();
+        clearUserCache();
+        if (!cancelled) window.location.replace('/login');
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!supabase) {
       setIsLoading(false);
       return;
@@ -88,6 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       // SIGNED_IN / TOKEN_REFRESHED / SIGNED_OUT 등 — 네트워크 getUser 재호출 없이 세션 공유
       if (event === 'SIGNED_OUT') {
+        clearTabLogin();
         clearUserCache();
         setUser(null);
         setIsLoading(false);
