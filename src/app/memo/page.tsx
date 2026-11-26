@@ -121,11 +121,26 @@ function MemoPageContent() {
   const { data: memoCategoriesData } = useMemoCategories(user?.id ?? null);
   const memoCategories: MemoCategory[] = memoCategoriesData ?? [];
   const invalidateMemoCategories = useInvalidateMemoCategories();
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(null);
+  // 목록 상태(검색어·카테고리·탭·페이지)는 URL 쿼리에 보관 →
+  // 글을 열었다가 뒤로가기 하면 보던 목록(검색 결과)이 그대로 복원된다.
+  const [initialList] = useState(() => ({
+    q: (searchParams.get('q') ?? '').trim(),
+    cat: searchParams.get('cat'),
+    tab: searchParams.get('tab'),
+    page: Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1),
+  }));
+  const restoredFromUrl =
+    !!initialList.q || !!initialList.cat || !!initialList.tab || initialList.page > 1;
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string | null>(
+    initialList.cat
+  );
   /** 중요공지 탭 — Diary 첫 진입 시 고정 글이 하나라도 있으면 이 탭이 먼저 열린다 */
-  const [showPinnedOnly, setShowPinnedOnly] = useState(true);
+  const [showPinnedOnly, setShowPinnedOnly] = useState(
+    restoredFromUrl ? initialList.tab === 'pinned' && !initialList.cat : true
+  );
   const { data: pinnedCount, isSuccess: pinnedCountReady } = usePinnedCount();
-  const pinnedDefaultDecided = useRef(false);
+  // URL에서 복원된 경우 기본 탭 결정을 건너뛴다 (복원된 탭 유지)
+  const pinnedDefaultDecided = useRef(restoredFromUrl);
   useEffect(() => {
     if (pinnedDefaultDecided.current || !pinnedCountReady) return;
     pinnedDefaultDecided.current = true;
@@ -141,19 +156,40 @@ function MemoPageContent() {
   const [newCategoryParentId, setNewCategoryParentId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(initialList.page);
 
   // 검색 (서버 — title/content ilike, 전체 글 대상)
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [searchInput, setSearchInput] = useState(initialList.q);
+  const [debouncedQuery, setDebouncedQuery] = useState(initialList.q);
+  const debouncedQueryRef = useRef(initialList.q);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
-      setDebouncedQuery(searchInput.trim());
+      const q = searchInput.trim();
+      // 검색어가 실제로 바뀐 경우에만 1페이지로 (복원 직후 페이지가 초기화되지 않도록)
+      if (q === debouncedQueryRef.current) return;
+      debouncedQueryRef.current = q;
+      setDebouncedQuery(q);
       setCurrentPage(1);
     }, 300);
     return () => window.clearTimeout(t);
   }, [searchInput]);
+
+  // 목록 상태 → URL 동기화 (히스토리 항목을 늘리지 않고 현재 항목만 교체, 서버 요청 없음)
+  useEffect(() => {
+    if (searchParams.get('edit') || searchParams.get('manageCategories')) return;
+    if (!pinnedDefaultDecided.current) return;
+    const params = new URLSearchParams();
+    if (debouncedQuery) params.set('q', debouncedQuery);
+    if (selectedCategoryFilter) params.set('cat', selectedCategoryFilter);
+    else if (showPinnedOnly !== !!pinnedCount) params.set('tab', showPinnedOnly ? 'pinned' : 'all');
+    if (currentPage > 1) params.set('page', String(currentPage));
+    const qs = params.toString();
+    const next = qs ? `?${qs}` : '';
+    if (window.location.pathname === '/memo' && window.location.search !== next) {
+      window.history.replaceState(null, '', `/memo${next}`);
+    }
+  }, [debouncedQuery, selectedCategoryFilter, showPinnedOnly, currentPage, pinnedCount, pinnedCountReady, searchParams]);
 
   // 페이지네이션 — React Query (카테고리 + 검색은 서버 조건, count/range 동일 기준)
   const pageSize = 10;
