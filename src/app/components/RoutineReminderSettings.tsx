@@ -161,7 +161,29 @@ export default function RoutineReminderSettings() {
           >
             {busy ? '켜는 중…' : '알림 켜기'}
           </button>
-        ) : null}
+        ) : (
+          // 켤 수 없는 상태에서도 자리를 비워 두지 않고 이유를 보여 준다
+          <div className="flex items-center gap-1.5">
+            <span className="px-2.5 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+              {status === 'loading'
+                ? '확인 중…'
+                : status === 'denied'
+                  ? '알림 차단됨'
+                  : status === 'ios-install'
+                    ? '홈 화면 설치 필요'
+                    : '지원 안 되는 브라우저'}
+            </span>
+            {status === 'denied' && (
+              <button
+                type="button"
+                onClick={() => refresh().catch(() => setStatus('off'))}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                다시 확인
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
         매일 <b>오후 1시</b>와 <b>밤 10시</b>에 오늘 아직 안 한 루틴이 있으면 이 기기로 알려 드려요. 모두 했으면 알림이 오지 않아요.
@@ -180,7 +202,9 @@ export default function RoutineReminderSettings() {
         </p>
       )}
       {status === 'unsupported' && (
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">이 브라우저는 푸시 알림을 지원하지 않아요.</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          이 브라우저는 푸시 알림을 지원하지 않아요. 카카오톡 등 앱 안에서 열었다면 Chrome 에서 직접 열어 주세요.
+        </p>
       )}
       {note && <p className="mt-1 text-xs text-gray-700 dark:text-gray-200">{note}</p>}
     </div>
