@@ -178,7 +178,7 @@ export default function CardIngestSettings() {
         </button>
       </div>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        휴대폰(MacroDroid)이 카드 결제 알림을 보내면 가계부 확인 대기 목록에 들어가고, Daily 화면에 등록 팝업이 떠요.
+        휴대폰(MacroDroid)이 카드 결제 알림을 보내면 가계부 확인 대기 목록에 들어가고, Daily 화면에 등록 팝업이 떠요. 아래 [휴대폰 알림]을 켠 기기에는 푸시 알림도 가요.
       </p>
 
       {open && (
