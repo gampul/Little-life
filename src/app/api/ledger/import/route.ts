@@ -1,55 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import * as XLSX from 'xlsx';
+import { parseLedgerRows, type LedgerExcelRow } from '../../../../lib/ledgerImport';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-// 거래 유형 매핑 (CSV → DB)
-const TYPE_MAPPING: Record<string, { transaction_type: string; is_transfer: boolean }> = {
-  '수입': { transaction_type: '수입', is_transfer: false },
-  '지출': { transaction_type: '지출', is_transfer: false },
-  '이체': { transaction_type: '자산이체', is_transfer: true },
-  '이체지출': { transaction_type: '자산이체', is_transfer: true },
-  '이체입금': { transaction_type: '자산이체', is_transfer: true },
-};
-
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-/**
- * 엑셀 날짜 → 실제 시각. 가계부 앱이 내보낸 시각은 한국 시간(KST) 기준이라
- * 서버(UTC)에서 그대로 읽으면 9시간 밀려 오후 3시 이후 거래가 다음 날로 넘어감.
- *  - 숫자(엑셀 시리얼): KST 벽시계 시각으로 보고 9시간 빼서 UTC 로
- *  - 문자열 "2026. 01. 30 20:10:58": +09:00 을 붙여 해석
- */
-function parseKstDate(v: unknown): Date | null {
-  if (typeof v === 'number' && Number.isFinite(v)) {
-    return new Date(Math.round((v - 25569) * 86400 * 1000) - KST_OFFSET_MS);
-  }
-  if (typeof v === 'string' && v.trim()) {
-    const m = v.trim().match(/^(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})\.?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?/);
-    if (m) {
-      const [, y, mo, d, h = '0', mi = '0', se = '0', ms = '0'] = m;
-      return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +se, +ms.padEnd(3, '0')) - KST_OFFSET_MS);
-    }
-    const t = new Date(v);
-    return Number.isNaN(t.getTime()) ? null : t;
-  }
-  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
-  return null;
-}
-
-interface ExcelRow {
-  날짜?: string | number | Date;
-  자산?: string;
-  이체자산?: string;
-  분류?: string;
-  소분류?: string;
-  메모?: string;
-  '금액(원)'?: number | string;
-  금액?: number | string;
-  '수입/지출'?: string;
-}
 
 interface TransactionInsert {
   user_id: string;
@@ -103,6 +58,8 @@ export async function POST(request: NextRequest) {
     // FormData에서 파일 추출
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    // mode=replace: 기존 내역을 모두 지우고 이 파일로 교체 (기본은 없는 거래만 추가)
+    const replaceAll = formData.get('mode') === 'replace';
     
     if (!file) {
       return NextResponse.json({ error: '파일이 없습니다' }, { status: 400 });
@@ -122,97 +79,22 @@ export async function POST(request: NextRequest) {
     // 첫 번째 시트 파싱
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const jsonData: ExcelRow[] = XLSX.utils.sheet_to_json(worksheet);
+    const jsonData: LedgerExcelRow[] = XLSX.utils.sheet_to_json(worksheet);
 
     if (jsonData.length === 0) {
       return NextResponse.json({ error: '데이터가 없습니다' }, { status: 400 });
     }
 
-    // 데이터 변환
-    const transactions: TransactionInsert[] = [];
-    const errors: string[] = [];
-
-    for (let i = 0; i < jsonData.length; i++) {
-      const row = jsonData[i];
-      const rowNum = i + 2; // Excel은 1-based, 헤더 제외
-
-      try {
-        // 날짜 파싱 (KST 기준)
-        if (row.날짜 == null || row.날짜 === '') {
-          errors.push(`Row ${rowNum}: 날짜가 없습니다`);
-          continue;
-        }
-        const dateValue = parseKstDate(row.날짜);
-        if (!dateValue) {
-          errors.push(`Row ${rowNum}: 잘못된 날짜 형식`);
-          continue;
-        }
-
-        // 금액 파싱 (금액(원) 또는 금액 컬럼)
-        const rawAmount = row['금액(원)'] ?? row.금액;
-        let signed: number;
-        if (typeof rawAmount === 'number') {
-          signed = rawAmount;
-        } else if (typeof rawAmount === 'string') {
-          signed = parseInt(rawAmount.replace(/[^0-9-]/g, '')) || 0;
-        } else {
-          errors.push(`Row ${rowNum}: 금액이 없습니다`);
-          continue;
-        }
-
-        const amount = Math.abs(signed);
-        if (amount <= 0) {
-          errors.push(`Row ${rowNum}: 금액은 0보다 커야 합니다`);
-          continue;
-        }
-
-        // 거래 유형 매핑
-        let typeText = row['수입/지출']?.trim() || '';
-        // 음수 금액(잔액수정 등)은 부호를 버리지 않고 수입↔지출을 뒤집어 저장
-        if (signed < 0 && (typeText === '수입' || typeText === '지출')) typeText = typeText === '수입' ? '지출' : '수입';
-        const typeInfo = TYPE_MAPPING[typeText];
-        if (!typeInfo) {
-          errors.push(`Row ${rowNum}: 알 수 없는 거래 유형 "${typeText}"`);
-          continue;
-        }
-
-        // 필수 필드 확인
-        const asset = row.자산?.trim();
-        
-        if (!asset) {
-          errors.push(`Row ${rowNum}: 자산이 없습니다`);
-          continue;
-        }
-
-        // 분류 처리 (이체인 경우 '자산이체'로 설정)
-        let category = row.분류?.trim() || '';
-        if (typeInfo.is_transfer) {
-          category = '자산이체';
-        }
-        if (!category) {
-          errors.push(`Row ${rowNum}: 분류가 없습니다`);
-          continue;
-        }
-
-        transactions.push({
-          user_id: userId,
-          date: dateValue.toISOString(),
-          asset,
-          category,
-          sub_category: row.소분류?.trim() || null,
-          transaction_type: typeInfo.transaction_type,
-          is_transfer: typeInfo.is_transfer,
-          transfer_asset: typeInfo.is_transfer ? (row.이체자산?.trim() || null) : null,
-          amount,
-          memo: row.메모?.trim() || null,
-          currency: 'KRW',
-          source: 'csv',
-          import_batch_id: importBatchId,
-        });
-      } catch (err) {
-        errors.push(`Row ${rowNum}: 처리 오류`);
-      }
-    }
+    // 데이터 변환 (이모지 제거·이체 상대 자산·내용→메모 는 lib/ledgerImport)
+    const parsed = parseLedgerRows(jsonData);
+    const errors = parsed.errors;
+    const transactions: TransactionInsert[] = parsed.rows.map((r) => ({
+      ...r,
+      user_id: userId,
+      currency: 'KRW',
+      source: 'csv',
+      import_batch_id: importBatchId,
+    }));
 
     if (transactions.length === 0) {
       return NextResponse.json({ 
@@ -220,6 +102,32 @@ export async function POST(request: NextRequest) {
         error: '유효한 데이터가 없습니다',
         errors: errors.slice(0, 20),
       }, { status: 400 });
+    }
+
+    // 전체 교체: 백업 → 삭제 → 삽입을 DB 함수 한 번(한 트랜잭션)으로. 실패하면 기존 내역 그대로
+    if (replaceAll) {
+      const { data: replaced, error: replaceError } = await supabase.rpc('replace_transactions', {
+        p_rows: transactions.map(({ user_id: _u, ...rest }) => rest),
+      });
+      if (replaceError) {
+        console.error('Replace error:', replaceError);
+        return NextResponse.json({
+          success: false,
+          error: '교체 실패 (기존 내역은 그대로입니다)',
+          details: replaceError.message,
+        }, { status: 500 });
+      }
+      const result = (replaced ?? {}) as { inserted?: number; deleted?: number };
+      return NextResponse.json({
+        success: true,
+        replaced: true,
+        imported: result.inserted ?? 0,
+        deleted: result.deleted ?? 0,
+        total: transactions.length,
+        skipped: transactions.length - (result.inserted ?? 0),
+        errors: errors.slice(0, 10),
+        import_batch_id: importBatchId,
+      });
     }
 
     // 이미 있는 거래는 건너뜀 — 같은 자산·금액·유형이고 시각이 2초 안이면 같은 거래로 봄
