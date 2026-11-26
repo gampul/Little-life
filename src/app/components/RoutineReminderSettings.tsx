@@ -87,7 +87,7 @@ export default function RoutineReminderSettings() {
       );
       if (error) throw error;
       setStatus('on');
-      flash('✅ 이 기기에서 루틴 알림을 받아요. [테스트 알림]으로 확인해 보세요.');
+      flash('✅ 이 기기에서 알림을 받아요. [테스트 알림]으로 확인해 보세요.');
     } catch (err) {
       flash(`❌ 알림 켜기 실패: ${(err as Error).message}`, 8000);
     } finally {
@@ -106,7 +106,7 @@ export default function RoutineReminderSettings() {
         await sub.unsubscribe();
       }
       setStatus('off');
-      flash('이 기기의 루틴 알림을 껐어요.');
+      flash('이 기기의 알림을 껐어요.');
     } catch (err) {
       flash(`❌ 알림 끄기 실패: ${(err as Error).message}`, 8000);
     } finally {
@@ -132,7 +132,7 @@ export default function RoutineReminderSettings() {
   return (
     <div className="mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">루틴 알림</h3>
+        <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white whitespace-nowrap">휴대폰 알림</h3>
         {status === 'on' ? (
           <div className="flex items-center gap-1.5">
             <button
@@ -165,6 +165,8 @@ export default function RoutineReminderSettings() {
       </div>
       <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
         매일 <b>오후 1시</b>와 <b>밤 10시</b>에 오늘 아직 안 한 루틴이 있으면 이 기기로 알려 드려요. 모두 했으면 알림이 오지 않아요.
+        <br />
+        카드 결제·배당 알림이 가계부 대기 목록에 들어올 때도 이 기기로 바로 알려 드려요.
       </p>
       {status === 'on' && <p className="mt-1 text-xs text-green-600 dark:text-green-400">● 이 기기에서 알림을 받고 있어요</p>}
       {status === 'denied' && (
